@@ -1,0 +1,11 @@
+/*
+ * Compiled once with the Tailwind CSS standalone CLI (no Node required):
+ *
+ *   tailwindcss -i server/assets/preview.input.css -o server/assets/preview.css --minify
+ *
+ * The daemon embeds `preview.css` directly into generated artifacts, so the
+ * preview never loads a stylesheet (or anything else) from the network.
+ */
+@import "tailwindcss";
+@source "../src/agent.rs";
+@source "../../workspace/index.html";

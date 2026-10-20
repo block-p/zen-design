@@ -1,0 +1,186 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Status card</title>
+<style>
+:root {
+  --bg: #0a2540;
+  --text: #ffffff;
+  --accent: #635bff;
+  --card: #ffffff10;
+  --border: #ffffff20;
+  --ok: #3ecf8e;
+  --warn: #ff7a59;
+}
+* { box-sizing: border-box; }
+html, body { margin: 0; min-height: 100%; }
+body {
+  min-height: 100vh;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+  background: var(--bg);
+  color: var(--text);
+  font-family: 'Inter', system-ui, sans-serif;
+  line-height: 1.4;
+}
+.card {
+  width: min(100%, 360px);
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  padding: 18px;
+  backdrop-filter: blur(10px);
+  box-shadow: 0 18px 40px rgba(0,0,0,.22);
+}
+.row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+.dot-wrap {
+  position: relative;
+  width: 14px;
+  height: 14px;
+  flex: 0 0 14px;
+}
+.dot {
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+  background: var(--ok);
+  box-shadow: 0 0 0 0 rgba(62,207,142,.45);
+  animation: pulse 1.8s ease-out infinite;
+}
+.dot.degraded {
+  background: var(--warn);
+  box-shadow: 0 0 0 0 rgba(255,122,89,.45);
+  animation-name: pulse-warn;
+}
+@keyframes pulse {
+  0% { box-shadow: 0 0 0 0 rgba(62,207,142,.45); }
+  70% { box-shadow: 0 0 0 10px rgba(62,207,142,0); }
+  100% { box-shadow: 0 0 0 0 rgba(62,207,142,0); }
+}
+@keyframes pulse-warn {
+  0% { box-shadow: 0 0 0 0 rgba(255,122,89,.45); }
+  70% { box-shadow: 0 0 0 10px rgba(255,122,89,0); }
+  100% { box-shadow: 0 0 0 0 rgba(255,122,89,0); }
+}
+.status {
+  font-size: 15px;
+  font-weight: 600;
+  letter-spacing: -.01em;
+}
+.meta {
+  margin-top: 14px;
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 10px;
+}
+.metric {
+  background: rgba(255,255,255,.05);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 10px;
+}
+.metric-label {
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: .08em;
+  opacity: .72;
+}
+.metric-value {
+  margin-top: 4px;
+  font-size: 16px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+.toggle {
+  margin-top: 14px;
+  width: 100%;
+  border: 1px solid var(--border);
+  background: rgba(255,255,255,.06);
+  color: var(--text);
+  border-radius: 10px;
+  padding: 10px 12px;
+  font: inherit;
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background .18s ease, border-color .18s ease, transform .18s ease;
+}
+.toggle:hover { background: rgba(255,255,255,.1); border-color: var(--accent); }
+.toggle:active { transform: translateY(1px); }
+.toggle:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+@media (max-width: 420px) {
+  .meta { grid-template-columns: 1fr; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .dot { animation: none; }
+}
+</style>
+</head>
+<body>
+<main>
+  <section class="card" aria-labelledby="status-title">
+    <div class="row">
+      <span class="dot-wrap" aria-hidden="true"><span class="dot" id="dot"></span></span>
+      <div>
+        <div class="status" id="status-title">API status: Operational</div>
+        <div id="status-note" style="font-size:12px;opacity:.72;">All systems running normally</div>
+      </div>
+    </div>
+    <div class="meta" aria-label="Service metrics">
+      <div class="metric">
+        <div class="metric-label">Uptime</div>
+        <div class="metric-value">99.98%</div>
+      </div>
+      <div class="metric">
+        <div class="metric-label">Latency</div>
+        <div class="metric-value">124 ms</div>
+      </div>
+      <div class="metric">
+        <div class="metric-label">Checked</div>
+        <div class="metric-value">12s ago</div>
+      </div>
+    </div>
+    <button class="toggle" id="toggle" type="button" aria-pressed="false">Simulate degraded mode</button>
+  </section>
+</main>
+<script>
+const dot = document.getElementById('dot');
+const title = document.getElementById('status-title');
+const note = document.getElementById('status-note');
+const toggle = document.getElementById('toggle');
+let degraded = false;
+
+function render() {
+  dot.classList.toggle('degraded', degraded);
+  title.textContent = degraded ? 'API status: Degraded' : 'API status: Operational';
+  note.textContent = degraded ? 'Elevated error rate detected' : 'All systems running normally';
+  toggle.textContent = degraded ? 'Restore operational mode' : 'Simulate degraded mode';
+  toggle.setAttribute('aria-pressed', String(degraded));
+}
+
+toggle.addEventListener('click', () => {
+  degraded = !degraded;
+  render();
+});
+
+toggle.addEventListener('keydown', (event) => {
+  if (event.key === 'Enter' || event.key === ' ') {
+    event.preventDefault();
+    toggle.click();
+  }
+});
+
+render();
+</script>
+</body>
+</html>

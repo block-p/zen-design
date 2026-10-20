@@ -1,0 +1,727 @@
+<!DOCTYPE html>
+<html lang="en">
+<head><meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'; script-src 'unsafe-inline'; img-src data: blob:; font-src data:; media-src data: blob:; connect-src 'none'; base-uri 'none'; form-action 'none'; frame-src 'none'">
+
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Job Collector — Motion Piece</title>
+<style>
+  *, *::before, *::after {
+    box-sizing: border-box;
+    margin: 0;
+    padding: 0;
+    user-select: none;
+  }
+
+  :root {
+    --bg: #0d0e12;
+    --text: #f3f4f6;
+    --accent: #5e6ad2;
+    --card: #161822;
+    --border: #2b2d3d;
+    --font: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
+    --ease-in: cubic-bezier(0.7, 0, 0.84, 0);
+    --duration: 10s;
+  }
+
+  html, body {
+    width: 100%;
+    height: 100%;
+    background: #000;
+    overflow: hidden;
+    font-family: var(--font);
+    color: var(--text);
+  }
+
+  #viewport {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    width: 1440px;
+    height: 900px;
+    background: var(--bg);
+    transform: translate(-50%, -50%);
+    transform-origin: center center;
+    overflow: hidden;
+    box-shadow: 0 0 80px rgba(0,0,0,0.8);
+  }
+
+  /* --- CHROME / HUD --- */
+  .hud {
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+    z-index: 100;
+  }
+  .hud-progress-track {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 2px;
+    background: rgba(255,255,255,0.06);
+  }
+  .hud-progress-bar {
+    width: 100%;
+    height: 100%;
+    background: var(--accent);
+    transform-origin: left;
+    animation: timeline var(--duration) linear infinite;
+  }
+  .hud-controls {
+    position: absolute;
+    top: 28px;
+    right: 36px;
+    display: flex;
+    gap: 12px;
+    pointer-events: auto;
+  }
+  .hud-btn {
+    width: 32px;
+    height: 32px;
+    border-radius: 6px;
+    background: var(--card);
+    border: 1px solid var(--border);
+    color: var(--text);
+    display: grid;
+    place-items: center;
+    cursor: pointer;
+    opacity: 0.45;
+    transition: opacity 0.2s, border-color 0.2s;
+  }
+  .hud-btn:hover {
+    opacity: 1;
+    border-color: var(--accent);
+  }
+  .hud-btn svg {
+    width: 14px;
+    height: 14px;
+    fill: currentColor;
+  }
+
+  /* --- STAGE & SCENES --- */
+  .stage {
+    position: absolute;
+    inset: 0;
+  }
+
+  /* GRID AMBIENCE */
+  .grid-floor {
+    position: absolute;
+    inset: 0;
+    background-image:
+      linear-gradient(to right, rgba(43,45,61,0.25) 1px, transparent 1px),
+      linear-gradient(to bottom, rgba(43,45,61,0.25) 1px, transparent 1px);
+    background-size: 80px 80px;
+    mask-image: radial-gradient(circle at 50% 50%, black 30%, transparent 75%);
+    opacity: 0.7;
+  }
+
+  /* BEAT 1: NOISE / CHAOS (0s - 2.5s) */
+  .beat-1 {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    animation: b1-seq var(--duration) var(--ease-in) infinite;
+  }
+  .b1-headline {
+    position: absolute;
+    font-size: 130px;
+    font-weight: 900;
+    letter-spacing: -0.05em;
+    line-height: 0.9;
+    text-transform: uppercase;
+    text-align: center;
+    z-index: 5;
+    pointer-events: none;
+  }
+  .b1-headline .line-mask {
+    overflow: hidden;
+    display: block;
+  }
+  .b1-headline .word {
+    display: inline-block;
+    animation: b1-text var(--duration) var(--ease-out) infinite;
+  }
+  .b1-tabs-cluster {
+    position: absolute;
+    width: 1000px;
+    height: 600px;
+    z-index: 2;
+  }
+  .b1-tab {
+    position: absolute;
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 10px 14px;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    box-shadow: 0 12px 30px rgba(0,0,0,0.5);
+    animation: b1-tab-anim var(--duration) var(--ease-out) infinite;
+  }
+  .b1-tab .dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: #ff5f56;
+  }
+  .b1-tab .tab-title {
+    font-size: 12px;
+    font-family: monospace;
+    color: color-mix(in srgb, var(--text) 70%, transparent);
+    letter-spacing: -0.02em;
+  }
+  .tab-1 { top: 12%; left: 8%; transform: rotate(-8deg); animation-delay: 0.05s; }
+  .tab-2 { top: 18%; right: 10%; transform: rotate(10deg); animation-delay: 0.1s; }
+  .tab-3 { bottom: 20%; left: 14%; transform: rotate(5deg); animation-delay: 0.15s; }
+  .tab-4 { bottom: 16%; right: 12%; transform: rotate(-6deg); animation-delay: 0.2s; }
+  .tab-5 { top: 5%; left: 42%; transform: rotate(-2deg); animation-delay: 0.12s; }
+  .tab-6 { bottom: 8%; left: 45%; transform: rotate(3deg); animation-delay: 0.18s; }
+
+  /* BEAT 2: IMPLOSION & SINGULARITY (2.3s - 5.0s) */
+  .beat-2 {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    animation: b2-seq var(--duration) var(--ease-out) infinite;
+  }
+  .core-orb {
+    width: 14px;
+    height: 14px;
+    border-radius: 50%;
+    background: var(--accent);
+    box-shadow: 0 0 60px 20px color-mix(in srgb, var(--accent) 70%, transparent);
+    animation: b2-orb var(--duration) var(--ease-out) infinite;
+  }
+  .b2-hero-text {
+    position: absolute;
+    font-size: 140px;
+    font-weight: 800;
+    letter-spacing: -0.04em;
+    line-height: 0.95;
+    text-align: center;
+    color: var(--text);
+    animation: b2-txt var(--duration) var(--ease-out) infinite;
+  }
+  .b2-hero-text span {
+    color: var(--accent);
+    display: inline-block;
+  }
+
+  /* BEAT 3: PIPELINE CRAWL & LIVE AGGREGATION (4.8s - 7.6s) */
+  .beat-3 {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    animation: b3-seq var(--duration) var(--ease-out) infinite;
+  }
+  .spider-network {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+  }
+  .spider-path {
+    stroke: color-mix(in srgb, var(--accent) 40%, transparent);
+    stroke-width: 1.5;
+    stroke-dasharray: 600;
+    stroke-dashoffset: 600;
+    fill: none;
+    animation: spider-draw var(--duration) cubic-bezier(0.4, 0, 0.2, 1) infinite;
+  }
+  .b3-title {
+    font-size: 18px;
+    letter-spacing: 0.3em;
+    text-transform: uppercase;
+    color: var(--accent);
+    font-weight: 700;
+    margin-bottom: 24px;
+    animation: b3-title-in var(--duration) var(--ease-out) infinite;
+  }
+  .b3-counter {
+    font-size: 110px;
+    font-weight: 900;
+    letter-spacing: -0.05em;
+    line-height: 1;
+    font-variant-numeric: tabular-nums;
+    animation: b3-counter-pop var(--duration) var(--ease-out) infinite;
+  }
+  .b3-counter small {
+    font-size: 40px;
+    color: color-mix(in srgb, var(--text) 50%, transparent);
+    font-weight: 600;
+    margin-left: 8px;
+  }
+  .b3-filters {
+    display: flex;
+    gap: 16px;
+    margin-top: 36px;
+  }
+  .filter-pill {
+    padding: 10px 22px;
+    border-radius: 999px;
+    border: 1px solid var(--border);
+    background: var(--card);
+    font-size: 14px;
+    font-weight: 600;
+    letter-spacing: 0.05em;
+    text-transform: uppercase;
+    opacity: 0;
+    transform: translateY(20px) scale(0.9);
+    animation: b3-pills var(--duration) var(--ease-out) infinite;
+  }
+  .filter-pill.active {
+    border-color: var(--accent);
+    color: var(--accent);
+    background: color-mix(in srgb, var(--accent) 12%, transparent);
+  }
+  .filter-pill:nth-child(1) { animation-delay: 5.2s; }
+  .filter-pill:nth-child(2) { animation-delay: 5.32s; }
+  .filter-pill:nth-child(3) { animation-delay: 5.44s; }
+  .filter-pill:nth-child(4) { animation-delay: 5.56s; }
+
+  /* BEAT 4: SYSTEM DEPLOY & OUTRO BRAND (7.4s - 10.0s) */
+  .beat-4 {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    animation: b4-seq var(--duration) var(--ease-out) infinite;
+  }
+  .brand-logo-wrap {
+    position: relative;
+    width: 140px;
+    height: 140px;
+    display: grid;
+    place-items: center;
+    margin-bottom: 32px;
+  }
+  .logo-ring {
+    position: absolute;
+    inset: 0;
+    border: 2px dashed color-mix(in srgb, var(--accent) 50%, transparent);
+    border-radius: 50%;
+    animation: logo-spin 12s linear infinite;
+  }
+  .logo-box {
+    width: 80px;
+    height: 80px;
+    background: var(--card);
+    border: 2px solid var(--accent);
+    border-radius: 20px;
+    display: grid;
+    place-items: center;
+    box-shadow: 0 0 50px color-mix(in srgb, var(--accent) 40%, transparent);
+    animation: b4-box var(--duration) var(--ease-out) infinite;
+  }
+  .logo-box svg {
+    width: 44px;
+    height: 44px;
+    fill: none;
+    stroke: var(--text);
+    stroke-width: 2.2;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+  }
+  .b4-brand-name {
+    font-size: 110px;
+    font-weight: 900;
+    letter-spacing: -0.05em;
+    line-height: 1;
+    margin-bottom: 20px;
+    overflow: hidden;
+  }
+  .b4-brand-name span {
+    display: inline-block;
+    animation: b4-char-reveal var(--duration) var(--ease-out) infinite;
+  }
+  .b4-mantra {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    font-size: 16px;
+    letter-spacing: 0.4em;
+    text-transform: uppercase;
+    color: color-mix(in srgb, var(--text) 70%, transparent);
+    font-weight: 600;
+    animation: b4-mantra-in var(--duration) var(--ease-out) infinite;
+  }
+  .b4-mantra .sep {
+    width: 4px;
+    height: 4px;
+    border-radius: 50%;
+    background: var(--accent);
+  }
+  .b4-stars {
+    display: flex;
+    gap: 8px;
+    margin-top: 36px;
+    opacity: 0;
+    animation: b4-stars-in var(--duration) var(--ease-out) infinite;
+  }
+  .b4-stars svg {
+    width: 18px;
+    height: 18px;
+    fill: #f59e0b;
+  }
+
+  /* --- TIMELINE DEFINITIONS --- */
+  @keyframes timeline {
+    0% { transform: scaleX(0); }
+    100% { transform: scaleX(1); }
+  }
+
+  /* Beat 1: 0% to 26% (0.0s - 2.6s) */
+  @keyframes b1-seq {
+    0% { opacity: 0; transform: scale(1.08); filter: blur(4px); }
+    4% { opacity: 1; transform: scale(1); filter: blur(0px); }
+    21% { opacity: 1; transform: scale(1); filter: blur(0px); }
+    26% { opacity: 0; transform: scale(0.85); filter: blur(6px); }
+    100% { opacity: 0; transform: scale(0.85); }
+  }
+  @keyframes b1-text {
+    0% { transform: translateY(110%); }
+    6% { transform: translateY(0); }
+    20% { transform: translateY(0); }
+    25% { transform: translateY(-110%); }
+    100% { transform: translateY(-110%); }
+  }
+  @keyframes b1-tab-anim {
+    0% { opacity: 0; transform: scale(0.5) translate(0, 40px); }
+    6% { opacity: 1; transform: scale(1) translate(0, 0); }
+    19% { opacity: 1; transform: scale(1) translate(0, 0); }
+    24% { opacity: 0; transform: scale(0.2) translate(0, 0); }
+    100% { opacity: 0; }
+  }
+
+  /* Beat 2: 24% to 50% (2.4s - 5.0s) */
+  @keyframes b2-seq {
+    0%, 23% { opacity: 0; transform: scale(1.15); pointer-events: none; }
+    26% { opacity: 1; transform: scale(1); }
+    46% { opacity: 1; transform: scale(1); }
+    50% { opacity: 0; transform: scale(1.2); pointer-events: none; }
+    100% { opacity: 0; }
+  }
+  @keyframes b2-orb {
+    0%, 23% { transform: scale(0); opacity: 0; }
+    26% { transform: scale(6); opacity: 1; }
+    30% { transform: scale(1); opacity: 0.3; }
+    46% { transform: scale(1); opacity: 0.3; }
+    50% { transform: scale(12); opacity: 0; }
+    100% { opacity: 0; }
+  }
+  @keyframes b2-txt {
+    0%, 24% { opacity: 0; transform: scale(0.9); }
+    28% { opacity: 1; transform: scale(1); }
+    45% { opacity: 1; transform: scale(1); }
+    49% { opacity: 0; transform: translateY(-20px); }
+    100% { opacity: 0; }
+  }
+
+  /* Beat 3: 48% to 75% (4.8s - 7.5s) */
+  @keyframes b3-seq {
+    0%, 47% { opacity: 0; transform: scale(0.95); pointer-events: none; }
+    50% { opacity: 1; transform: scale(1); }
+    71% { opacity: 1; transform: scale(1); }
+    75% { opacity: 0; transform: scale(1.05); pointer-events: none; }
+    100% { opacity: 0; }
+  }
+  @keyframes spider-draw {
+    0%, 48% { stroke-dashoffset: 600; opacity: 0; }
+    52% { opacity: 1; stroke-dashoffset: 0; }
+    71% { opacity: 0.8; stroke-dashoffset: 0; }
+    74% { opacity: 0; stroke-dashoffset: -600; }
+    100% { opacity: 0; }
+  }
+  @keyframes b3-title-in {
+    0%, 48% { opacity: 0; transform: translateY(-16px); }
+    52% { opacity: 1; transform: translateY(0); }
+    71% { opacity: 1; transform: translateY(0); }
+    74% { opacity: 0; transform: translateY(-10px); }
+    100% { opacity: 0; }
+  }
+  @keyframes b3-counter-pop {
+    0%, 49% { opacity: 0; transform: scale(0.85); }
+    53% { opacity: 1; transform: scale(1); }
+    71% { opacity: 1; transform: scale(1); }
+    74% { opacity: 0; transform: scale(0.95); }
+    100% { opacity: 0; }
+  }
+  @keyframes b3-pills {
+    0%, 50% { opacity: 0; transform: translateY(20px) scale(0.9); }
+    55% { opacity: 1; transform: translateY(0) scale(1); }
+    70% { opacity: 1; transform: translateY(0) scale(1); }
+    74% { opacity: 0; transform: translateY(-15px) scale(0.95); }
+    100% { opacity: 0; }
+  }
+
+  /* Beat 4: 73% to 100% (7.3s - 10.0s) */
+  @keyframes b4-seq {
+    0%, 72% { opacity: 0; transform: scale(0.92); pointer-events: none; }
+    76% { opacity: 1; transform: scale(1); }
+    96% { opacity: 1; transform: scale(1); }
+    100% { opacity: 0; transform: scale(1.04); }
+  }
+  @keyframes logo-spin {
+    to { transform: rotate(360deg); }
+  }
+  @keyframes b4-box {
+    0%, 73% { transform: scale(0) rotate(-20deg); }
+    77% { transform: scale(1) rotate(0deg); }
+    96% { transform: scale(1) rotate(0deg); }
+    100% { transform: scale(0.9); }
+  }
+  @keyframes b4-char-reveal {
+    0%, 74% { transform: translateY(100%); }
+    78% { transform: translateY(0); }
+    96% { transform: translateY(0); }
+    100% { transform: translateY(-20%); }
+  }
+  @keyframes b4-mantra-in {
+    0%, 76% { opacity: 0; letter-spacing: 0.1em; }
+    81% { opacity: 1; letter-spacing: 0.4em; }
+    96% { opacity: 1; letter-spacing: 0.4em; }
+    100% { opacity: 0; }
+  }
+  @keyframes b4-stars-in {
+    0%, 78% { opacity: 0; transform: translateY(10px); }
+    82% { opacity: 1; transform: translateY(0); }
+    96% { opacity: 1; transform: translateY(0); }
+    100% { opacity: 0; }
+  }
+
+  /* REDUCED MOTION OVERRIDE */
+  @media (prefers-reduced-motion: reduce) {
+    *, ::before, ::after {
+      animation-play-state: paused !important;
+    }
+    .beat-1, .beat-2, .beat-3 {
+      display: none !important;
+    }
+    .beat-4 {
+      opacity: 1 !important;
+      transform: none !important;
+      pointer-events: auto !important;
+    }
+    .b4-brand-name span, .b4-mantra, .b4-stars, .logo-box {
+      opacity: 1 !important;
+      transform: none !important;
+    }
+    .hud-progress-bar {
+      transform: scaleX(1) !important;
+    }
+  }
+
+  .paused * {
+    animation-play-state: paused !important;
+  }
+</style>
+</head>
+<body>
+
+<div id="viewport">
+  <div class="grid-floor"></div>
+
+  <!-- HUD / CHROME -->
+  <div class="hud">
+    <div class="hud-progress-track">
+      <div class="hud-progress-bar" id="progressBar"></div>
+    </div>
+    <div class="hud-controls">
+      <button class="hud-btn" id="btnPlayPause" aria-label="Toggle Play">
+        <svg viewBox="0 0 24 24" id="playIcon"><path d="M6 19h4V5H6v14zm8-14v14h4V5h-4z"/></svg>
+      </button>
+      <button class="hud-btn" id="btnReplay" aria-label="Replay">
+        <svg viewBox="0 0 24 24"><path d="M12 5V1L7 6l5 5V7c3.31 0 6 2.69 6 6s-2.69 6-6 6-6-2.69-6-6H4c0 4.42 3.58 8 8 8s8-3.58 8-8-3.58-8-8-8z"/></svg>
+      </button>
+    </div>
+  </div>
+
+  <div class="stage" id="stage">
+    
+    <!-- BEAT 1: NOISE / CHAOS -->
+    <section class="beat-1">
+      <div class="b1-tabs-cluster">
+        <div class="b1-tab tab-1">
+          <div class="dot"></div>
+          <div class="tab-title">linkedin.com/jobs/dev-8912</div>
+        </div>
+        <div class="b1-tab tab-2">
+          <div class="dot"></div>
+          <div class="tab-title">indeed.com/viewjob?jk=9a30f</div>
+        </div>
+        <div class="b1-tab tab-3">
+          <div class="dot"></div>
+          <div class="tab-title">glassdoor.com/job/sr-backend</div>
+        </div>
+        <div class="b1-tab tab-4">
+          <div class="dot"></div>
+          <div class="tab-title">weworkremotely.com/t/rails</div>
+        </div>
+        <div class="b1-tab tab-5">
+          <div class="dot"></div>
+          <div class="tab-title">remoteok.com/remote-engineer</div>
+        </div>
+        <div class="b1-tab tab-6">
+          <div class="dot"></div>
+          <div class="tab-title">news.ycombinator.com/item?id=whoishiring</div>
+        </div>
+      </div>
+      <div class="b1-headline">
+        <div class="line-mask"><span class="word">TOO MUCH</span></div>
+        <div class="line-mask"><span class="word" style="color:var(--accent);">NOISE.</span></div>
+      </div>
+    </section>
+
+    <!-- BEAT 2: THE SINGULARITY -->
+    <section class="beat-2">
+      <div class="core-orb"></div>
+      <div class="b2-hero-text">
+        ONE<br><span>STREAM.</span>
+      </div>
+    </section>
+
+    <!-- BEAT 3: PIPELINE CRAWL & LIVE AGGREGATION -->
+    <section class="beat-3">
+      <svg class="spider-network" viewBox="0 0 1440 900" preserveAspectRatio="none">
+        <path class="spider-path" d="M 120 180 Q 480 300 720 450" />
+        <path class="spider-path" d="M 1320 180 Q 960 300 720 450" />
+        <path class="spider-path" d="M 180 720 Q 480 600 720 450" />
+        <path class="spider-path" d="M 1260 720 Q 960 600 720 450" />
+      </svg>
+      <div class="b3-title">Live Pipeline Ingestion</div>
+      <div class="b3-counter" id="liveCounter">2,480<small>ROLES</small></div>
+      <div class="b3-filters">
+        <div class="filter-pill active">Remote</div>
+        <div class="filter-pill">Full-Time</div>
+        <div class="filter-pill active">Staff / Lead</div>
+        <div class="filter-pill">Golang • Rust</div>
+      </div>
+    </section>
+
+    <!-- BEAT 4: BRAND / OUTRO -->
+    <section class="beat-4">
+      <div class="brand-logo-wrap">
+        <div class="logo-ring"></div>
+        <div class="logo-box">
+          <svg viewBox="0 0 24 24">
+            <polyline points="16 18 22 12 16 6"></polyline>
+            <polyline points="8 6 2 12 8 18"></polyline>
+            <circle cx="12" cy="12" r="2"></circle>
+          </svg>
+        </div>
+      </div>
+      <div class="b4-brand-name">
+        <span>JOB COLLECTOR</span>
+      </div>
+      <div class="b4-mantra">
+        <span>Aggregate</span>
+        <span class="sep"></span>
+        <span>Crawl</span>
+        <span class="sep"></span>
+        <span>Discover</span>
+      </div>
+      <div class="b4-stars">
+        <svg viewBox="0 0 24 24"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>
+        <svg viewBox="0 0 24 24"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>
+        <svg viewBox="0 0 24 24"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>
+        <svg viewBox="0 0 24 24"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>
+        <svg viewBox="0 0 24 24"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>
+      </div>
+    </section>
+
+  </div>
+</div>
+
+<script>
+  // Resize handler: maintain exact 1440x900 viewport scaling
+  const vp = document.getElementById('viewport');
+  function resize() {
+    const scale = Math.min(window.innerWidth / 1440, window.innerHeight / 900);
+    vp.style.transform = `translate(-50%, -50%) scale(${scale})`;
+  }
+  window.addEventListener('resize', resize, { passive: true });
+  resize();
+
+  // Playback control
+  const body = document.body;
+  const playBtn = document.getElementById('btnPlayPause');
+  const replayBtn = document.getElementById('btnReplay');
+  const playIcon = document.getElementById('playIcon');
+
+  let isPaused = false;
+
+  function togglePlay() {
+    isPaused = !isPaused;
+    if (isPaused) {
+      body.classList.add('paused');
+      playIcon.innerHTML = '<polygon points="5,3 19,12 5,21"/>';
+    } else {
+      body.classList.remove('paused');
+      playIcon.innerHTML = '<path d="M6 19h4V5H6v14zm8-14v14h4V5h-4z"/>';
+    }
+  }
+
+  function restart() {
+    body.classList.remove('paused');
+    isPaused = false;
+    playIcon.innerHTML = '<path d="M6 19h4V5H6v14zm8-14v14h4V5h-4z"/>';
+
+    // Force animation reset across all elements
+    const stage = document.getElementById('stage');
+    const bar = document.getElementById('progressBar');
+    
+    stage.style.display = 'none';
+    bar.style.display = 'none';
+    stage.offsetHeight; // trigger reflow
+    stage.style.display = '';
+    bar.style.display = '';
+  }
+
+  playBtn.addEventListener('click', togglePlay);
+  replayBtn.addEventListener('click', restart);
+
+  // Keyboard controls
+  window.addEventListener('keydown', (e) => {
+    if (e.code === 'Space') {
+      e.preventDefault();
+      togglePlay();
+    } else if (e.code === 'KeyR') {
+      e.preventDefault();
+      restart();
+    }
+  });
+
+  // Dynamic counter ticker sync
+  const counterEl = document.getElementById('liveCounter');
+  let startTime = performance.now();
+  function tick(now) {
+    if (!isPaused) {
+      const elapsed = (now - startTime) % 10000;
+      // In beat 3 window (4800ms - 7200ms)
+      if (elapsed >= 4800 && elapsed <= 7400) {
+        const p = (elapsed - 4800) / 2600;
+        const count = Math.floor(1200 + (2480 - 1200) * Math.min(1, p * 1.3));
+        counterEl.innerHTML = `${count.toLocaleString()}<small>ROLES</small>`;
+      } else {
+        counterEl.innerHTML = `2,480<small>ROLES</small>`;
+      }
+    }
+    requestAnimationFrame(tick);
+  }
+  requestAnimationFrame(tick);
+</script>
+</body>
+</html>

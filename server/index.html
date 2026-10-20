@@ -1,0 +1,380 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Job Collector — Motion</title>
+<style>
+/* ---------- tokens ---------- */
+:root{
+  --bg:#0d0e12; --tx:#f3f4f6; --ac:#5e6ad2; --card:#161822; --bd:#2b2d3d;
+  --mut:color-mix(in srgb, var(--tx) 62%, transparent);
+  --lai:cubic-bezier(0.16,1,0.3,1);
+  --lei:cubic-bezier(0.7,0,0.84,0);
+  --T:10.8s;
+}
+*{margin:0;padding:0;box-sizing:border-box}
+html,body{height:100%;overflow:hidden;background:var(--bg)}
+body{font-family:system-ui,-apple-system,sans-serif;color:var(--tx);-webkit-font-smoothing:antialiased}
+#stage{position:fixed;left:50%;top:50%;width:1440px;height:900px;transform:translate(-50%,-50%) scale(var(--s,1));background:var(--bg);border:1px solid var(--bd);overflow:hidden;user-select:none}
+svg{display:block}
+
+/* ---------- shared clock ---------- */
+.an{animation-name:none;animation-duration:var(--T);animation-timing-function:linear;animation-iteration-count:infinite;animation-fill-mode:both}
+#stage.paused *{animation-play-state:paused!important}
+
+/* ---------- ambient ---------- */
+.dots{position:absolute;inset:0;background-image:radial-gradient(color-mix(in srgb,var(--tx) 3%,transparent) 1px,transparent 1.3px);background-size:30px 30px}
+.glide{position:absolute;top:0;height:100%;width:1px;background:color-mix(in srgb,var(--tx) 7%,transparent);animation:kDrift var(--T) linear infinite}
+
+/* ---------- beat 1 : chaos ---------- */
+.b1wrap{position:absolute;inset:0;animation:kG1 var(--T) linear infinite}
+.dl{font-weight:800;line-height:.95;letter-spacing:-.035em}
+.l1mk{position:absolute;left:64px;top:206px;overflow:hidden}
+.l1g{display:block;position:relative;font-size:148px;white-space:nowrap;animation:kL1x var(--T) linear infinite}
+.l1o{color:transparent;-webkit-text-stroke:1.6px color-mix(in srgb,var(--tx) 92%,transparent)}
+.l1fc{position:absolute;inset:0;white-space:nowrap;animation:kFill var(--T) linear infinite}
+.l1f{color:var(--tx)}
+.l2mk{position:absolute;left:64px;top:382px;overflow:hidden}
+.l2in{display:block;font-size:156px;color:var(--tx);white-space:nowrap;animation:kL2 var(--T) linear infinite}
+.rule{position:absolute;left:64px;top:600px;width:640px;height:1px;background:var(--bd);transform-origin:left center;animation:kRule var(--T) linear infinite}
+.numrow{position:absolute;left:64px;top:634px;display:flex;align-items:flex-end;gap:26px;animation:kNum var(--T) linear infinite}
+.numrow b{font-size:176px;font-weight:800;letter-spacing:-.04em;color:var(--ac);line-height:.85;font-variant-numeric:tabular-nums}
+.numrow i{font-style:normal;font-size:21px;font-weight:600;letter-spacing:.24em;text-transform:uppercase;color:var(--mut);padding-bottom:10px}
+
+.chip{position:absolute;list-style:none}
+.cop,.cmv{display:block;width:100%;height:100%;opacity:0}
+.cbx{display:block;width:150px;height:40px;border-radius:10px;background:var(--card);border:1px solid var(--bd);position:relative;transform:rotate(var(--fr))}
+.cbx em{position:absolute;left:12px;top:16px;width:8px;height:8px;border-radius:50%;background:var(--cd,var(--ac))}
+.cbx u{position:absolute;left:30px;top:12px;width:46px;height:5px;border-radius:3px;background:color-mix(in srgb,var(--tx) 26%,transparent);text-decoration:none}
+.cbx s{position:absolute;left:30px;top:23px;width:28px;height:5px;border-radius:3px;background:color-mix(in srgb,var(--tx) 15%,transparent);text-decoration:none}
+.cmv{width:100%;height:100%;animation:kCmv var(--T) linear infinite}
+.cop{width:100%;height:100%;animation:kChipOp var(--T) linear infinite;animation-delay:var(--d)}
+
+.nf{position:absolute;width:158px;height:46px;border-radius:12px;background:var(--card);border:1px solid var(--bd);opacity:0;animation:kNf var(--T) linear infinite;animation-delay:var(--d)}
+.nf em{position:absolute;left:12px;top:19px;width:8px;height:8px;border-radius:50%;background:var(--cd,var(--ac))}
+.nf u{position:absolute;left:30px;top:15px;width:64px;height:5px;border-radius:3px;background:color-mix(in srgb,var(--tx) 30%,transparent);text-decoration:none}
+.nf s{position:absolute;left:30px;top:27px;width:40px;height:5px;border-radius:3px;background:color-mix(in srgb,var(--tx) 15%,transparent);text-decoration:none}
+
+/* ---------- beat 2 : node + wordmark ---------- */
+.b2g{position:absolute;inset:0;animation:kG2 var(--T) linear infinite}
+.nd{position:absolute;left:711px;top:441px;width:18px;height:18px;border-radius:50%;background:var(--ac);animation:kNode var(--T) linear infinite}
+.rg{position:absolute;border-radius:50%;border:1.5px solid color-mix(in srgb,var(--ac) 40%,transparent)}
+.rg1{left:624px;top:354px;width:192px;height:192px;animation:kR1 var(--T) linear infinite}
+.rg2{left:580px;top:310px;width:280px;height:280px;border-color:color-mix(in srgb,var(--ac) 28%,transparent);animation:kR2 var(--T) linear infinite}
+.wm{position:absolute;left:0;right:0;top:372px;text-align:center}
+.wm-t{font-weight:800;font-size:118px;line-height:1.02;letter-spacing:.34em;animation:kTrk var(--T) linear infinite}
+.wlo{display:inline-block;overflow:hidden;vertical-align:top}
+.wl{display:inline-block;opacity:0;animation:kLtr var(--T) linear infinite;animation-delay:calc(2.84s + var(--i)*0.042s)}
+.sp{display:inline-block;width:.42em}
+.submk{position:absolute;left:0;right:0;top:560px;text-align:center;overflow:hidden}
+.subin{display:inline-block;font-size:30px;font-weight:500;color:var(--mut);letter-spacing:.01em;animation:kSub var(--T) linear infinite}
+
+/* ---------- beat 3 : dashboard ---------- */
+.g3b{position:absolute;inset:0;animation:kG3 var(--T) linear infinite}
+#panel{position:absolute;left:360px;top:170px;width:720px;height:580px;border-radius:26px;background:var(--card);border:1px solid var(--bd);animation:kPanel var(--T) linear infinite}
+.hd{position:absolute;left:44px;top:36px;right:44px;display:flex;align-items:center;gap:12px;animation:kHd var(--T) linear infinite}
+.hd em{width:8px;height:8px;border-radius:50%;background:var(--ac)}
+.hd u{flex:1;height:1px;background:var(--bd);text-decoration:none}
+.hd s{display:flex;gap:5px;text-decoration:none}
+.hd s u,.hd s s{width:14px;height:4px;border-radius:2px;background:color-mix(in srgb,var(--tx) 22%,transparent)}
+.srch{position:absolute;left:44px;top:92px;width:632px;height:76px;border-radius:16px;background:color-mix(in srgb,var(--bg) 72%,var(--card));border:1px solid var(--bd);display:flex;align-items:center;padding-left:56px;animation:kSearch var(--T) linear infinite}
+.srch svg{position:absolute;left:20px;top:28px}
+#q{font-size:30px;font-weight:600;letter-spacing:.01em;color:var(--tx);font-variant-numeric:tabular-nums;white-space:nowrap}
+.crt{display:block;margin-left:3px;animation:kCaret var(--T) linear infinite}
+.crt b{display:block;width:2px;height:36px;background:var(--ac);animation:kBlink .72s ease-in-out infinite}
+.tags{position:absolute;left:44px;top:194px;display:flex;gap:12px}
+.tag{display:inline-block;padding:9px 20px;border-radius:999px;border:1px solid var(--bd);font-size:21px;font-weight:600;color:var(--tx);opacity:0;animation:kTag var(--T) linear infinite;animation-delay:calc(6.30s + var(--i)*0.055s)}
+.tag.hl{color:color-mix(in srgb,var(--ac) 65%,var(--tx));border-color:color-mix(in srgb,var(--ac) 45%,var(--bd))}
+.cnt{position:absolute;left:44px;top:282px;animation:kCnt var(--T) linear infinite}
+.cnt b{font-size:94px;font-weight:800;letter-spacing:-.03em;color:var(--ac);line-height:.95;font-variant-numeric:tabular-nums}
+.cnt i{display:block;font-style:normal;font-size:21px;font-weight:500;color:var(--mut);margin-top:10px;letter-spacing:.06em}
+.crd{position:absolute;top:444px;width:286px;height:92px;border-radius:14px;background:color-mix(in srgb,var(--card) 82%,var(--tx) 4%);border:1px solid var(--bd)}
+.ce{left:44px;animation:kCardA var(--T) linear infinite}
+.ce em{position:absolute;left:16px;top:20px;width:7px;height:7px;border-radius:50%;background:var(--ac)}
+.ce u{position:absolute;left:34px;top:16px;font-size:23px;font-weight:600;text-decoration:none;color:var(--tx)}
+.ce s{position:absolute;left:34px;top:58px;width:110px;height:5px;border-radius:3px;background:color-mix(in srgb,var(--tx) 14%,transparent);text-decoration:none}
+.cp{right:44px;text-align:right;padding:16px 18px;animation:kCardB var(--T) linear infinite}
+.cp u{display:block;font-size:23px;font-weight:600;text-decoration:none;color:var(--tx)}
+.cp .r2{display:flex;justify-content:flex-end;align-items:center;gap:10px;margin-top:10px}
+.cp .r2 s{font-size:20px;font-weight:500;color:var(--mut);text-decoration:none}
+.cp .pill{font-size:17px;font-weight:600;padding:4px 12px;border-radius:999px;background:color-mix(in srgb,var(--ac) 16%,transparent);color:color-mix(in srgb,var(--ac) 60%,var(--tx))}
+.web{position:absolute;inset:0;pointer-events:none}
+.wp{fill:none;stroke:color-mix(in srgb,var(--ac) 65%,transparent);stroke-width:1.6;stroke-dasharray:1;opacity:0;animation:kWebD var(--T) linear infinite;animation-delay:calc(5.66s + var(--i)*0.14s)}
+.sat{position:absolute;width:44px;height:44px;border-radius:12px;background:var(--card);border:1px solid var(--bd);display:flex;align-items:center;justify-content:center;opacity:0;animation:kSatIn var(--T) linear infinite;animation-delay:calc(5.50s + var(--i)*0.09s)}
+.trv{position:absolute;left:0;top:0;width:7px;height:7px;border-radius:50%;background:var(--tx);opacity:0;animation:kTrv var(--T) linear infinite;animation-delay:var(--d)}
+@supports not (offset-path:path("M0 0")){.trv{display:none}}
+
+/* ---------- beat 4 : emblem outro ---------- */
+.b4g{position:absolute;inset:0;animation:kG4 var(--T) linear infinite}
+.em{position:absolute;left:604px;top:118px}
+.em .ec{fill:none;stroke:color-mix(in srgb,var(--tx) 32%,transparent);stroke-width:1.5;stroke-dasharray:1;opacity:0;animation:kEnC var(--T) linear infinite}
+.em .es{fill:none;stroke:color-mix(in srgb,var(--ac) 85%,var(--tx));stroke-width:2;stroke-linecap:round;stroke-dasharray:1;opacity:0;animation:kEnS var(--T) linear infinite;animation-delay:calc(8.12s + var(--i)*0.11s)}
+.em .ed{fill:var(--ac);opacity:0;animation:kEd var(--T) linear infinite;transform-box:fill-box;transform-origin:center}
+.em .slt{fill:none;stroke:color-mix(in srgb,var(--tx) 35%,transparent);stroke-width:1.5;stroke-dasharray:1;opacity:0;animation:kSlot var(--T) linear infinite}
+.blk{offset-path:path("M 211 36 C 252 128, 196 214, 116 180");offset-distance:100%;animation:kBlk var(--T) linear infinite}
+.strw{position:absolute;left:50%;top:398px;transform:translateX(-50%);width:178px;height:26px;overflow:hidden}
+.st{position:absolute;top:1px;opacity:0;animation:kStX var(--T) linear infinite;animation-delay:calc(9.02s + var(--i)*0.055s)}
+.st path{fill:color-mix(in srgb,var(--ac) 62%,var(--tx))}
+.shn{position:absolute;left:0;top:0;width:2px;height:26px;background:color-mix(in srgb,var(--tx) 55%,transparent);opacity:0;animation:kSheen var(--T) linear infinite}
+.words{position:absolute;left:0;right:0;top:452px;text-align:center}
+.wmk{overflow:hidden;margin:0 auto 2px}
+.win{display:inline-block;font-weight:800;font-size:104px;line-height:1.02;letter-spacing:-.03em;color:var(--tx);opacity:0;transform:translateY(108%);animation:kW1 var(--T) linear infinite}
+.win.w2{animation-name:kW2}
+.win.w3{animation-name:kW3,kOpen;letter-spacing:.17em}
+.cmp{position:absolute;left:0;right:0;top:792px;text-align:center;font-size:16px;font-weight:600;letter-spacing:.38em;color:color-mix(in srgb,var(--tx) 34%,transparent);opacity:0;animation:kCmp var(--T) linear infinite}
+
+/* ---------- chrome ---------- */
+#ui{position:absolute;right:22px;top:20px;display:flex;gap:8px;z-index:9}
+#ui button{width:30px;height:30px;border:0;background:transparent;color:color-mix(in srgb,var(--tx) 42%,transparent);cursor:pointer;padding:5px}
+#ui button:hover{color:color-mix(in srgb,var(--tx) 78%,transparent)}
+#ui svg{width:20px;height:20px;stroke:currentColor;fill:none;stroke-width:1.8;stroke-linecap:round}
+#ui .iP{display:none}
+#stage.paused .iP{display:block}
+#stage.paused .iPa{display:none}
+.iPa,.iP{fill:currentColor;stroke:none}
+#pgw{position:absolute;left:64px;right:64px;bottom:20px;height:2px;background:color-mix(in srgb,var(--bd) 55%,transparent);z-index:9}
+#pg{position:absolute;inset:0;background:color-mix(in srgb,var(--tx) 38%,transparent);transform:scaleX(0);transform-origin:left center;animation:kPg var(--T) linear infinite}
+
+/* ---------- keyframes (all share one 10.8s clock) ---------- */
+@keyframes kDrift{0%{transform:translateX(240px)}100%{transform:translateX(1240px)}}
+@keyframes kPg{0%{transform:scaleX(0)}100%{transform:scaleX(1)}}
+/* gates */
+@keyframes kG1{0%{opacity:1}22.9%{opacity:1}23.9%{opacity:0}}
+@keyframes kG2{0%{opacity:0;transform:scale(1)}24.2%{opacity:0;transform:scale(1)}24.9%{opacity:1;transform:scale(1)}44.2%{opacity:1;transform:scale(1)}47.2%{opacity:0;transform:scale(2.55)}}
+@keyframes kG3{0%{opacity:0}46.9%{opacity:0}47.4%{opacity:1}72.4%{opacity:1}73.4%{opacity:0}}
+@keyframes kG4{0%{opacity:0}73.0%{opacity:0}73.6%{opacity:1}97.2%{opacity:1}99.3%{opacity:0}}
+/* beat 1 */
+@keyframes kFill{0%{clip-path:inset(0 100% 0 0)}2.4%{clip-path:inset(0 100% 0 0)}8.8%{clip-path:inset(0 0 0 0)}}
+@keyframes kL2{0%{opacity:0;transform:translateY(112%)}4.8%{opacity:1;transform:none;animation-timing-function:var(--eo)}4.81%{animation-timing-function:linear}21.2%{opacity:1;transform:none;animation-timing-function:var(--ei)}23.6%{opacity:0;transform:translateY(-115%)}}
+@keyframes kL1x{0%{transform:none;opacity:1}21.4%{transform:none;opacity:1;animation-timing-function:var(--ei)}23.7%{transform:translateY(-115%);opacity:0}}
+@keyframes kRule{0%{transform:scaleX(0);opacity:0}6.5%{transform:scaleX(0);opacity:0;animation-timing-function:var(--eo)}6.51%{animation-timing-function:linear}10.6%{transform:scaleX(1);opacity:1}21.2%{transform:scaleX(1);opacity:1;animation-timing-function:linear}23%{opacity:0}}
+@keyframes kNum{0%{opacity:0;transform:translateY(34px)}5%{opacity:0;transform:translateY(34px);animation-timing-function:var(--eo)}5.01%{animation-timing-function:linear}8.6%{opacity:1;transform:none}21.2%{opacity:1;transform:none;animation-timing-function:var(--ei)}23.2%{opacity:0;transform:translateY(-30px)}}
+@keyframes kChipOp{0%{opacity:0}4.4%{opacity:1}}
+@keyframes kCmv{0%{transform:translate(var(--fx),var(--fy)) rotate(var(--fr)) scale(.72);animation-timing-function:var(--eo)}5%{transform:none}20%{transform:none;animation-timing-function:var(--ei)}23.2%{transform:translate(var(--ix),var(--iy)) scale(.26) rotate(10deg)}}
+@keyframes kNf{0%{opacity:0;transform:translateY(var(--ny,16px)) scale(.72);animation-timing-function:var(--eo)}3.8%{opacity:1;transform:none}9%{transform:translateY(-6px)}20%{transform:translateY(-6px);opacity:1;animation-timing-function:var(--ei)}22%{opacity:0;transform:translateY(-2px) scale(1.12)}}
+/* beat 2 */
+@keyframes kNode{0%{opacity:0;transform:scale(.2)}24.5%{opacity:0;transform:scale(.2);animation-timing-function:var(--eo)}24.51%{animation-timing-function:linear}26.4%{opacity:1;transform:scale(1.08)}27.2%{transform:scale(1)}}
+@keyframes kR1{0%{opacity:0;transform:scale(.5)}25.6%{opacity:.45;transform:scale(.55)}30.6%{opacity:0;transform:scale(1.65)}30.7%{opacity:0}}
+@keyframes kR2{0%{opacity:0;transform:scale(.5)}27.6%{opacity:.35;transform:scale(.55)}33%{opacity:0;transform:scale(1.65)}33.6%{opacity:.3;transform:scale(.6)}38.4%{opacity:0;transform:scale(1.6)}38.5%{opacity:0}}
+@keyframes kTrk{0%{letter-spacing:.34em}26.4%{letter-spacing:.34em;animation-timing-function:var(--eo)}26.41%{animation-timing-function:linear}31.8%{letter-spacing:.02em}}
+@keyframes kLtr{0%{opacity:0;transform:translateY(118%);animation-timing-function:var(--eo)}6.2%{opacity:1;transform:none}}
+@keyframes kSub{0%{opacity:0;transform:translateY(110%)}35.4%{opacity:0;transform:translateY(110%);animation-timing-function:var(--eo)}35.41%{animation-timing-function:linear}38.6%{opacity:1;transform:none}}
+/* beat 3 */
+@keyframes kPanel{0%{opacity:0;transform:scale(.97);clip-path:inset(0 0 100% 0)}46.8%{opacity:0;transform:scale(.97);clip-path:inset(0 0 100% 0);animation-timing-function:var(--eo)}46.81%{animation-timing-function:linear}50.6%{opacity:1;transform:none;clip-path:inset(0 0 0 0)}71.2%{opacity:1;clip-path:inset(0 0 0 0);animation-timing-function:var(--eo)}71.21%{animation-timing-function:var(--ei)}73%{opacity:1;clip-path:inset(100% 0 0 0)}73.4%{opacity:0}}
+@keyframes kHd{0%{opacity:0;transform:translateY(-12px)}48.2%{opacity:0;transform:translateY(-12px);animation-timing-function:var(--eo)}48.21%{animation-timing-function:linear}51%{opacity:1;transform:none}}
+@keyframes kSearch{0%{opacity:0;transform:translateY(14px)}49%{opacity:0;transform:translateY(14px);animation-timing-function:var(--eo)}49.01%{animation-timing-function:linear}52.4%{opacity:1;transform:none}}
+@keyframes kCaret{0%{opacity:0}52%{opacity:0}52.4%{opacity:1}57.2%{opacity:1}57.8%{opacity:0}}
+@keyframes kBlink{0%{opacity:.95}50%{opacity:.15}100%{opacity:.95}}
+@keyframes kTag{0%{opacity:0;transform:translateY(12px) scale(.86);animation-timing-function:var(--eo)}4%{opacity:1;transform:none}}
+@keyframes kSatIn{0%{opacity:0;transform:scale(.6)}3.4%{opacity:1;transform:scale(1);animation-timing-function:var(--eo)}3.41%{animation-timing-function:linear}}
+@keyframes kWebD{0%{opacity:0;stroke-dashoffset:1}5.5%{opacity:1;stroke-dashoffset:0;animation-timing-function:var(--eo)}5.51%{animation-timing-function:linear}}
+@keyframes kTrv{0%{offset-distance:0;opacity:0;animation-timing-function:cubic-bezier(.45,.05,.55,.95)}0.9%{opacity:.92}6.5%{offset-distance:100%;opacity:.92;animation-timing-function:linear}6.51%{animation-timing-function:linear}7.4%{opacity:0}}
+@keyframes kCnt{0%{opacity:0;transform:translateY(16px)}57%{opacity:0;transform:translateY(16px);animation-timing-function:var(--eo)}57.01%{animation-timing-function:linear}60.4%{opacity:1;transform:none}}
+@keyframes kCardA{0%{opacity:0;transform:translateX(34px)}61%{opacity:0;transform:translateX(34px);animation-timing-function:var(--eo)}61.01%{animation-timing-function:linear}64.2%{opacity:1;transform:none}}
+@keyframes kCardB{0%{opacity:0;transform:translateX(34px)}63%{opacity:0;transform:translateX(34px);animation-timing-function:var(--eo)}63.01%{animation-timing-function:linear}66.2%{opacity:1;transform:none}}
+/* beat 4 */
+@keyframes kEnC{0%{opacity:0;stroke-dashoffset:1}73.8%{opacity:0;stroke-dashoffset:1;animation-timing-function:linear}74%{opacity:1;animation-timing-function:linear}78.4%{opacity:1;stroke-dashoffset:0}}
+@keyframes kEnS{0%{opacity:0;stroke-dashoffset:1}75.4%{opacity:0;stroke-dashoffset:1;animation-timing-function:linear}75.6%{opacity:1}79.6%{opacity:1;stroke-dashoffset:0}}
+@keyframes kEd{0%{opacity:0;transform:scale(.3)}77.4%{opacity:0;transform:scale(.3);animation-timing-function:var(--eo)}77.41%{animation-timing-function:linear}78.3%{opacity:1;transform:scale(1)}}
+@keyframes kSlot{0%{opacity:0;stroke-dashoffset:1}79.4%{opacity:0;stroke-dashoffset:1;animation-timing-function:linear}79.6%{opacity:1}82%{opacity:1;stroke-dashoffset:0}}
+@keyframes kBlk{0%{offset-distance:0;opacity:0}80.6%{offset-distance:0;opacity:0;animation-timing-function:cubic-bezier(.3,.7,.3,1)}81.2%{opacity:1}84.3%{offset-distance:100%}85%{offset-distance:94%}85.6%{offset-distance:102%}86.2%{offset-distance:100%}}
+@keyframes kStX{0%{opacity:0;transform:scale(.4);animation-timing-function:var(--eo)}3.4%{opacity:1;transform:scale(1.12)}4.2%{transform:scale(1)}}
+@keyframes kSheen{0%{opacity:0;transform:translateX(-140px)}88.4%{opacity:0;transform:translateX(-140px);animation-timing-function:cubic-bezier(.4,0,.3,1)}88.41%{animation-timing-function:linear}90%{opacity:.7}93.5%{opacity:0;transform:translateX(230px)}93.6%{opacity:0}}
+@keyframes kW1{0%{opacity:0;transform:translateY(108%)}87.6%{opacity:0;transform:translateY(108%);animation-timing-function:var(--eo)}87.61%{animation-timing-function:linear}91.6%{opacity:1;transform:none}}
+@keyframes kW2{0%{opacity:0;transform:translateY(108%)}88.5%{opacity:0;transform:translateY(108%);animation-timing-function:var(--eo)}88.51%{animation-timing-function:linear}92.5%{opacity:1;transform:none}}
+@keyframes kW3{0%{opacity:0;transform:translateY(108%)}89.4%{opacity:0;transform:translateY(108%);animation-timing-function:var(--eo)}89.41%{animation-timing-function:linear}93.4%{opacity:1;transform:none}}
+@keyframes kOpen{0%{letter-spacing:.17em}90.2%{letter-spacing:.17em;animation-timing-function:var(--eo)}90.21%{animation-timing-function:linear}94%{letter-spacing:.045em}}
+@keyframes kCmp{0%{opacity:0}95.2%{opacity:0;animation-timing-function:var(--eo)}95.21%{animation-timing-function:linear}96.4%{opacity:1}}
+
+/* ---------- reduced motion : composed end poster ---------- */
+#stage.rm *,#stage.rm{animation:none!important}
+.rm .b1wrap,.rm .b2g,.rm .g3b{opacity:0!important}
+.rm .b4g{opacity:1!important}
+.rm .b4g *{opacity:1!important;transform:none!important}
+.rm .shn{opacity:0!important}
+.rm .em .ec,.rm .em .es,.rm .em .slt{stroke-dashoffset:0!important}
+.rm .blk{offset-distance:100%!important}
+.rm .win.w3{letter-spacing:.045em!important}
+.rm #pg{transform:scaleX(1)}
+</style>
+</head>
+<body>
+<div id="stage">
+  <div class="dots"></div>
+  <div class="glide"></div>
+
+  <!-- BEAT 1 — tab chaos -->
+  <div class="b1wrap">
+    <div class="l1mk"><div class="l1g dl">
+      <span class="l1o">TOO MANY</span><span class="l1fc"><span class="l1f">TOO MANY</span></span>
+    </div></div>
+    <div class="l2mk dl"><span class="l2in">TABS.</span></div>
+    <div class="rule"></div>
+    <div class="numrow"><b id="num"></b><i>sources</i></div>
+    <ul>
+      <li class="chip" style="left:946px;top:108px;--d:.30s;--fx:-26px;--fy:34px;--fr:-7deg;--ix:-301px;--iy:322px"><span class="cop"><span class="cmv"><span class="cbx" style="--cd:var(--ac)"><em></em><u></u><s></s></span></span></span></li>
+      <li class="chip" style="left:1128px;top:148px;--d:.34s;--fx:22px;--fy:-24px;--fr:5deg;--ix:-483px;--iy:282px"><span class="cop"><span class="cmv"><span class="cbx" style="--cd:color-mix(in srgb,var(--tx) 55%,transparent)"><em></em><u></u><s></s></span></span></span></li>
+      <li class="chip" style="left:876px;top:204px;--d:.38s;--fx:-18px;--fy:26px;--fr:4deg;--ix:-231px;--iy:226px"><span class="cop"><span class="cmv"><span class="cbx" style="--cd:var(--ac)"><em></em><u></u><s></s></span></span></span></li>
+      <li class="chip" style="left:1176px;top:258px;--d:.42s;--fx:26px;--fy:-30px;--fr:8deg;--ix:-531px;--iy:192px"><span class="cop"><span class="cmv"><span class="cbx" style="--cd:var(--bd)"><em></em><u></u><s></s></span></span></span></li>
+      <li class="chip" style="left:996px;top:318px;--d:.46s;--fx:-30px;--fy:-22px;--fr:-5deg;--ix:-351px;--iy:112px"><span class="cop"><span class="cmv"><span class="cbx" style="--cd:var(--ac)"><em></em><u></u><s></s></span></span></span></li>
+      <li class="chip" style="left:858px;top:342px;--d:.50s;--fx:18px;--fy:-34px;--fr:6deg;--ix:-213px;--iy:88px"><span class="cop"><span class="cmv"><span class="cbx" style="--cd:color-mix(in srgb,var(--tx) 55%,transparent)"><em></em><u></u><s></s></span></span></span></li>
+      <li class="chip" style="left:1148px;top:344px;--d:.54s;--fx:-24px;--fy:30px;--fr:-8deg;--ix:-503px;--iy:88px"><span class="cop"><span class="cmv"><span class="cbx" style="--cd:var(--ac)"><em></em><u></u><s></s></span></span></span></li>
+      <li class="chip" style="left:972px;top:444px;--d:.58s;--fx:30px;--fy:18px;--fr:4deg;--ix:-327px;--iy:-14px"><span class="cop"><span class="cmv"><span class="cbx" style="--cd:var(--bd)"><em></em><u></u><s></s></span></span></span></li>
+      <li class="chip" style="left:1204px;top:468px;--d:.62s;--fx:-20px;--fy:30px;--fr:-4deg;--ix:-555px;--iy:-38px"><span class="cop"><span class="cmv"><span class="cbx" style="--cd:var(--ac)"><em></em><u></u><s></s></span></span></span></li>
+    </ul>
+    <div class="nf" style="left:830px;top:92px;--d:.95s;--ny:16px;--cd:var(--ac)"><em></em><u></u><s></s></div>
+    <div class="nf" style="left:1240px;top:164px;--d:1.35s;--ny:20px;--cd:color-mix(in srgb,var(--tx) 55%,transparent)"><em></em><u></u><s></s></div>
+    <div class="nf" style="left:906px;top:522px;--d:1.60s;--ny:14px;--cd:var(--ac)"><em></em><u></u><s></s></div>
+  </div>
+
+  <!-- BEAT 2 — implosion node + wordmark -->
+  <div class="b2g">
+    <i class="rg rg1"></i><i class="rg rg2"></i>
+    <div class="nd"></div>
+    <div class="wm"><div class="wm-t">
+      <span class="wlo"><span class="wl" style="--i:0">J</span></span><span class="wlo"><span class="wl" style="--i:1">O</span></span><span class="wlo"><span class="wl" style="--i:2">B</span></span><span class="sp"></span><span class="wlo"><span class="wl" style="--i:3">C</span></span><span class="wlo"><span class="wl" style="--i:4">O</span></span><span class="wlo"><span class="wl" style="--i:5">L</span></span><span class="wlo"><span class="wl" style="--i:6">L</span></span><span class="wlo"><span class="wl" style="--i:7">E</span></span><span class="wlo"><span class="wl" style="--i:8">C</span></span><span class="wlo"><span class="wl" style="--i:9">T</span></span><span class="wlo"><span class="wl" style="--i:10">O</span></span><span class="wlo"><span class="wl" style="--i:11">R</span></span>
+    </div></div>
+    <div class="submk"><span class="subin">Everything, one feed.</span></div>
+  </div>
+
+  <!-- BEAT 3 — dashboard film -->
+  <div class="g3b">
+    <svg class="web" width="1440" height="900" viewBox="0 0 1440 900">
+      <path class="wp" style="--i:0" pathLength="1" d="M 292 318 C 330 322, 320 352, 368 356"/>
+      <path class="wp" style="--i:1" pathLength="1" d="M 1188 332 C 1146 336, 1122 354, 1076 360"/>
+      <path class="wp" style="--i:2" pathLength="1" d="M 292 612 C 334 606, 318 520, 368 512"/>
+      <path class="wp" style="--i:3" pathLength="1" d="M 1188 600 C 1150 594, 1126 508, 1074 508"/>
+    </svg>
+    <div class="sat" style="left:223px;top:293px;--i:0"><svg width="18" height="18" viewBox="0 0 18 18"><circle cx="9" cy="9" r="7" fill="none" stroke="color-mix(in srgb,var(--tx) 55%,transparent)" stroke-width="1.5"/><circle cx="9" cy="9" r="2.6" fill="color-mix(in srgb,var(--tx) 55%,transparent)"/></svg></div>
+    <div class="sat" style="left:1173px;top:310px;--i:1"><svg width="18" height="18" viewBox="0 0 18 18"><path d="M9 1.5 15.5 5.25v7.5L9 16.5 2.5 12.75V5.25Z" fill="none" stroke="color-mix(in srgb,var(--tx) 55%,transparent)" stroke-width="1.5"/></svg></div>
+    <div class="sat" style="left:228px;top:590px;--i:2"><svg width="18" height="18" viewBox="0 0 18 18"><path d="M9 1.5 16.5 9 9 16.5 1.5 9Z" fill="none" stroke="color-mix(in srgb,var(--tx) 55%,transparent)" stroke-width="1.5"/></svg></div>
+    <div class="sat" style="left:1165px;top:586px;--i:3"><svg width="18" height="18" viewBox="0 0 18 18"><rect x="2.5" y="2.5" width="13" height="13" rx="3" fill="none" stroke="color-mix(in srgb,var(--tx) 55%,transparent)" stroke-width="1.5"/></svg></div>
+    <span class="trv" style="--d:6.05s;offset-path:path('M 292 612 C 334 606, 318 520, 368 512')"></span>
+    <span class="trv" style="--d:6.42s;offset-path:path('M 1188 600 C 1150 594, 1126 508, 1074 508')"></span>
+    <div id="panel">
+      <div class="hd"><em></em><u></u><s><u></u><s></s><u></u></s></div>
+      <div class="srch">
+        <svg class="mag" width="20" height="20" viewBox="0 0 20 20"><circle cx="8.5" cy="8.5" r="5.4" fill="none" stroke="color-mix(in srgb,var(--tx) 40%,transparent)" stroke-width="1.6"/><path d="M12.8 12.8 17 17" stroke="color-mix(in srgb,var(--tx) 40%,transparent)" stroke-width="1.6" stroke-linecap="round"/></svg>
+        <span id="q"></span><span class="crt"><b></b></span>
+      </div>
+      <div class="tags">
+        <span class="tag" style="--i:0">Remote</span>
+        <span class="tag" style="--i:1">Full-time</span>
+        <span class="tag hl" style="--i:2">Senior Dev</span>
+      </div>
+      <div class="cnt"><b id="c1284">0</b><i>jobs today</i></div>
+      <div class="crd ce"><em></em><u>Platform Engineer</u><s></s></div>
+      <div class="crd cp"><u><bdi dir="rtl" lang="fa">توسعه‌دهنده ارشد</bdi></u><span class="r2"><s><bdi dir="rtl" lang="fa">۲۸۶ آگهی</bdi></s><span class="pill"><bdi dir="rtl" lang="fa">دورکاری</bdi></span></span></div>
+    </div>
+  </div>
+
+  <!-- BEAT 4 — emblem outro -->
+  <div class="b4g">
+    <svg class="em" width="232" height="232" viewBox="0 0 232 232">
+      <circle class="ec" cx="116" cy="116" r="88" pathLength="1"/>
+      <path class="es" style="--i:0" pathLength="1" d="M50 78 C 86 96, 128 96, 112 114"/>
+      <path class="es" style="--i:1" pathLength="1" d="M182 70 C 148 96, 122 100, 117 112"/>
+      <path class="es" style="--i:2" pathLength="1" d="M116 28 C 116 54, 116 66, 116 98"/>
+      <circle class="ed" cx="116" cy="116" r="9"/>
+      <rect class="slt" x="99" y="168" width="34" height="20" rx="5" pathLength="1"/>
+      <g class="blk">
+        <rect x="108" y="174.5" width="16" height="11" rx="2.5" fill="color-mix(in srgb,var(--ac) 70%,var(--tx))"/>
+        <path d="M111 178 l10 0 M111 182 l10 0" stroke="color-mix(in srgb,var(--bg) 80%,transparent)" stroke-width="1"/>
+      </g>
+    </svg>
+    <div class="strw">
+      <svg class="st s0" style="--i:0;left:0px" width="26" height="26" viewBox="0 0 24 24"><path d="M12 2l2.9 6.2 6.8.8-5 4.7 1.3 6.7-6-3.4-6 3.4 1.3-6.7-5-4.7 6.8-.8z"/></svg>
+      <svg class="st s1" style="--i:1;left:38px" width="26" height="26" viewBox="0 0 24 24"><path d="M12 2l2.9 6.2 6.8.8-5 4.7 1.3 6.7-6-3.4-6 3.4 1.3-6.7-5-4.7 6.8-.8z"/></svg>
+      <svg class="st s2" style="--i:2;left:76px" width="26" height="26" viewBox="0 0 24 24"><path d="M12 2l2.9 6.2 6.8.8-5 4.7 1.3 6.7-6-3.4-6 3.4 1.3-6.7-5-4.7 6.8-.8z"/></svg>
+      <svg class="st s3" style="--i:3;left:114px" width="26" height="26" viewBox="0 0 24 24"><path d="M12 2l2.9 6.2 6.8.8-5 4.7 1.3 6.7-6-3.4-6 3.4 1.3-6.7-5-4.7 6.8-.8z"/></svg>
+      <svg class="st s4" style="--i:4;left:152px" width="26" height="26" viewBox="0 0 24 24"><path d="M12 2l2.9 6.2 6.8.8-5 4.7 1.3 6.7-6-3.4-6 3.4 1.3-6.7-5-4.7 6.8-.8z"/></svg>
+      <span class="shn"></span>
+    </div>
+    <div class="words">
+      <div class="wmk"><span class="win w1">AGGREGATE.</span></div>
+      <div class="wmk"><span class="win w2">CRAWL.</span></div>
+      <div class="wmk"><span class="win w3">DISCOVER.</span></div>
+    </div>
+    <div class="cmp">JOB COLLECTOR</div>
+  </div>
+
+  <!-- chrome -->
+  <div id="ui">
+    <button id="btnPlay" tabindex="-1" aria-label="Pause or resume">
+      <svg class="iPa icn" viewBox="0 0 24 24"><path d="M9 5v14M15 5v14" stroke="currentColor"/></svg>
+      <svg class="iP" viewBox="0 0 24 24"><path d="M8 5l11 7-11 7z"/></svg>
+    </button>
+    <button id="btnRz" tabindex="-1" aria-label="Replay">
+      <svg viewBox="0 0 24 24"><path d="M20 12a8 8 0 1 1-2.4-5.7"/><path d="M20 3.5v4.2h-4.2"/></svg>
+    </button>
+  </div>
+  <div id="pgw"><div id="pg"></div></div>
+</div>
+
+<script>
+(function(){
+  var D=10800, stage=document.getElementById('stage');
+  var num=document.getElementById('num'), cnt=document.getElementById('c1284'), q=document.getElementById('q');
+  var rm=window.matchMedia&&matchMedia('(prefers-reduced-motion: reduce)').matches;
+  if(rm) stage.classList.add('rm');
+
+  function fit(){
+    var s=Math.min(window.innerWidth/1440, window.innerHeight/900);
+    stage.style.setProperty('--s', s);
+  }
+  fit();
+  window.addEventListener('resize', fit);
+
+  function cssT(){
+    try{
+      var list=pg.getAnimations?pg.getAnimations():[];
+      if(list.length&&list[0].currentTime!=null) return list[0].currentTime%D;
+    }catch(e){}
+    return 0;
+  }
+  var pg=document.getElementById('pg');
+  var t0=performance.now();
+  var lastN=-1,lastC=-1,lastQ=-1;
+  function easeOut(p){p=Math.max(0,Math.min(1,p));return 1-Math.pow(1-p,3);}
+  function fmt(n){return String(n).replace(/\B(?=(\d{3})+(?!\d))/g,',');}
+
+  if(rm){
+    num.textContent='47'; cnt.textContent='1,284'; q.textContent='golang';
+    return;
+  }
+  function loop(){
+    var t=cssT();
+    /* beat 1 : count up to 47 */
+    var p=(t-780)/820;
+    var v=p<=0?-1:Math.round(47*easeOut(p));
+    if(v!==lastN){lastN=v; num.textContent=v<0?'':(v===0?'0':String(v));}
+    /* beat 3 : count to 1,284 */
+    p=(t-6180)/1080;
+    v=p<=0?-1:Math.round(1284*easeOut(p));
+    if(v!==lastC){lastC=v; cnt.textContent=v<0?'0':fmt(v);}
+    /* beat 3 : typing "golang" */
+    var idx=Math.max(0,Math.min(6,Math.floor((t-5660)/85)));
+    if(idx!==lastQ){lastQ=idx; q.textContent='golang'.slice(0,idx);}
+    requestAnimationFrame(loop);
+  }
+  requestAnimationFrame(loop);
+
+  function replay(){
+    var a=document.getAnimations?document.getAnimations():[];
+    for(var i=0;i<a.length;i++){try{a[i].currentTime=0;}catch(e){}}
+    stage.classList.remove('paused');
+  }
+  function toggle(){
+    stage.classList.toggle('paused');
+  }
+  document.getElementById('btnPlay').addEventListener('click',function(){toggle();this.blur();});
+  document.getElementById('btnRz').addEventListener('click',function(){replay();this.blur();});
+  window.addEventListener('keydown',function(e){
+    if(e.code==='Space'){e.preventDefault(); if(!e.repeat) toggle();}
+    else if(e.key==='r'||e.key==='R'){replay();}
+  });
+})();
+</script>
+</body>
+</html>

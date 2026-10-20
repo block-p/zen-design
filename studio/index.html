@@ -1,0 +1,44 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="theme-color" content="#f8fafc" />
+    <meta
+      name="description"
+      content="ZenDesign — a local-first AI design agent studio rendered in Rust."
+    />
+    <script>
+      (function() {
+        try {
+          var lang = localStorage.getItem('zen-language');
+          if (lang === 'fa') {
+            document.documentElement.lang = 'fa';
+            document.documentElement.dir = 'rtl';
+          } else {
+            document.documentElement.lang = 'en';
+            document.documentElement.dir = 'ltr';
+          }
+
+          var theme = localStorage.getItem('zen-theme');
+          if (theme === 'dark' || (!theme && window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches)) {
+            document.documentElement.setAttribute('data-theme', 'dark');
+          } else {
+            document.documentElement.setAttribute('data-theme', 'light');
+          }
+        } catch (e) {}
+      })();
+    </script>
+    <link
+      rel="icon"
+      href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%232563eb'/%3E%3Cpath d='M16 6l2.2 7.8L26 16l-7.8 2.2L16 26l-2.2-7.8L6 16l7.8-2.2z' fill='white'/%3E%3C/svg%3E"
+    />
+    <title>ZenDesign Studio</title>
+    <link data-trunk rel="rust" />
+    <link data-trunk rel="css" href="style.css" />
+    <link data-trunk rel="copy-dir" href="assets" />
+  </head>
+  <body>
+    <noscript>ZenDesign Studio needs JavaScript enabled to run its WASM renderer.</noscript>
+  </body>
+</html>

@@ -1,0 +1,26 @@
+# Rust
+target/
+**/target/
+**/*.rs.bk
+
+# Trunk output
+dist/
+**/dist/
+
+# Local cache & temporary files
+*.tmp
+*.log
+.DS_Store
+.idea/
+.vscode/
+
+# Local runtime data & exports
+*.mp4
+*.webm
+workspace/exports/
+workspace/notes.txt
+
+# Local configs and history with potential keys
+config.toml
+history.json
+.env*
