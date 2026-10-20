@@ -194,6 +194,20 @@ fn resolve_workspace() -> PathBuf {
         return std::fs::canonicalize(&path).unwrap_or(path);
     }
 
+    if let Ok(exe) = std::env::current_exe() {
+        if let Some(parent) = exe.parent() {
+            let exe_ws = parent.join("workspace");
+            if exe_ws.is_dir() {
+                return std::fs::canonicalize(&exe_ws).unwrap_or(exe_ws);
+            }
+        }
+    }
+
+    let local = PathBuf::from("./workspace");
+    if local.is_dir() {
+        return std::fs::canonicalize(&local).unwrap_or(local);
+    }
+
     let manifest_relative = Path::new(env!("CARGO_MANIFEST_DIR")).join("../workspace");
     let candidates = [PathBuf::from("../workspace"), manifest_relative];
 
@@ -203,13 +217,36 @@ fn resolve_workspace() -> PathBuf {
         }
     }
 
-    let fallback = PathBuf::from("../workspace");
+    let fallback = PathBuf::from("./workspace");
     let _ = std::fs::create_dir_all(&fallback);
     std::fs::canonicalize(&fallback).unwrap_or(fallback)
 }
 
 /// Locate the Trunk output regardless of the process working directory.
 fn resolve_studio() -> PathBuf {
+    if let Ok(exe) = std::env::current_exe() {
+        if let Some(parent) = exe.parent() {
+            let exe_dist = parent.join("dist");
+            if exe_dist.is_dir() {
+                return std::fs::canonicalize(&exe_dist).unwrap_or(exe_dist);
+            }
+            let exe_studio = parent.join("studio");
+            if exe_studio.is_dir() {
+                return std::fs::canonicalize(&exe_studio).unwrap_or(exe_studio);
+            }
+        }
+    }
+
+    let local_dist = PathBuf::from("./dist");
+    if local_dist.is_dir() {
+        return std::fs::canonicalize(&local_dist).unwrap_or(local_dist);
+    }
+
+    let local_studio_dist = PathBuf::from("./studio/dist");
+    if local_studio_dist.is_dir() {
+        return std::fs::canonicalize(&local_studio_dist).unwrap_or(local_studio_dist);
+    }
+
     let manifest_relative = Path::new(env!("CARGO_MANIFEST_DIR")).join("../studio/dist");
     let candidates = [PathBuf::from("../studio/dist"), manifest_relative];
 

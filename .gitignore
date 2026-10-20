@@ -25,3 +25,4 @@ workspace/notes.txt
 config.toml
 history.json
 .env*
+release_builds/

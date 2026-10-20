@@ -1,0 +1,97 @@
+name: Release Multi-Platform Binaries
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+    inputs:
+      tag_name:
+        description: 'Release tag name (e.g. v0.1.0)'
+        required: true
+        default: 'v0.1.0'
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    name: Build (${{ matrix.os }} - ${{ matrix.target }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-latest
+            target: x86_64-unknown-linux-gnu
+            artifact_name: zen-design-server
+            asset_name: zen-design-v0.1.0-linux-x86_64.tar.gz
+            use_tar: true
+          - os: windows-latest
+            target: x86_64-pc-windows-msvc
+            artifact_name: zen-design-server.exe
+            asset_name: zen-design-v0.1.0-windows-x86_64.zip
+            use_tar: false
+          - os: macos-latest
+            target: aarch64-apple-darwin
+            artifact_name: zen-design-server
+            asset_name: zen-design-v0.1.0-darwin-arm64.tar.gz
+            use_tar: true
+          - os: macos-13
+            target: x86_64-apple-darwin
+            artifact_name: zen-design-server
+            asset_name: zen-design-v0.1.0-darwin-x86_64.tar.gz
+            use_tar: true
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: wasm32-unknown-unknown, ${{ matrix.target }}
+
+      - name: Install Trunk
+        uses: taiki-e/install-action@v2
+        with:
+          tool: trunk
+
+      - name: Build Studio (WASM)
+        run: |
+          cd studio
+          trunk build --release
+
+      - name: Build Server
+        run: |
+          cd server
+          cargo build --release --target ${{ matrix.target }}
+
+      - name: Package Release Asset (Unix)
+        if: matrix.use_tar
+        run: |
+          mkdir -p package/dist package/workspace
+          cp server/target/${{ matrix.target }}/release/${{ matrix.artifact_name }} package/
+          cp -r studio/dist/* package/dist/
+          cp workspace/index.html package/workspace/
+          cp README.md LICENSE package/
+          tar -czvf ${{ matrix.asset_name }} -C package .
+
+      - name: Package Release Asset (Windows)
+        if: "!matrix.use_tar"
+        shell: bash
+        run: |
+          mkdir -p package/dist package/workspace
+          cp server/target/${{ matrix.target }}/release/${{ matrix.artifact_name }} package/
+          cp -r studio/dist/* package/dist/
+          cp workspace/index.html package/workspace/
+          cp README.md LICENSE package/
+          7z a ${{ matrix.asset_name }} ./package/*
+
+      - name: Upload to Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ github.ref_name || inputs.tag_name }}
+          files: ${{ matrix.asset_name }}
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
