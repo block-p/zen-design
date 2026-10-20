@@ -31,6 +31,11 @@ use tokio_stream::wrappers::{BroadcastStream, IntervalStream};
 use tower_http::{services::ServeDir, trace::TraceLayer};
 use tracing::{info, warn};
 use tracing_subscriber::EnvFilter;
+use rust_embed::RustEmbed;
+
+#[derive(RustEmbed)]
+#[folder = "../studio/dist/"]
+struct StudioAssets;
 
 use agent::{AgentEvent, AgentOrchestrator, PromptRequest};
 use settings::{Settings, KNOWN_PROVIDERS, PROVIDER_OPENAI};
@@ -161,15 +166,17 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .nest_service(
             "/preview",
             ServeDir::new(&workspace).append_index_html_on_directories(true),
-        )
-        // The studio itself is a Rust/WASM bundle compiled by Trunk. Axum
-        // serves it from the same origin as the API, so SSE and the preview
-        // iframe need no proxy or CORS exceptions. No CORS layer: the studio is
-        // same-origin, and a permissive one would let any website reach this
-        // daemon's settings and model credentials.
-        .fallback_service(ServeDir::new(&studio).append_index_html_on_directories(true))
-        .layer(TraceLayer::new_for_http())
-        .with_state(state);
+        );
+
+    let app = if studio.join("index.html").is_file() {
+        info!("Serving studio from disk: {}", studio.display());
+        app.fallback_service(ServeDir::new(&studio).append_index_html_on_directories(true))
+    } else {
+        info!("Serving studio from standalone embedded assets");
+        app.fallback(static_embedded_handler)
+    };
+
+    let app = app.layer(TraceLayer::new_for_http()).with_state(state);
 
     let listener = tokio::net::TcpListener::bind(&bind_addr).await?;
     info!("ZenDesign daemon listening on http://{bind_addr}");
@@ -930,6 +937,35 @@ async fn new_project(State(state): State<AppState>) -> impl IntoResponse {
             Json(json!({ "status": "error", "message": err })),
         )
             .into_response(),
+    }
+}
+
+async fn static_embedded_handler(uri: axum::http::Uri) -> impl IntoResponse {
+    let mut path = uri.path().trim_start_matches('/').to_string();
+    if path.is_empty() {
+        path = "index.html".to_string();
+    }
+
+    match StudioAssets::get(&path) {
+        Some(content) => {
+            let mime = mime_guess::from_path(&path).first_or_octet_stream();
+            (
+                [(axum::http::header::CONTENT_TYPE, mime.as_ref())],
+                content.data,
+            )
+                .into_response()
+        }
+        None => {
+            if let Some(content) = StudioAssets::get("index.html") {
+                (
+                    [(axum::http::header::CONTENT_TYPE, "text/html")],
+                    content.data,
+                )
+                    .into_response()
+            } else {
+                (StatusCode::NOT_FOUND, "Not Found").into_response()
+            }
+        }
     }
 }
 
