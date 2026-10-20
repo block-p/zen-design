@@ -7,9 +7,8 @@ use leptos::prelude::*;
 
 use crate::actions::export_video;
 use crate::data::{device_meta, ActivityEntry, ConnectionState, DeviceId, DEVICES};
-use crate::i18n::{localize_digits, t, Language};
+use crate::i18n::{t, Language};
 use crate::icons::Icon;
-use crate::util::format_sync_time;
 
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 enum FrameStatus {
@@ -30,6 +29,7 @@ thread_local! {
 }
 
 #[component]
+#[allow(unused_variables)]
 pub fn PreviewPanel(
     language: RwSignal<Language>,
     device: RwSignal<DeviceId>,

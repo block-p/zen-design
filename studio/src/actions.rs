@@ -588,4 +588,104 @@ pub fn clear_all_history(history: RwSignal<Vec<ChatHistoryItem>>) {
     });
 }
 
+#[derive(serde::Deserialize)]
+struct ActivateResponse {
+    #[allow(dead_code)]
+    status: String,
+    item: Option<ChatHistoryItem>,
+}
+
+pub fn activate_project(
+    id: String,
+    prompt: RwSignal<String>,
+    design_system: RwSignal<DesignSystemId>,
+    mode: RwSignal<ModeId>,
+    deep: RwSignal<bool>,
+    preview_version: RwSignal<u64>,
+    entries: RwSignal<Vec<ActivityEntry>>,
+    lang: Language,
+) {
+    push_activity(
+        entries,
+        ActivityKind::Status,
+        t(lang, "Loading project artifact…", "در حال بارگذاری پروژه…"),
+    );
+
+    spawn_local(async move {
+        let endpoint = format!("/api/history/{id}/activate");
+        match Request::post(&endpoint).send().await {
+            Ok(resp) if resp.ok() => {
+                if let Ok(body) = resp.text().await {
+                    if let Ok(data) = serde_json::from_str::<ActivateResponse>(&body) {
+                        if let Some(item) = data.item {
+                            prompt.set(item.prompt);
+                            design_system.set(DesignSystemId::parse(&item.design_system));
+                            mode.set(ModeId::parse(&item.mode));
+                            deep.set(item.deep);
+                        }
+                    }
+                }
+                preview_version.update(|v| *v = v.saturating_add(1));
+                push_activity(
+                    entries,
+                    ActivityKind::Done,
+                    t(lang, "Project restored to preview", "طرح پروژه در پیش‌نمایش بارگذاری شد"),
+                );
+            }
+            Ok(resp) => {
+                let status = resp.status();
+                push_activity(
+                    entries,
+                    ActivityKind::Error,
+                    format!("Failed to activate project ({status})"),
+                );
+            }
+            Err(err) => {
+                push_activity(
+                    entries,
+                    ActivityKind::Error,
+                    format!("Network error: {err}"),
+                );
+            }
+        }
+    });
+}
+
+pub fn create_new_project(
+    prompt: RwSignal<String>,
+    preview_version: RwSignal<u64>,
+    entries: RwSignal<Vec<ActivityEntry>>,
+    lang: Language,
+) {
+    spawn_local(async move {
+        match Request::post("/api/history/new-project").send().await {
+            Ok(resp) if resp.ok() => {
+                prompt.set(String::new());
+                preview_version.update(|v| *v = v.saturating_add(1));
+                push_activity(
+                    entries,
+                    ActivityKind::Status,
+                    t(lang, "New project canvas ready", "بوم پروژه جدید آماده شد"),
+                );
+            }
+            Ok(resp) => {
+                let status = resp.status();
+                push_activity(
+                    entries,
+                    ActivityKind::Error,
+                    format!("Failed to create new project ({status})"),
+                );
+            }
+            Err(err) => {
+                push_activity(
+                    entries,
+                    ActivityKind::Error,
+                    format!("Network error: {err}"),
+                );
+            }
+        }
+    });
+}
+
+
 

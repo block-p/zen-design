@@ -117,6 +117,7 @@ pub fn App() -> impl IntoView {
                         settings=settings
                         history=history
                         history_open=history_open
+                        preview_version=preview_version
                     />
 
                     <PreviewPanel
@@ -150,6 +151,7 @@ pub fn App() -> impl IntoView {
                     deep=deep
                     running=running
                     entries=entries
+                    preview_version=preview_version
                 />
             </div>
         </div>

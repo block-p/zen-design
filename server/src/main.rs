@@ -57,6 +57,7 @@ struct AppState {
     /// Loopback origin the daemon uses to load the preview inside Chrome.
     public_base: String,
     export_dir: PathBuf,
+    workspace: PathBuf,
 }
 
 #[tokio::main]
@@ -84,6 +85,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     if !studio.join("index.html").is_file() {
         warn!("Studio bundle is missing; run `trunk build` in studio/ before starting the daemon");
     }
+
+    history::bootstrap_existing_workspace(&workspace);
 
     let settings = Arc::new(RwLock::new(Settings::load()));
     {
@@ -128,6 +131,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         export_armed: Arc::new(AtomicBool::new(false)),
         public_base,
         export_dir,
+        workspace: workspace.clone(),
     };
 
     let app = Router::new()
@@ -150,6 +154,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .route("/api/models", get(models))
         .route("/api/history", get(get_history).post(post_history).delete(clear_all_history))
         .route("/api/history/:id", delete(delete_history_item))
+        .route("/api/history/:id/activate", post(activate_history_item))
+        .route("/api/history/new-project", post(new_project))
         // Serve the agent's live output. ServeDir handles traversal protection
         // and content types; index.html is served for `/preview/`.
         .nest_service(
@@ -379,7 +385,7 @@ async fn apply_detected_source(
         .map(|s| s.models.clone())
         .unwrap_or_default();
 
-    let mut models = if !specific_models.is_empty() {
+    let models = if !specific_models.is_empty() {
         specific_models
     } else {
         let mut live_models = Vec::new();
@@ -708,7 +714,7 @@ fn message_to_sse(message: String) -> Option<Result<Event, Infallible>> {
 /// with a client-side request timeout; progress arrives over `/api/events`.
 async fn prompt(
     State(state): State<AppState>,
-    Json(request): Json<PromptRequest>,
+    Json(mut request): Json<PromptRequest>,
 ) -> impl IntoResponse {
     if request.prompt.trim().is_empty() {
         return (
@@ -718,19 +724,33 @@ async fn prompt(
             .into_response();
     }
 
+    let timestamp = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_secs();
+
+    let session_id = request
+        .session_id
+        .clone()
+        .unwrap_or_else(|| format!("{timestamp}_{}", now_millis() % 10000));
+    request.session_id = Some(session_id.clone());
+
     let orchestrator = state.orchestrator.clone();
     let sender = state.event_sender.clone();
     let lock = state.agent_lock.clone();
     let design_system = request.design_system.clone();
     let mode = request.mode.clone();
     let deep = request.deep;
+    let workspace = state.workspace.clone();
 
     info!(
-        "Accepted prompt (design_system={design_system}, mode={mode}, deep={deep}, len={})",
+        "Accepted prompt for session {session_id} (design_system={design_system}, mode={mode}, deep={deep}, len={})",
         request.prompt.len()
     );
 
-    history::add_history_entry(
+    let item = history::add_history_entry(
+        &workspace,
+        session_id.clone(),
         request.prompt.clone(),
         design_system.clone(),
         mode.clone(),
@@ -762,9 +782,11 @@ async fn prompt(
         StatusCode::ACCEPTED,
         Json(json!({
             "status": "accepted",
+            "session_id": session_id,
             "design_system": design_system,
             "mode": mode,
             "deep": deep,
+            "item": item,
         })),
     )
         .into_response()
@@ -784,8 +806,8 @@ async fn stop_agent(State(state): State<AppState>) -> impl IntoResponse {
     }
 }
 
-async fn get_history() -> impl IntoResponse {
-    let items = history::load_history();
+async fn get_history(State(state): State<AppState>) -> impl IntoResponse {
+    let items = history::load_history(&state.workspace);
     Json(json!({ "items": items })).into_response()
 }
 
@@ -796,10 +818,24 @@ struct AddHistoryPayload {
     mode: String,
     #[serde(default)]
     deep: bool,
+    #[serde(default)]
+    session_id: Option<String>,
 }
 
-async fn post_history(Json(payload): Json<AddHistoryPayload>) -> impl IntoResponse {
+async fn post_history(
+    State(state): State<AppState>,
+    Json(payload): Json<AddHistoryPayload>,
+) -> impl IntoResponse {
+    let timestamp = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_secs();
+    let sid = payload
+        .session_id
+        .unwrap_or_else(|| format!("{timestamp}_{}", now_millis() % 10000));
     let item = history::add_history_entry(
+        &state.workspace,
+        sid,
         payload.prompt,
         payload.design_system,
         payload.mode,
@@ -808,14 +844,56 @@ async fn post_history(Json(payload): Json<AddHistoryPayload>) -> impl IntoRespon
     Json(json!({ "status": "ok", "item": item })).into_response()
 }
 
-async fn delete_history_item(AxumPath(id): AxumPath<String>) -> impl IntoResponse {
-    let deleted = history::delete_history_entry(&id);
+async fn delete_history_item(
+    State(state): State<AppState>,
+    AxumPath(id): AxumPath<String>,
+) -> impl IntoResponse {
+    let deleted = history::delete_history_entry(&state.workspace, &id);
     Json(json!({ "status": if deleted { "ok" } else { "not_found" } })).into_response()
 }
 
-async fn clear_all_history() -> impl IntoResponse {
-    let _ = history::clear_history();
+async fn clear_all_history(State(state): State<AppState>) -> impl IntoResponse {
+    let _ = history::clear_history(&state.workspace);
     Json(json!({ "status": "ok" })).into_response()
+}
+
+async fn activate_history_item(
+    State(state): State<AppState>,
+    AxumPath(id): AxumPath<String>,
+) -> impl IntoResponse {
+    match history::activate_session(&state.workspace, &id) {
+        Ok(item) => {
+            providers::emit_event(
+                &state.event_sender,
+                "reload",
+                "Loaded project from history.",
+            );
+            (StatusCode::OK, Json(json!({ "status": "ok", "item": item }))).into_response()
+        }
+        Err(err) => (
+            StatusCode::NOT_FOUND,
+            Json(json!({ "status": "error", "message": err })),
+        )
+            .into_response(),
+    }
+}
+
+async fn new_project(State(state): State<AppState>) -> impl IntoResponse {
+    match history::create_new_project(&state.workspace) {
+        Ok(()) => {
+            providers::emit_event(
+                &state.event_sender,
+                "reload",
+                "Created new blank project canvas.",
+            );
+            (StatusCode::OK, Json(json!({ "status": "ok" }))).into_response()
+        }
+        Err(err) => (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(json!({ "status": "error", "message": err })),
+        )
+            .into_response(),
+    }
 }
 
 fn now_millis() -> u128 {

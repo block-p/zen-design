@@ -1,10 +1,10 @@
 use icondata_lu::{
-    LuArrowUp, LuCommand, LuCornerDownLeft, LuGripHorizontal, LuHistory, LuSparkles, LuX, LuZap,
+    LuArrowUp, LuCommand, LuCornerDownLeft, LuGripHorizontal, LuHistory, LuPlus, LuSparkles, LuX, LuZap,
 };
 use leptos::prelude::*;
 use web_sys::{KeyboardEvent, MouseEvent, SubmitEvent};
 
-use crate::actions::{generate, stop_agent};
+use crate::actions::{create_new_project, generate, stop_agent};
 use crate::components::activity_log::ActivityLog;
 use crate::data::{
     mode_meta, system_meta, ActivityEntry, ChatHistoryItem, ConnectionState, DesignSystemId,
@@ -27,6 +27,7 @@ pub fn AgentPanel(
     settings: RwSignal<Option<SettingsView>>,
     history: RwSignal<Vec<ChatHistoryItem>>,
     history_open: RwSignal<bool>,
+    preview_version: RwSignal<u64>,
 ) -> impl IntoView {
     let can_generate = Memo::new(move |_| !prompt.get().trim().is_empty() && !running.get());
     let activity_height = RwSignal::new(260_i32);
@@ -101,9 +102,19 @@ pub fn AgentPanel(
                     <div class="zd-agent-top-right">
                         <button
                             type="button"
+                            class="zd-btn-soft zd-agent-new-btn"
+                            on:click=move |_| create_new_project(prompt, preview_version, entries, language.get())
+                            title=move || t(language.get(), "New Project Canvas", "پروژه جدید (شروع با بوم خالی)")
+                        >
+                            <Icon data=LuPlus size=12 />
+                            <span>{move || t(language.get(), "New", "جدید")}</span>
+                        </button>
+
+                        <button
+                            type="button"
                             class="zd-history-toggle-btn"
                             on:click=move |_| history_open.set(true)
-                            title=move || t(language.get(), "Chat History", "تاریخچه چت‌ها")
+                            title=move || t(language.get(), "Project History", "تاریخچه پروژه‌ها")
                         >
                             <Icon data=LuHistory size=13 />
                             <Show when=move || !history.get().is_empty()>

@@ -1,10 +1,11 @@
 use icondata_lu::{
-    LuClock, LuCornerDownLeft, LuHistory, LuPlay, LuSearch, LuSparkles, LuTrash2, LuX,
+    LuClock, LuCornerDownLeft, LuExternalLink, LuFolderOpen, LuHistory, LuPlay, LuSearch,
+    LuSparkles, LuTrash2, LuX,
 };
 use leptos::portal::Portal;
 use leptos::prelude::*;
 
-use crate::actions::{clear_all_history, delete_history_item, generate};
+use crate::actions::{activate_project, clear_all_history, delete_history_item, generate};
 use crate::data::{
     mode_meta, system_meta, ActivityEntry, ChatHistoryItem, DesignSystemId, ModeId,
 };
@@ -52,6 +53,7 @@ pub fn HistoryModal(
     deep: RwSignal<bool>,
     running: RwSignal<bool>,
     entries: RwSignal<Vec<ActivityEntry>>,
+    preview_version: RwSignal<u64>,
 ) -> impl IntoView {
     let search = RwSignal::new(String::new());
 
@@ -92,7 +94,7 @@ pub fn HistoryModal(
                                 <div class="zd-history-title-row">
                                     <Icon data=LuHistory size=16 class="zd-history-title-icon" />
                                     <h2 class="zd-modal-title">
-                                        {move || t(language.get(), "Chat History", "تاریخچه چت‌ها و پرامپت‌ها")}
+                                        {move || t(language.get(), "Project & Chat History", "تاریخچه پروژه‌ها و سشن‌ها")}
                                     </h2>
                                     <span class="zd-history-count-badge">
                                         {move || {
@@ -104,8 +106,8 @@ pub fn HistoryModal(
                                 <p class="zd-modal-subtitle">
                                     {move || t(
                                         language.get(),
-                                        "Browse, restore, or re-run your previous briefs",
-                                        "مشاهده، بازیابی و اجرای مجدد پرامپت‌های قبلی"
+                                        "Click 'Open Project' to restore the design directly in the live preview canvas",
+                                        "با کلیک روی «مشاهده پروژه»، طرح کامل مستقیماً در بوم پیش‌نمایش بارگذاری می‌شود"
                                     )}
                                 </p>
                             </div>
@@ -137,7 +139,7 @@ pub fn HistoryModal(
                             <input
                                 type="text"
                                 class="zd-history-search-input"
-                                placeholder=move || t(language.get(), "Search past prompts…", "جستجو در پرامپت‌های قبلی…")
+                                placeholder=move || t(language.get(), "Search past projects & prompts…", "جستجو در پروژه‌ها و پرامپت‌ها…")
                                 prop:value=move || search.get()
                                 on:input=move |ev| search.set(event_target_value(&ev))
                             />
@@ -162,14 +164,14 @@ pub fn HistoryModal(
                                         </div>
                                         <p class="zd-history-empty-title">
                                             {move || if search.get().is_empty() {
-                                                t(language.get(), "No prompt history yet", "هنوز تاریخچه‌ای ثبت نشده است")
+                                                t(language.get(), "No project history yet", "هنوز پروژه‌ای ثبت نشده است")
                                             } else {
-                                                t(language.get(), "No matching prompts found", "موردی با این جستجو پیدا نشد")
+                                                t(language.get(), "No matching projects found", "موردی با این جستجو پیدا نشد")
                                             }}
                                         </p>
                                         <p class="zd-history-empty-desc">
                                             {move || if search.get().is_empty() {
-                                                t(language.get(), "Your generated design prompts will appear here automatically.", "پرامپت‌هایی که تولید می‌کنید به طور خودکار اینجا ذخیره می‌شوند.")
+                                                t(language.get(), "Each generated design creates an isolated project session folder automatically.", "هر بار که طرحی تولید می‌کنید، یک پوشه پروژه مجزا برای آن ساخته می‌شود.")
                                             } else {
                                                 t(language.get(), "Try searching for a different keyword.", "کلمه کلیدی دیگری را جستجو کنید.")
                                             }}
@@ -185,6 +187,8 @@ pub fn HistoryModal(
                                             let run_prompt = item.prompt.clone();
                                             let load_prompt = item.prompt.clone();
                                             let item_id = item.id.clone();
+                                            let open_id = item.id.clone();
+                                            let ext_id = item.id.clone();
                                             let ds = DesignSystemId::parse(&item.design_system);
                                             let md = ModeId::parse(&item.mode);
                                             let is_deep = item.deep;
@@ -225,6 +229,38 @@ pub fn HistoryModal(
                                                         <div class="zd-history-actions-left">
                                                             <button
                                                                 type="button"
+                                                                class="zd-history-btn-open"
+                                                                on:click=move |_| {
+                                                                    open.set(false);
+                                                                    activate_project(
+                                                                        open_id.clone(),
+                                                                        prompt,
+                                                                        design_system,
+                                                                        mode,
+                                                                        deep,
+                                                                        preview_version,
+                                                                        entries,
+                                                                        lang,
+                                                                    );
+                                                                }
+                                                                title=move || t(lang, "Load this project into the live preview canvas", "بارگذاری و مشاهده این پروژه در بوم پیش‌نمایش")
+                                                            >
+                                                                <Icon data=LuFolderOpen size=11 />
+                                                                <span>{t(lang, "Open Project", "مشاهده پروژه")}</span>
+                                                            </button>
+
+                                                            <a
+                                                                href=format!("/preview/sessions/{ext_id}/index.html")
+                                                                target="_blank"
+                                                                rel="noopener noreferrer"
+                                                                class="zd-history-btn-ext"
+                                                                title=move || t(lang, "Open artifact standalone in new tab", "مشاهده طرح در تب مستقل جدید")
+                                                            >
+                                                                <Icon data=LuExternalLink size=10 />
+                                                            </a>
+
+                                                            <button
+                                                                type="button"
                                                                 class="zd-history-btn-run"
                                                                 disabled=move || running.get()
                                                                 on:click=move |_| {
@@ -240,6 +276,7 @@ pub fn HistoryModal(
                                                                 <Icon data=LuPlay size=10 />
                                                                 <span>{t(lang, "Re-run", "اجرای مجدد")}</span>
                                                             </button>
+
                                                             <button
                                                                 type="button"
                                                                 class="zd-history-btn-load"
@@ -253,14 +290,15 @@ pub fn HistoryModal(
                                                                 title=move || t(lang, "Load into composer to edit", "بارگذاری در ویرایشگر برای بازنویسی")
                                                             >
                                                                 <Icon data=LuCornerDownLeft size=10 />
-                                                                <span>{t(lang, "Use prompt", "استفاده")}</span>
+                                                                <span>{t(lang, "Edit prompt", "ویرایش")}</span>
                                                             </button>
                                                         </div>
+
                                                         <button
                                                             type="button"
                                                             class="zd-history-btn-delete"
                                                             on:click=move |_| delete_history_item(item_id.clone(), history)
-                                                            title=move || t(lang, "Delete from history", "حذف از تاریخچه")
+                                                            title=move || t(lang, "Delete project and its session files", "حذف پروژه و فایل‌های آن")
                                                         >
                                                             <Icon data=LuTrash2 size=11 />
                                                         </button>

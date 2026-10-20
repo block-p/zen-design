@@ -18,6 +18,7 @@ dist/
 *.mp4
 *.webm
 workspace/exports/
+workspace/sessions/
 workspace/notes.txt
 
 # Local configs and history with potential keys

@@ -397,6 +397,8 @@ pub struct ChatHistoryItem {
     #[serde(default)]
     pub deep: bool,
     pub timestamp: u64,
+    #[serde(default)]
+    pub has_artifact: bool,
 }
 
 #[derive(Clone, Debug, serde::Deserialize)]

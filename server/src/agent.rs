@@ -39,6 +39,8 @@ pub struct PromptRequest {
     /// Render, review and rewrite the artifact up to `DEEP_PASSES` times.
     #[serde(default)]
     pub deep: bool,
+    #[serde(default)]
+    pub session_id: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -149,7 +151,7 @@ impl AgentOrchestrator {
         tokio::time::sleep(Duration::from_millis(500)).await;
 
         let generated_html = generate_prototype_html(&req.prompt, &req.design_system, &req.mode);
-        self.write_artifact(&generated_html)?;
+        self.write_artifact(&generated_html, req.session_id.as_deref())?;
         providers::emit_event(sender, "done", "Artifact rendered successfully.");
         Ok(())
     }
@@ -224,7 +226,7 @@ impl AgentOrchestrator {
                     "writing",
                     format!("Applying model output ({} KB)…", html.len() / 1024),
                 );
-                self.write_artifact(&html)?;
+                self.write_artifact(&html, req.session_id.as_deref())?;
                 let message = if reviewed > 0 {
                     format!(
                         "Artifact refreshed via {label} after {reviewed} review pass{}.",
@@ -239,7 +241,7 @@ impl AgentOrchestrator {
                 Ok(())
             }
             Ok(Generated::ArtifactWritten) => {
-                match self.harden_agent_artifact() {
+                match self.harden_agent_artifact(req.session_id.as_deref()) {
                     Ok(Some(message)) => {
                         providers::emit_event(&self.event_sender, "status", message)
                     }
@@ -533,10 +535,25 @@ only one complete fenced HTML document."
         (html, applied)
     }
 
-    fn write_artifact(&self, html: &str) -> Result<(), String> {
-        let target = Path::new(&self.workspace_dir).join("index.html");
+    fn write_artifact(&self, html: &str, session_id: Option<&str>) -> Result<(), String> {
+        let workspace = Path::new(&self.workspace_dir);
+        let target = workspace.join("index.html");
         fs::write(&target, html).map_err(|e| format!("Failed to write to workspace: {}", e))?;
         info!("Wrote artifact to {:?} ({} bytes)", target, html.len());
+
+        if let Some(sid) = session_id {
+            let session_dir = workspace.join("sessions").join(sid);
+            if let Err(e) = fs::create_dir_all(&session_dir) {
+                warn!("Failed to create session dir {:?}: {e}", session_dir);
+            } else {
+                let session_file = session_dir.join("index.html");
+                if let Err(e) = fs::write(&session_file, html) {
+                    warn!("Failed to write session file {:?}: {e}", session_file);
+                } else {
+                    info!("Saved session copy to {:?} ({} bytes)", session_file, html.len());
+                }
+            }
+        }
         Ok(())
     }
 
@@ -544,28 +561,37 @@ only one complete fenced HTML document."
     /// model-text path (and therefore `ensure_csp`). Add the same offline CSP
     /// here — but only for self-contained documents, because `default-src
     /// 'none'` would break a deliberately multi-file artifact.
-    fn harden_agent_artifact(&self) -> Result<Option<String>, String> {
-        let target = Path::new(&self.workspace_dir).join("index.html");
+    fn harden_agent_artifact(&self, session_id: Option<&str>) -> Result<Option<String>, String> {
+        let workspace = Path::new(&self.workspace_dir);
+        let target = workspace.join("index.html");
         let html = fs::read_to_string(&target)
             .map_err(|error| format!("Failed to read the agent artifact: {error}"))?;
-        if html
+        let final_html = if html
             .to_ascii_lowercase()
             .contains("content-security-policy")
         {
-            return Ok(Some("Agent artifact already declares a CSP.".to_string()));
-        }
-        if !html_is_self_contained(&html) {
+            html
+        } else if !html_is_self_contained(&html) {
             info!("Agent artifact references local files; skipping CSP injection");
-            return Ok(Some(
-                "Agent wrote a multi-file artifact — inline CSP skipped.".to_string(),
-            ));
+            html
+        } else {
+            let hardened = ensure_csp(&html);
+            fs::write(&target, &hardened)
+                .map_err(|error| format!("Failed to harden the agent artifact: {error}"))?;
+            hardened
+        };
+
+        if let Some(sid) = session_id {
+            let session_dir = workspace.join("sessions").join(sid);
+            let _ = fs::create_dir_all(&session_dir);
+            let session_file = session_dir.join("index.html");
+            let _ = fs::write(&session_file, &final_html);
         }
-        let size = html.len();
-        fs::write(&target, ensure_csp(&html))
-            .map_err(|error| format!("Failed to harden the agent artifact: {error}"))?;
-        info!("Hardened agent artifact with offline CSP ({size} bytes)");
+
+        let size = final_html.len();
+        info!("Processed agent artifact ({size} bytes)");
         Ok(Some(format!(
-            "Agent artifact hardened with offline CSP ({} KB).",
+            "Agent artifact ready ({} KB).",
             size / 1024
         )))
     }

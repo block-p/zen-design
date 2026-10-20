@@ -2400,6 +2400,28 @@ html[data-theme="dark"] .zd-select--compact option {
   gap: 8px;
 }
 
+.zd-agent-new-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  height: 26px;
+  padding: 0 8px;
+  border-radius: var(--zd-radius-sm);
+  border: 1px solid var(--zd-border);
+  background: var(--zd-bg-card);
+  color: var(--zd-text-muted);
+  cursor: pointer;
+  transition: all var(--zd-duration) var(--zd-ease);
+  font-size: 11px;
+  font-weight: 500;
+}
+
+.zd-agent-new-btn:hover {
+  border-color: var(--zd-primary);
+  color: var(--zd-text);
+  background: var(--zd-primary-ghost);
+}
+
 .zd-history-toggle-btn {
   display: inline-flex;
   align-items: center;
@@ -2618,10 +2640,10 @@ html[data-theme="dark"] .zd-select--compact option {
   gap: 6px;
 }
 
-.zd-history-btn-run {
+.zd-history-btn-open {
   display: inline-flex;
   align-items: center;
-  gap: 4px;
+  gap: 5px;
   padding: 4px 10px;
   border-radius: var(--zd-radius-sm);
   background: var(--zd-primary);
@@ -2630,18 +2652,39 @@ html[data-theme="dark"] .zd-select--compact option {
   font-weight: 600;
   cursor: pointer;
   border: none;
-  transition: background var(--zd-duration);
+  transition: all var(--zd-duration);
 }
 
-.zd-history-btn-run:hover {
+.zd-history-btn-open:hover {
   background: var(--zd-primary-hover);
+  box-shadow: 0 0 10px var(--zd-primary-glow);
 }
 
-.zd-history-btn-load {
+.zd-history-btn-ext {
+  display: inline-grid;
+  place-items: center;
+  width: 24px;
+  height: 24px;
+  border-radius: var(--zd-radius-sm);
+  background: var(--zd-bg-muted);
+  color: var(--zd-text-muted);
+  border: 1px solid var(--zd-border);
+  text-decoration: none;
+  cursor: pointer;
+  transition: all var(--zd-duration);
+}
+
+.zd-history-btn-ext:hover {
+  color: var(--zd-text);
+  border-color: var(--zd-primary);
+  background: var(--zd-primary-ghost);
+}
+
+.zd-history-btn-run {
   display: inline-flex;
   align-items: center;
   gap: 4px;
-  padding: 4px 10px;
+  padding: 4px 9px;
   border-radius: var(--zd-radius-sm);
   background: var(--zd-bg-muted);
   color: var(--zd-text);
@@ -2652,8 +2695,34 @@ html[data-theme="dark"] .zd-select--compact option {
   transition: all var(--zd-duration);
 }
 
-.zd-history-btn-load:hover {
+.zd-history-btn-run:hover:not(:disabled) {
   border-color: var(--zd-primary);
+  color: var(--zd-primary);
+}
+
+.zd-history-btn-run:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.zd-history-btn-load {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 9px;
+  border-radius: var(--zd-radius-sm);
+  background: var(--zd-bg-muted);
+  color: var(--zd-text-muted);
+  font-size: 11px;
+  font-weight: 500;
+  cursor: pointer;
+  border: 1px solid var(--zd-border);
+  transition: all var(--zd-duration);
+}
+
+.zd-history-btn-load:hover {
+  border-color: var(--zd-border-strong);
+  color: var(--zd-text);
 }
 
 .zd-history-btn-delete {

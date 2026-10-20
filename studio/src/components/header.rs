@@ -4,12 +4,12 @@ use leptos::prelude::*;
 use web_sys::KeyboardEvent;
 
 use crate::data::{system_meta, ConnectionState, DesignSystemId, ModeId, DESIGN_SYSTEMS, MODES};
-use crate::i18n::{localize_digits, t, Language, Theme};
+use crate::i18n::{t, Language, Theme};
 use crate::icons::Icon;
 use crate::settings::SettingsView;
-use crate::util::format_clock;
 
 #[component]
+#[allow(unused_variables)]
 pub fn Header(
     language: RwSignal<Language>,
     theme: RwSignal<Theme>,
@@ -135,65 +135,12 @@ pub fn Header(
                     >
                         <Icon data=LuSettings size=14 stroke_width=1.9 />
                     </button>
-
-                    <ConnectionPill language=language connection=connection last_heartbeat=last_heartbeat />
                 </div>
             </div>
         </header>
     }
 }
 
-#[component]
-fn ConnectionPill(
-    language: RwSignal<Language>,
-    connection: RwSignal<ConnectionState>,
-    last_heartbeat: RwSignal<Option<f64>>,
-) -> impl IntoView {
-    let title = move || {
-        let lang = language.get();
-        match last_heartbeat.get() {
-            Some(timestamp) => format!(
-                "{} · {} {}",
-                t(lang, "SSE heartbeat every 2s", "ضربان SSE هر ۲ ثانیه"),
-                t(lang, "last ping", "آخرین پینگ"),
-                format_clock(timestamp, lang)
-            ),
-            None => t(
-                lang,
-                "Waiting for the first SSE heartbeat",
-                "در انتظار اولین ضربان SSE",
-            )
-            .to_string(),
-        }
-    };
-
-    view! {
-        <div
-            class="zd-connection-pill"
-            title=title
-        >
-            <span class="zd-status-dot-wrap">
-                <Show when=move || connection.get().animates()>
-                    <span class=move || {
-                        format!("zd-status-dot-ping zd-status-dot-ping--{}", connection.get().tone())
-                    }></span>
-                </Show>
-                <span class=move || {
-                    format!("zd-status-dot zd-status-dot--{}", connection.get().tone())
-                }></span>
-            </span>
-            <span class=move || {
-                format!("zd-connection-text zd-connection-text--{}", connection.get().tone())
-            }>
-                {move || match (connection.get(), language.get()) {
-                    (ConnectionState::Live, Language::En) => "Connected",
-                    (ConnectionState::Live, Language::Fa) => "متصل",
-                    (s, l) => s.label(l),
-                }}
-            </span>
-        </div>
-    }
-}
 
 #[component]
 fn DesignSystemPicker(
