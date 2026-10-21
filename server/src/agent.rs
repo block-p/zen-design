@@ -974,17 +974,20 @@ ARTIFACT — this overrides every website instinct:
   CTA row or "sections". If the file contains these, it is the wrong artifact.
 - The only chrome allowed: a tiny replay button and pause toggle in one corner plus a
   hairline progress bar. Understated, low contrast, no labels competing with the film.
-- Autoplay immediately, muted, with no click required. Total runtime 8–12 seconds (strictly {duration}s dynamic duration). Loop
+- Autoplay immediately, muted, with no click required. Total runtime: strictly {duration}s dynamic duration. Loop
   seamlessly, or hold the end card and restart cleanly. The first frame must work as a
   poster.
-- 3–5 beats. Each beat has one focal element with a clear entrance and exit. Cut between
-  beats with a mask, wipe, scale-through or a single hard cut — not just opacity fades.
+- Multi-beat narrative structure scaled to runtime:
+  * For short pieces (5–30s): 3–5 high-impact beats, 8–15s each.
+  * For long-form pieces (1m–10m): A full narrative episodic sequence (e.g. 6–15 distinct scenes or chapters) pacing through the full {duration}s duration with varied visual events, continuous ambient motion, dynamic data updates, narrative voiceover sync, and layered timeline transitions so the content sustains the entire {duration} seconds without finishing prematurely or freezing.
+- Cut between beats with a mask, wipe, scale-through, camera pan, or a hard cut — not just opacity fades.
 {sfx_prompt}
 {tts_prompt}
 
 STORY AND TYPE:
-- One idea, 10–30 words of real copy total: a product name, a launch line, one number, a
-  final mark. No lorem ipsum, no paragraphs, no feature lists, no fake UI.
+- Match the content volume to the duration:
+  * For short motion (under 30s): One crisp idea, 10–30 words of bold copy, a launch line, a stat, a final mark.
+  * For long motion (1–10 minutes): Rich multi-scene storytelling, progressive product or concept explanation, chapters, evolving statistics, diagrammatic breakdowns, and continuous narrative copy (synchronized with TTS narration if provided). Never stop animating before {duration}s.
 - Kinetic typography is required. Use at least three techniques: masked line or word
   reveals, split-letter stagger, tracking that tightens or opens, outlined-to-filled type,
   vertical counter-scroll, or type that scales through the camera.
