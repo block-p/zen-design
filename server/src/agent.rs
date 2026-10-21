@@ -309,7 +309,7 @@ impl AgentOrchestrator {
     async fn run_provider(&self, req: PromptRequest, settings: &Settings) -> Result<(), String> {
         let tokens = design_tokens_with_custom(&req.design_system, req.custom_theme.as_ref());
         let system = build_system_prompt_with_request(&tokens, &req);
-        let user = build_user_prompt(&req.prompt, &req.design_system, &req.mode);
+        let user = build_user_prompt_from_request(&req);
 
         let label = settings.provider_label();
         let model = settings.active_profile().model.trim().to_string();
@@ -1075,7 +1075,7 @@ SELF-CHECK — do this before replying. If any answer is wrong, rewrite the file
 1. Does the HTML contain <nav>, <header>, <footer>, "pricing", "features", "FAQ" or a CTA
    row? Then it is a website. Delete those and rebuild it as a film.
 2. Are there at least 3 distinct beats and 8+ animated elements on one timeline?
-3. Does it autoplay, run 8–12s, and loop or hold the end card cleanly?
+3. Does it autoplay, run the full dynamic requested duration of {duration}s, and loop or hold cleanly?
 4. Would the first frame read as a poster for a motion piece, not a homepage?
 5. Is every word legible at 1280×720?
 
@@ -1166,24 +1166,44 @@ CORE PRESENTATION ARCHITECTURE:
 }
 
 pub fn build_user_prompt(prompt: &str, design_system: &str, mode: &str) -> String {
-    let artifact_type = match mode {
+    let dummy = PromptRequest {
+        prompt: prompt.to_string(),
+        design_system: design_system.to_string(),
+        mode: mode.to_string(),
+        deep: false,
+        session_id: None,
+        custom_theme: None,
+        aspect_ratio: None,
+        duration_secs: None,
+        sound_effects: None,
+        tts_text: None,
+        tts_lang: None,
+    };
+    build_user_prompt_from_request(&dummy)
+}
+
+pub fn build_user_prompt_from_request(req: &PromptRequest) -> String {
+    let duration = req.duration_secs.unwrap_or(10).clamp(5, 600);
+    let artifact_type = match req.mode.as_str() {
         "motion" => {
-            "\nArtifact type: MOTION PIECE — an 8–12s self-playing film on a 16:9 artboard. \
-NOT a website: no nav, sections, cards, pricing, FAQ, CTA or footer."
+            format!(
+                "\nArtifact type: MOTION PIECE — a self-playing browser animation running for EXACTLY {duration}s. \
+Timeline animation and beats MUST span the entire {duration} seconds. NOT a static website."
+            )
         }
         "slides" => {
             "\nArtifact type: SLIDE DECK (PRECISE SLIDE DECOMPOSITION) — full-viewport 16:9 presentation deck. \
 Carefully respect any explicit slide separations, slide titles, numbered steps, or sections provided in the brief. \
-Every designated slide must be faithfully represented as a separate, beautifully composed 16:9 slide."
+Every designated slide must be faithfully represented as a separate, beautifully composed 16:9 slide.".to_string()
         }
-        _ => "",
+        _ => String::new(),
     };
 
     format!(
         "Brief:\n{}\n\nDesign system id: {}\nMode: {}{}\n\nBuild the artifact now.",
-        prompt.trim(),
-        design_system,
-        mode,
+        req.prompt.trim(),
+        req.design_system,
+        req.mode,
         artifact_type
     )
 }
