@@ -884,8 +884,69 @@ fn generate_algorithmic_theme(prompt: &str) -> CustomThemeTokens {
         "'Inter', system-ui, sans-serif".to_string()
     };
 
+    // Insurance / Banking / Finance / سرمایه / بانک / بیمه / مالی / اعتباری (Corporate Trust Navy & Royal Blue)
+    if lower.contains("بیمه") || lower.contains("بانک") || lower.contains("مالی") || lower.contains("سرمایه") || lower.contains("اعتبار") || lower.contains("insurance") || lower.contains("bank") || lower.contains("finance") || lower.contains("fintech") {
+        let is_light = lower.contains("روشن") || lower.contains("سفید") || lower.contains("light");
+        let (bg, card, border, text, accent, dot) = if is_light {
+            ("#f8fafc", "#ffffff", "#cbd5e1", "#0f172a", "#1d4ed8", "#2563eb")
+        } else {
+            ("#0b1329", "#111c38", "#1e293b", "#f1f5f9", "#3b82f6", "#60a5fa")
+        };
+        CustomThemeTokens {
+            name: if is_persian { "بیمه و اعتماد سازمانی / Corporate Trust".to_string() } else { "Corporate Trust (Insurance & Finance)".to_string() },
+            bg: bg.to_string(),
+            text: text.to_string(),
+            accent: accent.to_string(),
+            font_family: default_font,
+            card_bg: card.to_string(),
+            border_color: border.to_string(),
+            dot: dot.to_string(),
+            swatch: format!("linear-gradient(135deg, {accent} 0%, {bg} 100%)"),
+        }
+    } else if lower.contains("پزشکی") || lower.contains("درمان") || lower.contains("سلامت") || lower.contains("دارو") || lower.contains("بیمارستان") || lower.contains("medical") || lower.contains("health") || lower.contains("clinic") || lower.contains("pharma") {
+        let is_light = lower.contains("روشن") || lower.contains("سفید") || lower.contains("light");
+        let (bg, card, border, text, accent, dot) = if is_light {
+            ("#f0fdfa", "#ffffff", "#99f6e4", "#134e4a", "#0d9488", "#14b8a6")
+        } else {
+            ("#041f1e", "#072e2d", "#115e59", "#f0fdfa", "#14b8a6", "#2dd4bf")
+        };
+        CustomThemeTokens {
+            name: if is_persian { "پزشکی و سلامت / Clinical Teal".to_string() } else { "Clinical Teal (Health & Medical)".to_string() },
+            bg: bg.to_string(),
+            text: text.to_string(),
+            accent: accent.to_string(),
+            font_family: default_font,
+            card_bg: card.to_string(),
+            border_color: border.to_string(),
+            dot: dot.to_string(),
+            swatch: format!("linear-gradient(135deg, {accent} 0%, {bg} 100%)"),
+        }
+    } else if lower.contains("املاک") || lower.contains("ساختمان") || lower.contains("معماری") || lower.contains("سازه") || lower.contains("real estate") || lower.contains("architecture") || lower.contains("interior") {
+        CustomThemeTokens {
+            name: if is_persian { "معماری و املاک / Bronze Estate".to_string() } else { "Bronze Estate".to_string() },
+            bg: "#141210".to_string(),
+            text: "#f5f5f4".to_string(),
+            accent: "#d97706".to_string(),
+            font_family: default_font,
+            card_bg: "#211d19".to_string(),
+            border_color: "#443c33".to_string(),
+            dot: "#f59e0b".to_string(),
+            swatch: "linear-gradient(135deg, #d97706 0%, #141210 100%)".to_string(),
+        }
+    } else if lower.contains("کافه") || lower.contains("قهوه") || lower.contains("رستوران") || lower.contains("غذا") || lower.contains("فود") || lower.contains("cafe") || lower.contains("coffee") || lower.contains("restaurant") {
+        CustomThemeTokens {
+            name: if is_persian { "کافه و قهوه / Warm Espresso".to_string() } else { "Warm Espresso".to_string() },
+            bg: "#180d09".to_string(),
+            text: "#fed7aa".to_string(),
+            accent: "#ea580c".to_string(),
+            font_family: default_font,
+            card_bg: "#2b1810".to_string(),
+            border_color: "#4d2919".to_string(),
+            dot: "#f97316".to_string(),
+            swatch: "linear-gradient(135deg, #ea580c 0%, #180d09 100%)".to_string(),
+        }
     // Red / Crimson / Ruby / سرخ / قرمز / زرشکی
-    if lower.contains("قرمز") || lower.contains("سرخ") || lower.contains("زرشکی") || lower.contains("red") || lower.contains("crimson") || lower.contains("ruby") || lower.contains("blood") || lower.contains("scarlet") {
+    } else if lower.contains("قرمز") || lower.contains("سرخ") || lower.contains("زرشکی") || lower.contains("red") || lower.contains("crimson") || lower.contains("ruby") || lower.contains("blood") || lower.contains("scarlet") {
         let is_dark = lower.contains("مشکی") || lower.contains("سیاه") || lower.contains("تیره") || lower.contains("dark") || lower.contains("black") || !lower.contains("سفید");
         let (bg, card, border, text, accent) = if is_dark {
             ("#0a0a0c", "#161114", "#38171e", "#fce7f3", "#ef4444")
