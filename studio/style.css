@@ -3871,3 +3871,200 @@ html[data-theme="dark"] .zd-ai-disconnected-text {
   border-color: var(--zd-accent, #38bdf8);
 }
 
+/* === ZEN DESIGN ANTI-SLOP ARCHITECTURAL OVERRIDES === */
+:root {
+  --zd-bg-canvas: #f3f2ee !important;
+  --zd-bg-card: #ffffff !important;
+  --zd-bg-muted: #ebe9e4 !important;
+  --zd-bg-subtle: #e2e0d8 !important;
+
+  --zd-border: #dfddd6 !important;
+  --zd-border-muted: #ebe9e4 !important;
+  --zd-border-strong: #c7c4bc !important;
+
+  --zd-text: #141413 !important;
+  --zd-text-secondary: #52514e !important;
+  --zd-text-muted: #85837d !important;
+  --zd-text-faint: #b5b3ad !important;
+
+  --zd-primary: #18181b !important;
+  --zd-primary-fg: #ffffff !important;
+  --zd-primary-hover: #27272a !important;
+  --zd-primary-soft: #e4e4e7 !important;
+  --zd-primary-ghost: #f4f4f5 !important;
+
+  --zd-emerald: #0d9488 !important;
+  --zd-emerald-soft: #ccfbf1 !important;
+  --zd-amber: #d97706 !important;
+  --zd-amber-soft: #fef3c7 !important;
+  --zd-red: #dc2626 !important;
+  --zd-red-soft: #fee2e2 !important;
+  --zd-violet: #18181b !important;
+  --zd-violet-soft: #e4e4e7 !important;
+
+  --zd-radius-sm: 4px !important;
+  --zd-radius-md: 6px !important;
+  --zd-radius-lg: 6px !important;
+  --zd-radius-xl: 8px !important;
+
+  --zd-shadow-sm: 0 1px 2px rgba(20, 20, 19, 0.04) !important;
+  --zd-shadow-md: 0 2px 6px rgba(20, 20, 19, 0.06) !important;
+  --zd-shadow-lg: 0 12px 32px rgba(20, 20, 19, 0.14) !important;
+
+  --zd-ease: cubic-bezier(0.22, 1, 0.36, 1) !important;
+  --zd-duration: 120ms !important;
+}
+
+html[data-theme="dark"],
+html.dark,
+body.dark {
+  --zd-bg-canvas: #0c0c0d !important;
+  --zd-bg-card: #141416 !important;
+  --zd-bg-muted: #1c1c1f !important;
+  --zd-bg-subtle: #26262a !important;
+  --zd-border: #26262a !important;
+  --zd-border-muted: #1c1c1f !important;
+  --zd-border-strong: #38383e !important;
+  --zd-text: #f4f4f5 !important;
+  --zd-text-secondary: #a1a1aa !important;
+  --zd-text-muted: #71717a !important;
+  --zd-text-faint: #52525b !important;
+  --zd-primary: #f4f4f5 !important;
+  --zd-primary-fg: #0c0c0d !important;
+  --zd-primary-hover: #ffffff !important;
+  --zd-primary-soft: #27272a !important;
+  --zd-primary-ghost: #1f1f22 !important;
+}
+
+html[dir="rtl"] *,
+html[lang="fa"] * {
+  letter-spacing: 0 !important;
+}
+
+.zd-header {
+  background: var(--zd-bg-card) !important;
+  border-bottom: 1px solid var(--zd-border) !important;
+  box-shadow: none !important;
+  backdrop-filter: none !important;
+}
+
+.zd-header-logo,
+.zd-header-logo-icon {
+  background: var(--zd-text) !important;
+  color: var(--zd-bg-card) !important;
+  border-radius: 5px !important;
+  box-shadow: none !important;
+}
+
+.zd-sidebar {
+  background: var(--zd-bg-card) !important;
+  border-inline-end: 1px solid var(--zd-border) !important;
+  box-shadow: none !important;
+  border-radius: 0 !important;
+}
+
+.zd-agent-icon {
+  background: var(--zd-bg-muted) !important;
+  color: var(--zd-text) !important;
+  border: 1px solid var(--zd-border-strong) !important;
+  border-radius: 5px !important;
+  box-shadow: none !important;
+}
+
+.zd-agent-pulse-ping,
+.zd-agent-pulse-ring {
+  display: none !important;
+  animation: none !important;
+}
+
+.zd-agent-pulse {
+  background: transparent !important;
+  box-shadow: none !important;
+}
+
+.zd-agent-pulse-dot {
+  width: 6px !important;
+  height: 6px !important;
+  border-radius: 50% !important;
+  background: var(--zd-emerald) !important;
+  box-shadow: none !important;
+}
+
+.zd-btn,
+.zd-btn-soft,
+.zd-btn-secondary,
+.zd-header-btn,
+.zd-picker-trigger {
+  border-radius: 5px !important;
+  border: 1px solid var(--zd-border) !important;
+  background: var(--zd-bg-card) !important;
+  color: var(--zd-text) !important;
+  box-shadow: var(--zd-shadow-sm) !important;
+}
+
+.zd-btn-primary {
+  background: var(--zd-primary) !important;
+  color: var(--zd-primary-fg) !important;
+  border: 1px solid var(--zd-primary) !important;
+  border-radius: 5px !important;
+  box-shadow: none !important;
+}
+
+.zd-btn-primary span,
+.zd-btn-primary svg {
+  color: var(--zd-primary-fg) !important;
+}
+
+.zd-btn-submit--active,
+.zd-detected-connect-btn,
+.zd-history-btn-open,
+.zd-history-pill {
+  background: var(--zd-primary) !important;
+  color: var(--zd-primary-fg) !important;
+  border: 1px solid var(--zd-primary) !important;
+}
+
+.zd-btn-submit--active span,
+.zd-detected-connect-btn span,
+.zd-history-btn-open span,
+.zd-detected-connect-btn svg,
+.zd-btn-submit--active svg,
+.zd-history-btn-open svg {
+  color: var(--zd-primary-fg) !important;
+}
+
+.zd-detected-connect-btn:hover:not(:disabled),
+.zd-btn-submit--active:hover:not(:disabled),
+.zd-history-btn-open:hover:not(:disabled),
+.zd-btn-primary:hover:not(:disabled) {
+  background: var(--zd-primary-hover) !important;
+  color: var(--zd-primary-fg) !important;
+  border-color: var(--zd-primary-hover) !important;
+}
+
+.zd-detected-connect-btn:disabled,
+.zd-detected-connect-btn--loading {
+  background: var(--zd-bg-muted) !important;
+  color: var(--zd-text-muted) !important;
+  border-color: var(--zd-border) !important;
+}
+
+.zd-detected-connect-btn:disabled span,
+.zd-detected-connect-btn--loading span,
+.zd-detected-connect-btn:disabled svg,
+.zd-detected-connect-btn--loading svg {
+  color: var(--zd-text-muted) !important;
+}
+
+.zd-preset-card {
+  border-radius: 6px !important;
+  border: 1px solid var(--zd-border) !important;
+  background: var(--zd-bg-card) !important;
+  box-shadow: none !important;
+}
+
+.zd-preset-card:hover {
+  border-color: var(--zd-text) !important;
+  background: var(--zd-bg-muted) !important;
+  transform: none !important;
+}
