@@ -544,7 +544,7 @@ pub fn AgentPanel(
                     <span class="zd-agent-substrip-count">
                         {move || {
                             let count = prompt.with(|v| v.chars().count()).to_string();
-                            let text = format!("{count}/2000");
+                            let text = format!("{count} {}", t(language.get(), "chars", "کاراکتر"));
                             localize_digits(&text, language.get())
                         }}
                     </span>

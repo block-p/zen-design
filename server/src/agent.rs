@@ -2414,24 +2414,37 @@ pub async fn expand_brief_with_research(
         "Respond in concise, professional English."
     };
 
+    let duration_note = match mode {
+        "motion" => "For motion mode, construct a full timeline breakdown with sequential narrative scenes/beats that scale to the requested duration. Specify concrete visual assets (SVG shapes, stats, typography lines, timing percentages).",
+        "slides" => "For slides mode, construct an exact slide-by-slide deck (Cover, Problem, Architecture, Key Metrics, Deep Dive, Case Study, Conclusion) with specific content, titles, and stat callouts for every slide.",
+        _ => "For prototype mode, construct a full Product Requirements Document (PRD) with user journey, dashboard cards, table columns, interactive controls, and realistic dataset.",
+    };
+
     let research_prompt = format!(
-        r#"You are ZenDesign's Lead Research & Domain Architect.
-The user gave a concise brief for a {mode}:
+        r#"You are ZenDesign's Lead Autonomous Product Architect & Creative Director.
+The user gave this brief for a {mode}:
 "{prompt}"
 
-Your mission is to perform deep domain research, concept extraction, and structured outline development.
-Do NOT write code or HTML here. Produce a comprehensive, high-signal structural breakdown with real facts, terminology, numbers, and logical flow:
+Your job is NOT to write HTML or code.
+Your job is to generate the COMPLETE, EXHAUSTIVE IMPLEMENTATION PLAN & DETAILED DESIGN SPECIFICATION that will be fed into the frontend generation engine.
 
-1. Core Problem & Concept Definition (What is this, why does it matter, what are the primary pillars?).
-2. Domain Specifics & Real Terminology (Architecture, workflows, real-world metrics, KPIs, components).
-3. Section-by-Section / Slide-by-Slide Blueprint:
-   - For slides mode: Structure EXACTLY 5 to 7 designated slides, each with Title, Visual Focal Point, Key Message, and Specific Supporting Data/Stats.
-   - For prototype mode: Detail the User Flow, Navigation, Top Bar stats, Primary Workspace components, and Real dynamic data records.
-   - For motion mode: Break down into 4 sequential narrative beats (The Hook, The Friction, The Resolution, The Climax/Impact).
-4. Tone & Visual Mood direction suited for this domain.
+Create a high-impact, professional architectural plan:
+1. Executive Summary & Core Value Proposition
+   - Define the product/topic clearly with sharp, professional terminology.
+   - Target audience, user problem, and core solution.
+
+2. Domain Breakdown & Realistic Data Assets
+   - Key industry metrics, real numbers, benchmarks, and technical concepts.
+   - Real labels, product names, component breakdown (never use lorem ipsum or generic placeholders).
+
+3. Blueprint & Structural Breakdown:
+   {duration_note}
+
+4. Visual Language & Editorial Tone
+   - Creative art direction, visual metaphors, font emphasis, and layout dynamics.
 
 {lang_instruction}
-Be extremely detailed, specific, and actionable."#
+Make it deeply comprehensive, structured, and immediately actionable for production."#
     );
 
     match settings.provider.as_str() {
