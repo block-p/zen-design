@@ -9,7 +9,7 @@ use crate::data::{
     ActivityEntry, ActivityKind, AspectRatio, ChatHistoryItem, ConnectionState, CustomThemeTokens,
     DesignSystemId, DeviceId, ModeId,
 };
-use crate::i18n::{load_language, load_theme, store_language, store_theme};
+use crate::i18n::{load_language, load_theme, store_language, store_theme, t};
 use crate::settings::SettingsView;
 use crate::stream::{push_activity, start_event_stream};
 
@@ -101,8 +101,38 @@ pub fn App() -> impl IntoView {
         }
     }
 
+    let sidebar_width = RwSignal::new(380_i32);
+    let is_resizing_sidebar = RwSignal::new(false);
+    let resize_start_x = RwSignal::new(0_i32);
+    let resize_start_w = RwSignal::new(380_i32);
+
+    let on_sidebar_resizer_down = move |ev: web_sys::MouseEvent| {
+        ev.prevent_default();
+        is_resizing_sidebar.set(true);
+        resize_start_x.set(ev.client_x());
+        resize_start_w.set(sidebar_width.get());
+    };
+
+    let on_app_mouse_move = move |ev: web_sys::MouseEvent| {
+        if is_resizing_sidebar.get() {
+            let delta = ev.client_x() - resize_start_x.get();
+            let new_w = (resize_start_w.get() + delta).clamp(280, 800);
+            sidebar_width.set(new_w);
+        }
+    };
+
+    let on_app_mouse_up = move |_: web_sys::MouseEvent| {
+        if is_resizing_sidebar.get() {
+            is_resizing_sidebar.set(false);
+        }
+    };
+
     view! {
-        <div class="zd-app">
+        <div
+            class="zd-app"
+            on:mousemove=on_app_mouse_move
+            on:mouseup=on_app_mouse_up
+        >
             <div class="zd-shell">
                 <Header
                     language=language
@@ -138,7 +168,17 @@ pub fn App() -> impl IntoView {
                         sound_effects=sound_effects
                         tts_text=tts_text
                         tts_lang=tts_lang
+                        sidebar_width=sidebar_width
                     />
+
+                    <div
+                        class="zd-sidebar-resizer"
+                        class:zd-sidebar-resizer--active=move || is_resizing_sidebar.get()
+                        on:mousedown=on_sidebar_resizer_down
+                        title=move || t(language.get(), "Drag to resize sidebar width", "برای تغییر عرض پنل بکشید")
+                    >
+                        <div class="zd-sidebar-resizer-line"></div>
+                    </div>
 
                     <PreviewPanel
                         language=language

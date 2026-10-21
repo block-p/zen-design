@@ -36,6 +36,7 @@ pub fn AgentPanel(
     sound_effects: RwSignal<bool>,
     tts_text: RwSignal<String>,
     tts_lang: RwSignal<String>,
+    sidebar_width: RwSignal<i32>,
 ) -> impl IntoView {
     let can_generate = Memo::new(move |_| !prompt.get().trim().is_empty() && !running.get());
     let activity_height = RwSignal::new(260_i32);
@@ -85,6 +86,7 @@ pub fn AgentPanel(
     view! {
         <aside
             class="zd-sidebar"
+            style=move || format!("width: {}px; min-width: 280px; max-width: 800px; flex: none;", sidebar_width.get())
             on:mousemove=on_mouse_move
             on:mouseup=on_mouse_up
             on:mouseleave=on_mouse_up
