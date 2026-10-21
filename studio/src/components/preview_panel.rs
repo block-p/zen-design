@@ -54,19 +54,138 @@ pub fn PreviewPanel(
     let is_editing_inplace = RwSignal::new(false);
     let is_saving_inplace = RwSignal::new(false);
 
-    // Toggle contenteditable on the iframe body
+    // Toggle visual drag-and-drop & in-place editing inside the iframe
     let toggle_inplace_edit = move || {
         let next = !is_editing_inplace.get();
         is_editing_inplace.set(next);
 
         if let Some(frame) = iframe_ref.get_untracked() {
             if let Some(doc) = frame.content_document() {
-                if let Some(body) = doc.body() {
-                    let _ = body.set_attribute("contenteditable", if next { "true" } else { "false" });
-                    if next {
-                        let _ = body.set_attribute("style", "outline: 2px dashed #6366f1; outline-offset: -2px; cursor: text;");
-                    } else {
-                        let _ = body.remove_attribute("style");
+                if next {
+                    // Inject or enable the visual editing helper
+                    let script_id = "zd-visual-editor-runtime";
+                    if doc.get_element_by_id(script_id).is_none() {
+                        if let Ok(script_elem) = doc.create_element("script") {
+                            let _ = script_elem.set_id(script_id);
+                            let script_code = r#"
+(function() {
+    window.__zd_editor_active = true;
+    
+    // 1. Force enable user selection everywhere
+    const style = document.createElement('style');
+    style.id = 'zd-editor-styles';
+    style.textContent = `
+        *, *::before, *::after {
+            user-select: text !important;
+            -webkit-user-select: text !important;
+        }
+        .zd-editable-highlight {
+            outline: 2px dashed rgba(99, 102, 241, 0.7) !important;
+            outline-offset: 2px !important;
+            cursor: move !important;
+            position: relative;
+        }
+        .zd-editable-highlight:hover {
+            outline: 2px solid #6366f1 !important;
+            background-color: rgba(99, 102, 241, 0.05) !important;
+        }
+        .zd-editing-text {
+            cursor: text !important;
+            outline: 2px solid #10b981 !important;
+            background-color: rgba(16, 185, 129, 0.08) !important;
+        }
+    `;
+    document.head.appendChild(style);
+
+    // 2. Make visual blocks (cards, titles, shapes, columns) draggable & text editable
+    function initVisualEditor() {
+        // Find candidate blocks to drag (cards, sections, titles, paragraphs, images, svg)
+        const selectors = '.card, .slide-content > *, section > *, div[class*="card"], div[class*="box"], div[class*="col"], h1, h2, h3, p, img, svg, button';
+        const elements = document.querySelectorAll(selectors);
+
+        elements.forEach(el => {
+            el.classList.add('zd-editable-highlight');
+            
+            // Allow double-click to edit text directly
+            el.addEventListener('dblclick', function(e) {
+                e.stopPropagation();
+                el.contentEditable = "true";
+                el.classList.add('zd-editing-text');
+                el.focus();
+            });
+
+            el.addEventListener('blur', function() {
+                el.contentEditable = "false";
+                el.classList.remove('zd-editing-text');
+            });
+
+            // Drag to reposition
+            el.addEventListener('mousedown', function(e) {
+                if (el.isContentEditable || e.button !== 0) return;
+                e.preventDefault();
+                e.stopPropagation();
+
+                const rect = el.getBoundingClientRect();
+                const parentRect = el.offsetParent ? el.offsetParent.getBoundingClientRect() : { left: 0, top: 0 };
+                
+                let startX = e.clientX;
+                let startY = e.clientY;
+                
+                // Switch to relative or absolute positioning for free dragging
+                const computed = window.getComputedStyle(el);
+                if (computed.position === 'static') {
+                    el.style.position = 'relative';
+                }
+
+                const initialLeft = parseFloat(el.style.left) || 0;
+                const initialTop = parseFloat(el.style.top) || 0;
+
+                function onMouseMove(ev) {
+                    const dx = ev.clientX - startX;
+                    const dy = ev.clientY - startY;
+                    el.style.left = (initialLeft + dx) + 'px';
+                    el.style.top = (initialTop + dy) + 'px';
+                }
+
+                function onMouseUp() {
+                    document.removeEventListener('mousemove', onMouseMove);
+                    document.removeEventListener('mouseup', onMouseUp);
+                }
+
+                document.addEventListener('mousemove', onMouseMove);
+                document.addEventListener('mouseup', onMouseUp);
+            });
+        });
+    }
+
+    initVisualEditor();
+})();
+"#;
+                            script_elem.set_text_content(Some(script_code));
+                            if let Some(head) = doc.head() {
+                                let _ = head.append_child(&script_elem);
+                            }
+                        }
+                    }
+                } else {
+                    // Turn off visual editor inside iframe
+                    if let Ok(clean_script) = doc.create_element("script") {
+                        clean_script.set_text_content(Some(r#"
+(function() {
+    const style = document.getElementById('zd-editor-styles');
+    if (style) style.remove();
+    const script = document.getElementById('zd-visual-editor-runtime');
+    if (script) script.remove();
+    document.querySelectorAll('.zd-editable-highlight, .zd-editing-text').forEach(el => {
+        el.classList.remove('zd-editable-highlight', 'zd-editing-text');
+        el.removeAttribute('contenteditable');
+    });
+})();
+"#));
+                        if let Some(body) = doc.body() {
+                            let _ = body.append_child(&clean_script);
+                            let _ = clean_script.remove();
+                        }
                     }
                 }
             }
@@ -82,10 +201,26 @@ pub fn PreviewPanel(
         let Some(doc) = frame.content_document() else { return; };
         let Some(doc_elem) = doc.document_element() else { return; };
 
-        // Clean up editing attributes before saving
-        if let Some(body) = doc.body() {
-            let _ = body.remove_attribute("contenteditable");
-            let _ = body.remove_attribute("style");
+        // Clean up editing attributes and runtime helper tags before saving
+        if let Ok(clean_script) = doc.create_element("script") {
+            clean_script.set_text_content(Some(r#"
+(function() {
+    const style = document.getElementById('zd-editor-styles');
+    if (style) style.remove();
+    const script = document.getElementById('zd-visual-editor-runtime');
+    if (script) script.remove();
+    document.querySelectorAll('.zd-editable-highlight, .zd-editing-text').forEach(el => {
+        el.classList.remove('zd-editable-highlight', 'zd-editing-text');
+        el.removeAttribute('contenteditable');
+    });
+})();
+"#));
+            if let Some(body) = doc.body() {
+                let _ = body.append_child(&clean_script);
+                let _ = clean_script.remove();
+                let _ = body.remove_attribute("contenteditable");
+                let _ = body.remove_attribute("style");
+            }
         }
         is_editing_inplace.set(false);
 
@@ -319,8 +454,8 @@ pub fn PreviewPanel(
                         </div>
                     </Show>
 
-                    <Show when=move || mode.get() == ModeId::Slides>
-                        <div class="zd-preview-divider"></div>
+                    <!-- In-place visual edit toggle (Move blocks & edit text) -->
+                    <div class="zd-preview-divider"></div>
 
                         <!-- In-place visual edit toggle -->
                         <button
@@ -367,17 +502,18 @@ pub fn PreviewPanel(
                             </button>
                         </Show>
 
-                        <!-- Slides Drawer & Deck Inspector button -->
-                        <button
-                            type="button"
-                            class="zd-btn-soft zd-btn-slide-deck"
-                            on:click=move |_| slides_drawer_open.set(true)
-                            title=move || t(language.get(), "Open Slides Deck Inspector & Source Editor", "باز کردن پنل مدیریت اسلایدها و ویرایشگر کد")
-                        >
-                            <Icon data=LuPresentation size=12 />
-                            <span>{move || t(language.get(), "Deck Editor", "مدیریت اسلایدها")}</span>
-                        </button>
-                    </Show>
+                        <!-- Slides Drawer & Deck Inspector button (for Slides mode) -->
+                        <Show when=move || mode.get() == ModeId::Slides>
+                            <button
+                                type="button"
+                                class="zd-btn-soft zd-btn-slide-deck"
+                                on:click=move |_| slides_drawer_open.set(true)
+                                title=move || t(language.get(), "Open Slides Deck Inspector & Source Editor", "باز کردن پنل مدیریت اسلایدها و ویرایشگر کد")
+                            >
+                                <Icon data=LuPresentation size=12 />
+                                <span>{move || t(language.get(), "Deck Editor", "مدیریت اسلایدها")}</span>
+                            </button>
+                        </Show>
 
                     <div class="zd-preview-divider"></div>
 
