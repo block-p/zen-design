@@ -1095,11 +1095,16 @@ THE CANVAS & ATMOSPHERE:
   * Midground: Intricate animated SVG geometry and massive kinetic typography.
   * Foreground: Floating optical coordinates, hairline crosshairs or parallax particles.
 
-KINETIC TYPOGRAPHY AS PROTAGONIST:
+KINETIC TYPOGRAPHY AS PROTAGONIST (ZERO CLIPPING DISCIPLINE):
 - Kinetic typography is the hero visual art. Treat typography as physical, kinetic sculpture:
   * Giant display scale: clamp(48px, 8vw, 130px) (or 96px–180px on 1440×900).
-  * Ultra-tight tracking: letter-spacing: -0.04em to -0.055em; line-height: 0.90 to 0.98; heavy font weights (800–900).
-  * Mandatory masked reveals: Wrap lines or words in overflow:hidden containers. Animate them with translateY(115%) -> translateY(0%) using snappy easing cubic-bezier(0.16, 1, 0.3, 1), or clip-path: polygon(0 0, 100% 0, 100% 100%, 0 100%).
+  * Line-Height & Diacritic Headroom Safety (MANDATORY TO PREVENT CLIPPING):
+    - For Persian / Arabic script: MUST use `line-height: 1.25 to 1.35` and `letter-spacing: 0` (NEVER use negative letter-spacing, and NEVER use line-height under 1.2 which cuts off the hat of 'آ' and dots of 'ش/چ/پ/ژ').
+    - In masked reveal containers (`.typo-mask`), ALWAYS provide vertical overflow clearance:
+      `.typo-mask {{ overflow: hidden; display: inline-block; padding: 0.18em 0.12em; margin: -0.18em -0.12em; vertical-align: bottom; }}`
+      This ensures that glyph ascenders, hats (کلاه آ), and bottom descenders/dots are 100% visible with ZERO clipping from top or bottom!
+    - For English script: line-height: 1.05 to 1.15; letter-spacing: -0.03em.
+  * Mandatory masked reveals: Wrap lines or words in `.typo-mask` containers. Animate inner lines with translateY(120%) -> translateY(0%) using snappy easing cubic-bezier(0.16, 1, 0.3, 1), or clip-path.
   * Stagger siblings: delay each word or letter by 40–80ms for rhythmic entry.
   * Dynamic typographic behavior: tracking expansion/compression, chromatic text shadow, or filled-to-stroked outline shift.
 
