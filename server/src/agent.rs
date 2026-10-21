@@ -222,8 +222,56 @@ impl AgentOrchestrator {
         }
     }
 
-    pub async fn execute_prompt(&self, req: PromptRequest) -> Result<(), String> {
+    pub async fn execute_prompt(&self, mut req: PromptRequest) -> Result<(), String> {
         let settings = self.settings.read().await.clone();
+
+        // 1. SMART WEB & GITHUB INSPECTOR: Detect any URLs in the prompt and fetch live content
+        if let Some(url) = extract_first_url(&req.prompt) {
+            providers::emit_event(
+                &self.event_sender,
+                "status",
+                format!("🔍 Detecting URL in prompt: {url} — fetching live repository/site context…"),
+            );
+            if let Ok(web_context) = fetch_url_context(&self.http, &url).await {
+                providers::emit_event(
+                    &self.event_sender,
+                    "status",
+                    format!("📄 Extracted context from {url} ({} bytes). Integrating into prompt…", web_context.len()),
+                );
+                req.prompt = format!(
+                    "{}\n\n[INSPECTED LIVE CONTEXT FROM {}]:\n{}",
+                    req.prompt, url, web_context
+                );
+            }
+        }
+
+        // 2. CONCEPT & NARRATIVE EXPANSION (Deep Research Agent):
+        // If prompt is short/conceptual (e.g. "Presentation on Event-Driven Architecture", "SaaS for accountants"),
+        // or specifically in Slides/Motion mode, expand it into a comprehensive structured breakdown.
+        if settings.provider == PROVIDER_OPENAI || settings.provider == PROVIDER_ANTHROPIC {
+            let is_short_brief = req.prompt.lines().count() <= 3 && req.prompt.len() < 220;
+            let needs_expansion = is_short_brief || req.mode == "slides" || req.mode == "motion";
+            
+            if needs_expansion {
+                providers::emit_event(
+                    &self.event_sender,
+                    "status",
+                    "🧠 Autonomous Research Agent: Analyzing domain, extracting core concepts, metrics & narrative structure…",
+                );
+                if let Ok(expanded) = expand_brief_with_research(&self.http, &settings, &req.prompt, &req.mode).await {
+                    providers::emit_event(
+                        &self.event_sender,
+                        "status",
+                        "✨ Deep outline & structural concepts generated. Composing final artifact…",
+                    );
+                    req.prompt = format!(
+                        "User Request: {}\n\nDETAILED RESEARCH & STRUCTURED SPECIFICATION:\n{}",
+                        req.prompt, expanded
+                    );
+                }
+            }
+        }
+
         if settings.provider == PROVIDER_TEMPLATE {
             return self.render_template(req).await;
         }
@@ -2234,6 +2282,213 @@ pub fn truncate_words(text: &str, max_chars: usize) -> String {
     }
 
     format!("{out}…")
+}
+
+pub fn extract_first_url(text: &str) -> Option<String> {
+    for word in text.split_whitespace() {
+        let clean = word.trim_matches(|c| c == '(' || c == ')' || c == '[' || c == ']' || c == '<' || c == '>' || c == '"' || c == '\'');
+        if clean.starts_with("http://") || clean.starts_with("https://") {
+            return Some(clean.to_string());
+        }
+        if clean.starts_with("github.com/") {
+            return Some(format!("https://{clean}"));
+        }
+    }
+    None
+}
+
+pub async fn fetch_url_context(client: &reqwest::Client, url: &str) -> Result<String, String> {
+    let target = url.trim();
+    // GitHub repository specific handling: directly fetch README.md for maximum signal
+    if target.contains("github.com/") && !target.contains("/raw/") {
+        let trimmed = target.trim_end_matches('/').trim_end_matches(".git");
+        let parts: Vec<&str> = trimmed.split("github.com/").collect();
+        if parts.len() == 2 {
+            let repo_path = parts[1].trim_matches('/');
+            let segments: Vec<&str> = repo_path.split('/').collect();
+            if segments.len() >= 2 {
+                let owner = segments[0];
+                let repo = segments[1];
+                let raw_candidates = [
+                    format!("https://raw.githubusercontent.com/{owner}/{repo}/main/README.md"),
+                    format!("https://raw.githubusercontent.com/{owner}/{repo}/master/README.md"),
+                    format!("https://raw.githubusercontent.com/{owner}/{repo}/main/readme.md"),
+                    format!("https://raw.githubusercontent.com/{owner}/{repo}/master/readme.md"),
+                ];
+                for raw_url in raw_candidates {
+                    if let Ok(resp) = client.get(&raw_url).timeout(Duration::from_secs(6)).send().await {
+                        if resp.status().is_success() {
+                            if let Ok(body) = resp.text().await {
+                                if !body.trim().is_empty() {
+                                    let preview = body.chars().take(5000).collect::<String>();
+                                    return Ok(format!("GitHub Repository: {}/{}\n\nREADME:\n{}", owner, repo, preview));
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    // Generic Web Page Fetcher: fetch and strip HTML tags
+    let resp = client
+        .get(target)
+        .header("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) ZenDesign-Agent/1.0")
+        .timeout(Duration::from_secs(7))
+        .send()
+        .await
+        .map_err(|e| format!("Fetch failed: {e}"))?;
+
+    if !resp.status().is_success() {
+        return Err(format!("HTTP error {}", resp.status()));
+    }
+
+    let text = resp.text().await.map_err(|e| e.to_string())?;
+    let stripped = strip_html_tags(&text);
+    let sample = stripped.split_whitespace().take(800).collect::<Vec<&str>>().join(" ");
+    Ok(sample)
+}
+
+fn strip_html_tags(html: &str) -> String {
+    let mut out = String::new();
+    let mut in_tag = false;
+    let mut in_script_or_style = false;
+    let lower = html.to_lowercase();
+    let chars: Vec<char> = html.chars().collect();
+    let lower_chars: Vec<char> = lower.chars().collect();
+    let mut i = 0;
+
+    while i < chars.len() {
+        if !in_tag && chars[i] == '<' {
+            in_tag = true;
+            // Check if entering script or style
+            let rem: String = lower_chars[i..].iter().take(8).collect();
+            if rem.starts_with("<script") || rem.starts_with("<style") {
+                in_script_or_style = true;
+            }
+            if rem.starts_with("</script") || rem.starts_with("</style") {
+                in_script_or_style = false;
+            }
+        } else if in_tag && chars[i] == '>' {
+            in_tag = false;
+            out.push(' ');
+        } else if !in_tag && !in_script_or_style {
+            out.push(chars[i]);
+        }
+        i += 1;
+    }
+    out
+}
+
+pub async fn expand_brief_with_research(
+    client: &reqwest::Client,
+    settings: &Settings,
+    prompt: &str,
+    mode: &str,
+) -> Result<String, String> {
+    let is_persian = prompt.chars().any(|c| ('\u{0600}'..='\u{06FF}').contains(&c));
+    let lang_instruction = if is_persian {
+        "Respond in fluent, professional Persian (Farsi) with modern terminology."
+    } else {
+        "Respond in concise, professional English."
+    };
+
+    let research_prompt = format!(
+        r#"You are ZenDesign's Lead Research & Domain Architect.
+The user gave a concise brief for a {mode}:
+"{prompt}"
+
+Your mission is to perform deep domain research, concept extraction, and structured outline development.
+Do NOT write code or HTML here. Produce a comprehensive, high-signal structural breakdown with real facts, terminology, numbers, and logical flow:
+
+1. Core Problem & Concept Definition (What is this, why does it matter, what are the primary pillars?).
+2. Domain Specifics & Real Terminology (Architecture, workflows, real-world metrics, KPIs, components).
+3. Section-by-Section / Slide-by-Slide Blueprint:
+   - For slides mode: Structure EXACTLY 5 to 7 designated slides, each with Title, Visual Focal Point, Key Message, and Specific Supporting Data/Stats.
+   - For prototype mode: Detail the User Flow, Navigation, Top Bar stats, Primary Workspace components, and Real dynamic data records.
+   - For motion mode: Break down into 4 sequential narrative beats (The Hook, The Friction, The Resolution, The Climax/Impact).
+4. Tone & Visual Mood direction suited for this domain.
+
+{lang_instruction}
+Be extremely detailed, specific, and actionable."#
+    );
+
+    match settings.provider.as_str() {
+        PROVIDER_OPENAI => {
+            let base = settings.openai.base_url.trim().trim_end_matches('/');
+            let model = settings.openai.model.trim();
+            if base.is_empty() || model.is_empty() {
+                return Err("OpenAI provider unconfigured".to_string());
+            }
+            let key = settings.openai_key();
+            let body = serde_json::json!({
+                "model": model,
+                "temperature": 0.6,
+                "messages": [
+                    { "role": "system", "content": "You are an elite Research & Product Architect. You turn brief inputs into deep, comprehensive domain breakdowns." },
+                    { "role": "user", "content": research_prompt }
+                ]
+            });
+            let mut req = client.post(format!("{base}/chat/completions")).json(&body);
+            if !key.is_empty() {
+                req = req.bearer_auth(key);
+            }
+            let resp = req.send().await.map_err(|e| e.to_string())?;
+            if !resp.status().is_success() {
+                return Err(format!("OpenAI returned status {}", resp.status()));
+            }
+            let res_json: serde_json::Value = resp.json().await.map_err(|e| e.to_string())?;
+            let text = res_json["choices"][0]["message"]["content"]
+                .as_str()
+                .unwrap_or_default()
+                .to_string();
+            if text.trim().is_empty() {
+                return Err("Empty response from research provider".to_string());
+            }
+            Ok(text)
+        }
+        PROVIDER_ANTHROPIC => {
+            let base = settings.anthropic.base_url.trim().trim_end_matches('/');
+            let model = if settings.anthropic.model.trim().is_empty() {
+                "claude-opus-4-6"
+            } else {
+                settings.anthropic.model.trim()
+            };
+            let key = settings.anthropic_key();
+            if key.is_empty() {
+                return Err("Anthropic API key missing".to_string());
+            }
+            let body = serde_json::json!({
+                "model": model,
+                "max_tokens": 2048,
+                "messages": [
+                    { "role": "user", "content": research_prompt }
+                ]
+            });
+            let resp = client
+                .post(format!("{base}/v1/messages"))
+                .header("x-api-key", key.trim())
+                .header("anthropic-version", "2023-06-01")
+                .json(&body)
+                .send()
+                .await
+                .map_err(|e| e.to_string())?;
+            if !resp.status().is_success() {
+                return Err(format!("Anthropic returned status {}", resp.status()));
+            }
+            let res_json: serde_json::Value = resp.json().await.map_err(|e| e.to_string())?;
+            let text = res_json["content"][0]["text"]
+                .as_str()
+                .unwrap_or_default()
+                .to_string();
+            if text.trim().is_empty() {
+                return Err("Empty response from research provider".to_string());
+            }
+            Ok(text)
+        }
+        _ => Err("Provider does not support autonomous research".to_string()),
+    }
 }
 
 #[cfg(test)]
