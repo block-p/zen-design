@@ -3054,15 +3054,115 @@ html[data-theme="dark"] .zd-select--compact option {
   padding: 16px;
 }
 
+/* ── AI Disconnected Warning Banner ─────────────────────────────────── */
+.zd-ai-disconnected-banner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 8px 12px;
+  background: var(--zd-amber-soft, rgba(245, 158, 11, 0.1));
+  border: 1px solid rgba(245, 158, 11, 0.35);
+  border-radius: var(--zd-radius-md);
+  margin-bottom: 12px;
+  animation: zd-fade-in 0.2s ease;
+}
+
+.zd-ai-disconnected-text {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  font-size: 11px;
+  color: #b45309;
+  font-weight: 500;
+  line-height: 1.4;
+}
+
+html[data-theme="dark"] .zd-ai-disconnected-text {
+  color: #fde68a;
+}
+
+.zd-ai-disconnected-icon {
+  color: #d97706;
+  flex-shrink: 0;
+}
+
+.zd-btn-connect-ai {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 4px 10px;
+  border-radius: var(--zd-radius-sm);
+  background: #d97706;
+  color: #ffffff;
+  border: none;
+  font-size: 11px;
+  font-weight: 600;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: all 0.15s ease;
+}
+
+.zd-btn-connect-ai:hover {
+  background: #b45309;
+  transform: translateY(-1px);
+}
+
 .zd-theme-builder-prompt-card {
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: 10px;
   padding: 14px;
   background: var(--zd-surface-subtle);
   border: 1px solid var(--zd-border);
   border-radius: var(--zd-radius-md);
   margin-bottom: 16px;
+}
+
+.zd-theme-builder-prompt-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.zd-theme-ai-pill-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.zd-theme-ai-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 7px;
+  border-radius: 999px;
+  background: rgba(245, 158, 11, 0.15);
+  color: #d97706;
+  font-size: 10px;
+  font-weight: 600;
+}
+
+.zd-btn-pill-connect {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 8px;
+  border-radius: 4px;
+  background: transparent;
+  border: 1px solid rgba(245, 158, 11, 0.4);
+  color: #d97706;
+  font-size: 10px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.zd-btn-pill-connect:hover {
+  background: rgba(245, 158, 11, 0.2);
+  color: #b45309;
 }
 
 .zd-theme-builder-input-row {

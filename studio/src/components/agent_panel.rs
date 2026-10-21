@@ -1,6 +1,6 @@
 use icondata_lu::{
-    LuArrowUp, LuClock, LuCommand, LuCornerDownLeft, LuGripHorizontal, LuHistory, LuMic, LuPalette,
-    LuPlus, LuSparkles, LuVolume2, LuVolumeX, LuX, LuZap,
+    LuArrowUp, LuClock, LuCommand, LuCornerDownLeft, LuExternalLink, LuGripHorizontal, LuHistory, LuMic, LuPalette,
+    LuPlus, LuSlidersHorizontal, LuSparkles, LuVolume2, LuVolumeX, LuX, LuZap,
 };
 use leptos::prelude::*;
 use web_sys::{KeyboardEvent, MouseEvent, SubmitEvent};
@@ -31,6 +31,7 @@ pub fn AgentPanel(
     preview_version: RwSignal<u64>,
     custom_theme: RwSignal<Option<CustomThemeTokens>>,
     theme_builder_open: RwSignal<bool>,
+    settings_open: RwSignal<bool>,
     aspect_ratio: RwSignal<AspectRatio>,
     duration_secs: RwSignal<u32>,
     sound_effects: RwSignal<bool>,
@@ -172,6 +173,32 @@ pub fn AgentPanel(
                         </span>
                     </div>
                 </div>
+
+                <Show when=move || {
+                    let is_template = settings.get().map(|s| s.provider == "template" || s.provider.is_empty()).unwrap_or(true);
+                    is_template
+                }>
+                    <div class="zd-ai-disconnected-banner">
+                        <div class="zd-ai-disconnected-text">
+                            <Icon data=LuZap size=13 class="zd-ai-disconnected-icon" />
+                            <span>
+                                {move || t(
+                                    language.get(),
+                                    "AI Model is not connected. Responses use offline fallback templates.",
+                                    "هوش مصنوعی متصل نیست؛ پاسخ‌ها با قالب‌های ساده آفلاین تولید می‌شوند."
+                                )}
+                            </span>
+                        </div>
+                        <button
+                            type="button"
+                            class="zd-btn-connect-ai"
+                            on:click=move |_| settings_open.set(true)
+                        >
+                            <Icon data=LuSlidersHorizontal size=12 />
+                            <span>{move || t(language.get(), "Connect AI", "اتصال هوش مصنوعی")}</span>
+                        </button>
+                    </div>
+                </Show>
 
                 <form on:submit=move |event: SubmitEvent| {
                     event.prevent_default();

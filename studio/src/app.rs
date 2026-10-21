@@ -165,6 +165,7 @@ pub fn App() -> impl IntoView {
                         preview_version=preview_version
                         custom_theme=custom_theme
                         theme_builder_open=theme_builder_open
+                        settings_open=settings_open
                         aspect_ratio=aspect_ratio
                         duration_secs=duration_secs
                         sound_effects=sound_effects
@@ -226,6 +227,8 @@ pub fn App() -> impl IntoView {
                     design_system=design_system
                     entries=entries
                     preview_version=preview_version
+                    settings=settings
+                    settings_open=settings_open
                 />
 
                 <SlidesEditorDrawer

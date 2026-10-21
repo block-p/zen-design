@@ -1,5 +1,5 @@
 use gloo_net::http::Request;
-use icondata_lu::{LuCheck, LuPalette, LuSparkles, LuWand, LuX};
+use icondata_lu::{LuCheck, LuPalette, LuSlidersHorizontal, LuSparkles, LuWand, LuX, LuZap};
 use leptos::portal::Portal;
 use leptos::prelude::*;
 use serde::Deserialize;
@@ -82,6 +82,8 @@ pub fn ThemeBuilderModal(
     design_system: RwSignal<DesignSystemId>,
     entries: RwSignal<Vec<ActivityEntry>>,
     preview_version: RwSignal<u64>,
+    settings: RwSignal<Option<crate::settings::SettingsView>>,
+    settings_open: RwSignal<bool>,
 ) -> impl IntoView {
     let prompt_input = RwSignal::new(String::new());
     let generating = RwSignal::new(false);
@@ -265,10 +267,31 @@ pub fn ThemeBuilderModal(
                     <div class="zd-modal-body zd-theme-builder-body">
                         <!-- AI Prompt Generation Box -->
                         <div class="zd-theme-builder-prompt-card">
-                            <label class="zd-form-label">
-                                <Icon data=LuWand size=13 />
-                                <span>{move || t(language.get(), "Describe Your Dream Theme", "توصیف تم مورد نظر شما")}</span>
-                            </label>
+                            <div class="zd-theme-builder-prompt-header">
+                                <label class="zd-form-label">
+                                    <Icon data=LuWand size=13 />
+                                    <span>{move || t(language.get(), "Describe Your Dream Theme", "توصیف تم مورد نظر شما")}</span>
+                                </label>
+                                <Show when=move || {
+                                    settings.get().map(|s| s.provider == "template" || s.provider.is_empty()).unwrap_or(true)
+                                }>
+                                    <div class="zd-theme-ai-pill-row">
+                                        <span class="zd-theme-ai-pill">
+                                            <Icon data=LuZap size=11 />
+                                            <span>{move || t(language.get(), "Offline Generator Active", "الگوریتم آفلاین فعال است")}</span>
+                                        </span>
+                                        <button
+                                            type="button"
+                                            class="zd-btn-pill-connect"
+                                            on:click=move |_| settings_open.set(true)
+                                            title=move || t(language.get(), "Connect real AI model in Settings", "اتصال مدل هوش مصنوعی در تنظیمات")
+                                        >
+                                            <Icon data=LuSlidersHorizontal size=11 />
+                                            <span>{move || t(language.get(), "Connect AI for best creative results", "اتصال هوش مصنوعی برای نتیجه دقیق‌تر")}</span>
+                                        </button>
+                                    </div>
+                                </Show>
+                            </div>
                             <div class="zd-theme-builder-input-row">
                                 <input
                                     type="text"
