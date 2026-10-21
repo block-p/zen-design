@@ -225,6 +225,7 @@ pub fn App() -> impl IntoView {
                     custom_theme=custom_theme
                     design_system=design_system
                     entries=entries
+                    preview_version=preview_version
                 />
 
                 <SlidesEditorDrawer

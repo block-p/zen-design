@@ -4,6 +4,7 @@ use leptos::portal::Portal;
 use leptos::prelude::*;
 use serde::Deserialize;
 use serde_json::json;
+use wasm_bindgen::JsCast;
 use wasm_bindgen_futures::spawn_local;
 use web_sys::KeyboardEvent;
 
@@ -24,6 +25,7 @@ pub fn ThemeBuilderModal(
     custom_theme: RwSignal<Option<CustomThemeTokens>>,
     design_system: RwSignal<DesignSystemId>,
     entries: RwSignal<Vec<ActivityEntry>>,
+    preview_version: RwSignal<u64>,
 ) -> impl IntoView {
     let prompt_input = RwSignal::new(String::new());
     let generating = RwSignal::new(false);
@@ -109,19 +111,48 @@ pub fn ThemeBuilderModal(
 
         let tokens = CustomThemeTokens {
             name: name.clone(),
-            bg,
-            text,
-            accent,
-            font_family: font,
-            card_bg: card,
-            border_color: border,
+            bg: bg.clone(),
+            text: text.clone(),
+            accent: accent.clone(),
+            font_family: font.clone(),
+            card_bg: card.clone(),
+            border_color: border.clone(),
             dot,
             swatch,
         };
 
         custom_theme.set(Some(tokens));
         design_system.set(DesignSystemId::Custom);
+        preview_version.update(|v| *v += 1);
         open.set(false);
+
+        // Directly apply custom theme variables to iframe if loaded
+        if let Some(window) = web_sys::window() {
+            if let Some(document) = window.document() {
+                if let Ok(Some(iframe_el)) = document.query_selector(".zd-preview-frame") {
+                    if let Ok(iframe) = iframe_el.dyn_into::<web_sys::HtmlIFrameElement>() {
+                        if let Some(content_doc) = iframe.content_document() {
+                            if let Some(root) = content_doc.document_element() {
+                                if let Ok(style) = root.dyn_into::<web_sys::HtmlElement>() {
+                                    let s = style.style();
+                                    let _ = s.set_property("--zd-bg", &bg);
+                                    let _ = s.set_property("--zd-text", &text);
+                                    let _ = s.set_property("--zd-accent", &accent);
+                                    let _ = s.set_property("--zd-card-bg", &card);
+                                    let _ = s.set_property("--zd-border", &border);
+                                    let _ = s.set_property("--zd-font", &font);
+                                    let _ = s.set_property("--bg", &bg);
+                                    let _ = s.set_property("--text", &text);
+                                    let _ = s.set_property("--accent", &accent);
+                                    let _ = s.set_property("--card", &card);
+                                    let _ = s.set_property("--border", &border);
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
 
         push_activity(
             entries,
@@ -182,12 +213,18 @@ pub fn ThemeBuilderModal(
                                     )
                                     prop:value=move || prompt_input.get()
                                     on:input=move |ev| prompt_input.set(event_target_value(&ev))
+                                    on:keydown=move |ev: web_sys::KeyboardEvent| {
+                                        if ev.key() == "Enter" {
+                                            ev.prevent_default();
+                                            on_generate(());
+                                        }
+                                    }
                                 />
                                 <button
                                     type="button"
                                     class="zd-btn-primary zd-theme-builder-gen-btn"
                                     disabled=move || generating.get() || prompt_input.get().trim().is_empty()
-                                    on:click=on_generate
+                                    on:click=move |_| on_generate(())
                                 >
                                     <Show
                                         when=move || generating.get()
