@@ -18,6 +18,62 @@ struct ThemeGenerateResponse {
     theme: CustomThemeTokens,
 }
 
+fn normalize_to_hex(color: &str) -> String {
+    let c = color.trim();
+    if c.starts_with('#') {
+        if c.len() == 7 {
+            return c.to_string();
+        } else if c.len() == 4 {
+            let r = &c[1..2];
+            let g = &c[2..3];
+            let b = &c[3..4];
+            return format!("#{r}{r}{g}{g}{b}{b}");
+        }
+    }
+    if c.starts_with("hsl") {
+        if let Some(start) = c.find('(') {
+            if let Some(end) = c.rfind(')') {
+                let inner = &c[start + 1..end];
+                let parts: Vec<&str> = inner.split(',').collect();
+                if parts.len() >= 3 {
+                    let h: f64 = parts[0].trim().parse().unwrap_or(0.0);
+                    let s: f64 = parts[1].trim().trim_end_matches('%').parse::<f64>().unwrap_or(0.0) / 100.0;
+                    let l: f64 = parts[2].trim().trim_end_matches('%').parse::<f64>().unwrap_or(0.0) / 100.0;
+                    
+                    let c = (1.0 - (2.0 * l - 1.0).abs()) * s;
+                    let x = c * (1.0 - ((h / 60.0) % 2.0 - 1.0).abs());
+                    let m = l - c / 2.0;
+
+                    let (r1, g1, b1) = if h < 60.0 {
+                        (c, x, 0.0)
+                    } else if h < 120.0 {
+                        (x, c, 0.0)
+                    } else if h < 180.0 {
+                        (0.0, c, x)
+                    } else if h < 240.0 {
+                        (0.0, x, c)
+                    } else if h < 300.0 {
+                        (x, 0.0, c)
+                    } else {
+                        (c, 0.0, x)
+                    };
+
+                    let r = ((r1 + m) * 255.0).round().clamp(0.0, 255.0) as u8;
+                    let g = ((g1 + m) * 255.0).round().clamp(0.0, 255.0) as u8;
+                    let b = ((b1 + m) * 255.0).round().clamp(0.0, 255.0) as u8;
+
+                    return format!("#{r:02x}{g:02x}{b:02x}");
+                }
+            }
+        }
+    }
+    if c.is_empty() {
+        "#38bdf8".to_string()
+    } else {
+        c.to_string()
+    }
+}
+
 #[component]
 pub fn ThemeBuilderModal(
     language: RwSignal<Language>,
@@ -82,11 +138,11 @@ pub fn ThemeBuilderModal(
                     Ok(resp) if resp.ok() => {
                         if let Ok(data) = resp.json::<ThemeGenerateResponse>().await {
                             theme_name.set(data.theme.name);
-                            bg_color.set(data.theme.bg);
-                            text_color.set(data.theme.text);
-                            accent_color.set(data.theme.accent);
-                            card_bg.set(data.theme.card_bg);
-                            border_color.set(data.theme.border_color);
+                            bg_color.set(normalize_to_hex(&data.theme.bg));
+                            text_color.set(normalize_to_hex(&data.theme.text));
+                            accent_color.set(normalize_to_hex(&data.theme.accent));
+                            card_bg.set(normalize_to_hex(&data.theme.card_bg));
+                            border_color.set(normalize_to_hex(&data.theme.border_color));
                             font_family.set(data.theme.font_family);
                         } else {
                             error_msg.set(Some("Failed to parse generated theme".to_string()));

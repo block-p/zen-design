@@ -877,7 +877,33 @@ async fn generate_theme(
 fn generate_algorithmic_theme(prompt: &str) -> CustomThemeTokens {
     let lower = prompt.to_lowercase();
 
-    if lower.contains("cyber") || lower.contains("neon") || lower.contains("arcade") || lower.contains("matrix") {
+    let is_persian = prompt.chars().any(|c| ('\u{0600}'..='\u{06FF}').contains(&c));
+    let default_font = if is_persian {
+        "'Vazirmatn', system-ui, sans-serif".to_string()
+    } else {
+        "'Inter', system-ui, sans-serif".to_string()
+    };
+
+    // Red / Crimson / Ruby / سرخ / قرمز / زرشکی
+    if lower.contains("قرمز") || lower.contains("سرخ") || lower.contains("زرشکی") || lower.contains("red") || lower.contains("crimson") || lower.contains("ruby") || lower.contains("blood") || lower.contains("scarlet") {
+        let is_dark = lower.contains("مشکی") || lower.contains("سیاه") || lower.contains("تیره") || lower.contains("dark") || lower.contains("black") || !lower.contains("سفید");
+        let (bg, card, border, text, accent) = if is_dark {
+            ("#0a0a0c", "#161114", "#38171e", "#fce7f3", "#ef4444")
+        } else {
+            ("#fff5f5", "#ffffff", "#fed7d7", "#1a202c", "#e53e3e")
+        };
+        CustomThemeTokens {
+            name: if is_persian { "قرمز شفق / Crimson Dark".to_string() } else { "Crimson Void".to_string() },
+            bg: bg.to_string(),
+            text: text.to_string(),
+            accent: accent.to_string(),
+            font_family: default_font,
+            card_bg: card.to_string(),
+            border_color: border.to_string(),
+            dot: accent.to_string(),
+            swatch: format!("linear-gradient(135deg, {accent} 0%, {bg} 100%)"),
+        }
+    } else if lower.contains("cyber") || lower.contains("neon") || lower.contains("arcade") || lower.contains("matrix") || lower.contains("نئون") || lower.contains("سایبر") {
         CustomThemeTokens {
             name: "Neon Cyberpunk".to_string(),
             bg: "#090a0f".to_string(),
@@ -889,61 +915,61 @@ fn generate_algorithmic_theme(prompt: &str) -> CustomThemeTokens {
             dot: "#00f0ff".to_string(),
             swatch: "linear-gradient(135deg, #ff007f 0%, #090a0f 100%)".to_string(),
         }
-    } else if lower.contains("forest") || lower.contains("moss") || lower.contains("pine") || lower.contains("nature") || lower.contains("green") || lower.contains("سبز") || lower.contains("جنگل") {
+    } else if lower.contains("forest") || lower.contains("moss") || lower.contains("pine") || lower.contains("nature") || lower.contains("green") || lower.contains("سبز") || lower.contains("جنگل") || lower.contains("طبیعت") {
         CustomThemeTokens {
-            name: "Nordic Pine".to_string(),
+            name: if is_persian { "سبز نوردیک / Nordic Pine".to_string() } else { "Nordic Pine".to_string() },
             bg: "#0a1410".to_string(),
             text: "#ecfdf5".to_string(),
             accent: "#10b981".to_string(),
-            font_family: "'Plus Jakarta Sans', system-ui, sans-serif".to_string(),
+            font_family: default_font,
             card_bg: "#12241d".to_string(),
             border_color: "#1f4034".to_string(),
             dot: "#10b981".to_string(),
             swatch: "linear-gradient(135deg, #10b981 0%, #0a1410 100%)".to_string(),
         }
-    } else if lower.contains("sunset") || lower.contains("warm") || lower.contains("coral") || lower.contains("autumn") || lower.contains("پاییز") || lower.contains("نارنجی") {
+    } else if lower.contains("sunset") || lower.contains("warm") || lower.contains("coral") || lower.contains("autumn") || lower.contains("پاییز") || lower.contains("نارنجی") || lower.contains("آفتاب") {
         CustomThemeTokens {
-            name: "Sunset Ember".to_string(),
+            name: if is_persian { "غروب پاییزی / Sunset Ember".to_string() } else { "Sunset Ember".to_string() },
             bg: "#1f0d14".to_string(),
             text: "#fff1f2".to_string(),
             accent: "#f97316".to_string(),
-            font_family: "'Outfit', system-ui, sans-serif".to_string(),
+            font_family: default_font,
             card_bg: "#321620".to_string(),
             border_color: "#582436".to_string(),
             dot: "#f97316".to_string(),
             swatch: "linear-gradient(135deg, #f97316 0%, #1f0d14 100%)".to_string(),
         }
-    } else if lower.contains("gold") || lower.contains("luxury") || lower.contains("champagne") || lower.contains("royal") || lower.contains("طلا") || lower.contains("لوکس") {
+    } else if lower.contains("gold") || lower.contains("luxury") || lower.contains("champagne") || lower.contains("royal") || lower.contains("طلا") || lower.contains("لوکس") || lower.contains("سلطنتی") || lower.contains("زرد") {
         CustomThemeTokens {
-            name: "Imperial Obsidian".to_string(),
+            name: if is_persian { "طلایی لوکس / Imperial Obsidian".to_string() } else { "Imperial Obsidian".to_string() },
             bg: "#0a0a0c".to_string(),
             text: "#faf5ef".to_string(),
             accent: "#eab308".to_string(),
-            font_family: "'Cinzel', 'Playfair Display', serif".to_string(),
+            font_family: default_font,
             card_bg: "#16161c".to_string(),
             border_color: "#caa23440".to_string(),
             dot: "#eab308".to_string(),
             swatch: "linear-gradient(135deg, #eab308 0%, #0a0a0c 100%)".to_string(),
         }
-    } else if lower.contains("ocean") || lower.contains("sea") || lower.contains("aqua") || lower.contains("blue") || lower.contains("دریا") || lower.contains("آبی") {
+    } else if lower.contains("ocean") || lower.contains("sea") || lower.contains("aqua") || lower.contains("blue") || lower.contains("دریا") || lower.contains("آبی") || lower.contains("اقیانوس") {
         CustomThemeTokens {
-            name: "Abyssal Azure".to_string(),
+            name: if is_persian { "آبی اقیانوس / Abyssal Azure".to_string() } else { "Abyssal Azure".to_string() },
             bg: "#05111e".to_string(),
             text: "#f0f9ff".to_string(),
             accent: "#0284c7".to_string(),
-            font_family: "'Inter', system-ui, sans-serif".to_string(),
+            font_family: default_font,
             card_bg: "#0b2038".to_string(),
             border_color: "#133860".to_string(),
             dot: "#0284c7".to_string(),
             swatch: "linear-gradient(135deg, #0284c7 0%, #05111e 100%)".to_string(),
         }
-    } else if lower.contains("purple") || lower.contains("violet") || lower.contains("lavender") || lower.contains("بنفش") {
+    } else if lower.contains("purple") || lower.contains("violet") || lower.contains("lavender") || lower.contains("بنفش") || lower.contains("ارغوانی") {
         CustomThemeTokens {
-            name: "Velvet Nebula".to_string(),
+            name: if is_persian { "بنفش کیهانی / Velvet Nebula".to_string() } else { "Velvet Nebula".to_string() },
             bg: "#120a22".to_string(),
             text: "#f5f3ff".to_string(),
             accent: "#a855f7".to_string(),
-            font_family: "'Inter', system-ui, sans-serif".to_string(),
+            font_family: default_font,
             card_bg: "#1d1236".to_string(),
             border_color: "#341f5e".to_string(),
             dot: "#a855f7".to_string(),
@@ -951,40 +977,53 @@ fn generate_algorithmic_theme(prompt: &str) -> CustomThemeTokens {
         }
     } else if lower.contains("minimal") || lower.contains("light") || lower.contains("white") || lower.contains("paper") || lower.contains("سفید") || lower.contains("روشن") {
         CustomThemeTokens {
-            name: "Atelier Paper".to_string(),
+            name: if is_persian { "سفید مینیمال / Minimal White".to_string() } else { "Atelier Paper".to_string() },
             bg: "#f8f9fa".to_string(),
             text: "#18181b".to_string(),
             accent: "#2563eb".to_string(),
-            font_family: "'Helvetica Neue', Arial, sans-serif".to_string(),
+            font_family: default_font,
             card_bg: "#ffffff".to_string(),
             border_color: "#e4e4e7".to_string(),
             dot: "#2563eb".to_string(),
             swatch: "linear-gradient(135deg, #2563eb 0%, #f8f9fa 100%)".to_string(),
         }
     } else {
-        // Deterministic hash-based derivation
+        // Deterministic hash-based derivation with clean HEX outputs
         let hash: u64 = prompt.bytes().fold(5381, |acc, b| acc.wrapping_mul(33).wrapping_add(b as u64));
-        let hue = hash % 360;
-        let accent = format!("hsl({hue}, 85%, 60%)");
-        let dot = format!("hsl({hue}, 85%, 60%)");
-        let swatch = format!("linear-gradient(135deg, hsl({hue}, 85%, 60%) 0%, #0a0d14 100%)");
+        let hue = (hash % 360) as f64;
+        let s = 0.85;
+        let l = 0.58;
+        let c = (1.0 - (2.0 * l - 1.0_f64).abs()) * s;
+        let x = c * (1.0 - ((hue / 60.0) % 2.0 - 1.0_f64).abs());
+        let m = l - c / 2.0;
+        let (r1, g1, b1) = if hue < 60.0 { (c, x, 0.0) }
+            else if hue < 120.0 { (x, c, 0.0) }
+            else if hue < 180.0 { (0.0, c, x) }
+            else if hue < 240.0 { (0.0, x, c) }
+            else if hue < 300.0 { (x, 0.0, c) }
+            else { (c, 0.0, x) };
+        let r = ((r1 + m) * 255.0).round().clamp(0.0, 255.0) as u8;
+        let g = ((g1 + m) * 255.0).round().clamp(0.0, 255.0) as u8;
+        let b = ((b1 + m) * 255.0).round().clamp(0.0, 255.0) as u8;
+        let accent = format!("#{r:02x}{g:02x}{b:02x}");
+        let bg = "#0a0d14".to_string();
+        let swatch = format!("linear-gradient(135deg, {accent} 0%, {bg} 100%)");
 
-        let is_persian = prompt.chars().any(|c| ('\u{0600}'..='\u{06FF}').contains(&c));
-        let default_font = if is_persian {
-            "'Vazirmatn', system-ui, sans-serif".to_string()
+        let display_name = if is_persian {
+            format!("تم اختصاصی ({})", truncate_words(prompt, 18).trim_end_matches('…'))
         } else {
-            "'Inter', system-ui, sans-serif".to_string()
+            format!("Custom ({})", truncate_words(prompt, 18).trim_end_matches('…'))
         };
 
         CustomThemeTokens {
-            name: format!("Custom ({})", truncate_words(prompt, 18).trim_end_matches('…')),
-            bg: "#0a0d14".to_string(),
+            name: display_name,
+            bg,
             text: "#f1f5f9".to_string(),
-            accent,
+            accent: accent.clone(),
             font_family: default_font,
             card_bg: "#131824".to_string(),
             border_color: "#1e293b".to_string(),
-            dot,
+            dot: accent,
             swatch,
         }
     }
