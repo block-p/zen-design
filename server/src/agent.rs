@@ -971,15 +971,18 @@ fn build_motion_prompt_from_request(tokens: &DesignTokens, req: &PromptRequest) 
 
     let sfx_prompt = if sfx {
         r#"
-AUDIO & PROCEDURAL SOUND EFFECTS (SFX) ENABLED (Web Audio API):
-- The piece MUST include procedural sound effects using browser Web Audio API inside a <script> block.
-- NO external .mp3/.wav files or CDNs (all network requests are blocked by CSP). Synthesize sounds mathematically via AudioContext, OscillatorNode, GainNode, and BiquadFilterNode.
-- Synthesize three cues:
-  1. Sub-bass punch/impact: Low sine sweep (120Hz down to 40Hz) with punchy decay (0.4s) on major visual beats.
-  2. Kinetic tick/click: Crisp high frequency click (1800Hz pulse, 20ms decay) during text/counter reveals.
-  3. Whoosh / Transition: Soft pitch-swept tone or filtered noise on scene wipe or scale transition.
-- Provide a sleek audio toggle button (Mute / Sound) in a corner. Resume AudioContext upon user gesture.
-"#
+AUDIO & CINEMATIC PROCEDURAL SOUND DESIGN (Web Audio API):
+- The piece MUST include high-production procedural audio using browser Web Audio API inside a <script> block.
+- NO external .mp3/.wav files or CDNs (all network requests are blocked by CSP). Synthesize sounds mathematically via AudioContext, OscillatorNode, GainNode, ConvolverNode/Delay, and BiquadFilterNode.
+- To sound professional, cinematic, and sleek (NEVER harsh, robotic, or cheap 8-bit beeps):
+  1. Cinematic Sub-Bass Impact (Bass Drop / Hit):
+     Use a clean sine wave starting at 90Hz dropping smoothly to 32Hz over 0.8s, passed through a lowpass filter (150Hz), with a soft 15ms attack and logarithmic decay (Gain 0.4 -> 0.001). Add a very subtle stereo detuned layer (e.g. +3 cents) for stereo warmth.
+  2. Elegant Glass / Kinetic Chime (Data / Metric reveal):
+     Harmonic chime chords: 2 or 3 layered sine oscillators tuned to musical intervals (e.g. Pentatonic / Fifth: E5 659Hz, B5 987Hz) with fast 5ms attack, sweet resonant bandpass filter, and 350ms gentle exponential decay.
+  3. Cinematic Ambient Whoosh / Air Riser (Scene wipes):
+     Filtered noise or multi-oscillator pitch sweep with soft low-pass filter (sweeping 200Hz -> 1400Hz -> 100Hz) and gentle stereo panning.
+  4. Subtle Kinetic Tick: Soft high-frequency muted click (0.015s, low volume 0.05).
+- Provide a sleek audio toggle button (Mute / Sound) in a corner. Resume AudioContext upon user gesture."#
     } else {
         ""
     };
@@ -2083,17 +2086,29 @@ fn generate_motion_html(req: &PromptRequest, tokens: &DesignTokens) -> String {
             if (sfxMuted) return;
             try {{
                 const ctx = getAudioContext();
+                const now = ctx.currentTime;
+                // Deep warm sub-bass drop with lowpass filter (no harsh buzz)
                 const osc = ctx.createOscillator();
+                const filter = ctx.createBiquadFilter();
                 const gain = ctx.createGain();
+
+                filter.type = 'lowpass';
+                filter.frequency.setValueAtTime(140, now);
+                filter.frequency.exponentialRampToValueAtTime(45, now + 0.6);
+
                 osc.type = 'sine';
-                osc.frequency.setValueAtTime(140, ctx.currentTime);
-                osc.frequency.exponentialRampToValueAtTime(38, ctx.currentTime + 0.35);
-                gain.gain.setValueAtTime(0.35, ctx.currentTime);
-                gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.35);
-                osc.connect(gain);
+                osc.frequency.setValueAtTime(85, now);
+                osc.frequency.exponentialRampToValueAtTime(32, now + 0.6);
+
+                gain.gain.setValueAtTime(0.001, now);
+                gain.gain.linearRampToValueAtTime(0.4, now + 0.02);
+                gain.gain.exponentialRampToValueAtTime(0.001, now + 0.6);
+
+                osc.connect(filter);
+                filter.connect(gain);
                 gain.connect(ctx.destination);
-                osc.start();
-                osc.stop(ctx.currentTime + 0.36);
+                osc.start(now);
+                osc.stop(now + 0.62);
             }} catch(e) {{}}
         }}
 
@@ -2101,16 +2116,30 @@ fn generate_motion_html(req: &PromptRequest, tokens: &DesignTokens) -> String {
             if (sfxMuted) return;
             try {{
                 const ctx = getAudioContext();
-                const osc = ctx.createOscillator();
-                const gain = ctx.createGain();
-                osc.type = 'triangle';
-                osc.frequency.setValueAtTime(1800, ctx.currentTime);
-                gain.gain.setValueAtTime(0.12, ctx.currentTime);
-                gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.03);
-                osc.connect(gain);
-                gain.connect(ctx.destination);
-                osc.start();
-                osc.stop(ctx.currentTime + 0.04);
+                const now = ctx.currentTime;
+                // Elegant dual harmonic glass chime (musical E5 + B5)
+                [659.25, 987.77].forEach((freq, idx) => {{
+                    const osc = ctx.createOscillator();
+                    const gain = ctx.createGain();
+                    const filter = ctx.createBiquadFilter();
+
+                    filter.type = 'bandpass';
+                    filter.frequency.setValueAtTime(freq, now);
+                    filter.Q.setValueAtTime(4.0, now);
+
+                    osc.type = 'sine';
+                    osc.frequency.setValueAtTime(freq, now);
+
+                    gain.gain.setValueAtTime(0.001, now);
+                    gain.gain.linearRampToValueAtTime(0.12 / (idx + 1), now + 0.006);
+                    gain.gain.exponentialRampToValueAtTime(0.001, now + 0.35);
+
+                    osc.connect(filter);
+                    filter.connect(gain);
+                    gain.connect(ctx.destination);
+                    osc.start(now);
+                    osc.stop(now + 0.36);
+                }});
             }} catch(e) {{}}
         }}
 
@@ -2118,17 +2147,31 @@ fn generate_motion_html(req: &PromptRequest, tokens: &DesignTokens) -> String {
             if (sfxMuted) return;
             try {{
                 const ctx = getAudioContext();
+                const now = ctx.currentTime;
+                // Soft cinematic air riser & swoosh with lowpass filter
                 const osc = ctx.createOscillator();
+                const filter = ctx.createBiquadFilter();
                 const gain = ctx.createGain();
-                osc.type = 'sine';
-                osc.frequency.setValueAtTime(320, ctx.currentTime);
-                osc.frequency.exponentialRampToValueAtTime(90, ctx.currentTime + 0.38);
-                gain.gain.setValueAtTime(0.18, ctx.currentTime);
-                gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.38);
-                osc.connect(gain);
+
+                filter.type = 'lowpass';
+                filter.frequency.setValueAtTime(220, now);
+                filter.frequency.exponentialRampToValueAtTime(1200, now + 0.22);
+                filter.frequency.exponentialRampToValueAtTime(150, now + 0.48);
+
+                osc.type = 'triangle';
+                osc.frequency.setValueAtTime(120, now);
+                osc.frequency.linearRampToValueAtTime(260, now + 0.22);
+                osc.frequency.linearRampToValueAtTime(80, now + 0.48);
+
+                gain.gain.setValueAtTime(0.001, now);
+                gain.gain.linearRampToValueAtTime(0.18, now + 0.18);
+                gain.gain.exponentialRampToValueAtTime(0.001, now + 0.48);
+
+                osc.connect(filter);
+                filter.connect(gain);
                 gain.connect(ctx.destination);
-                osc.start();
-                osc.stop(ctx.currentTime + 0.39);
+                osc.start(now);
+                osc.stop(now + 0.5);
             }} catch(e) {{}}
         }}
 
