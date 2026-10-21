@@ -3040,6 +3040,12 @@ html[data-theme="dark"] .zd-select--compact option {
   max-height: 90vh;
   display: flex;
   flex-direction: column;
+  background: var(--zd-bg-card);
+  border: 1px solid var(--zd-border);
+  border-radius: var(--zd-radius-xl);
+  box-shadow: 0 20px 45px rgba(0, 0, 0, 0.6);
+  z-index: 100;
+  position: relative;
 }
 
 .zd-theme-builder-body {

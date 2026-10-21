@@ -166,18 +166,22 @@ pub fn ThemeBuilderModal(
             <Portal>
                 <div
                     class="zd-modal-backdrop"
-                    on:click=move |_| open.set(false)
-                ></div>
-                <div
-                    class="zd-modal-dialog zd-theme-builder-dialog"
-                    role="dialog"
-                    aria-modal="true"
-                    on:keydown=move |ev: KeyboardEvent| {
-                        if ev.key() == "Escape" {
+                    on:click=move |event| {
+                        if event.target() == event.current_target() {
                             open.set(false);
                         }
                     }
                 >
+                    <div
+                        class="zd-modal-window zd-theme-builder-dialog"
+                        role="dialog"
+                        aria-modal="true"
+                        on:keydown=move |ev: KeyboardEvent| {
+                            if ev.key() == "Escape" {
+                                open.set(false);
+                            }
+                        }
+                    >
                     <div class="zd-modal-header">
                         <div class="zd-modal-title-row">
                             <Icon data=LuPalette size=18 class="zd-modal-title-icon" />
@@ -471,7 +475,8 @@ pub fn ThemeBuilderModal(
                         </button>
                     </div>
                 </div>
-            </Portal>
-        </Show>
+            </div>
+        </Portal>
+    </Show>
     }
 }
