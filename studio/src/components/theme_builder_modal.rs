@@ -272,25 +272,38 @@ pub fn ThemeBuilderModal(
                                     <Icon data=LuWand size=13 />
                                     <span>{move || t(language.get(), "Describe Your Dream Theme", "توصیف تم مورد نظر شما")}</span>
                                 </label>
-                                <Show when=move || {
-                                    settings.get().map(|s| s.provider == "template" || s.provider.is_empty()).unwrap_or(true)
-                                }>
-                                    <div class="zd-theme-ai-pill-row">
-                                        <span class="zd-theme-ai-pill">
-                                            <Icon data=LuZap size=11 />
-                                            <span>{move || t(language.get(), "Offline Generator Active", "الگوریتم آفلاین فعال است")}</span>
-                                        </span>
-                                        <button
-                                            type="button"
-                                            class="zd-btn-pill-connect"
-                                            on:click=move |_| settings_open.set(true)
-                                            title=move || t(language.get(), "Connect real AI model in Settings", "اتصال مدل هوش مصنوعی در تنظیمات")
-                                        >
-                                            <Icon data=LuSlidersHorizontal size=11 />
-                                            <span>{move || t(language.get(), "Connect AI for best creative results", "اتصال هوش مصنوعی برای نتیجه دقیق‌تر")}</span>
-                                        </button>
-                                    </div>
-                                </Show>
+                                {move || {
+                                    let is_template = settings.get().map(|s| s.provider == "template" || s.provider.is_empty()).unwrap_or(true);
+                                    if is_template {
+                                        view! {
+                                            <div class="zd-theme-ai-pill-row">
+                                                <span class="zd-theme-ai-pill">
+                                                    <Icon data=LuZap size=11 />
+                                                    <span>{move || t(language.get(), "Offline Generator Active", "الگوریتم آفلاین فعال است")}</span>
+                                                </span>
+                                                <button
+                                                    type="button"
+                                                    class="zd-btn-pill-connect"
+                                                    on:click=move |_| settings_open.set(true)
+                                                    title=move || t(language.get(), "Connect real AI model in Settings", "اتصال مدل هوش مصنوعی در تنظیمات")
+                                                >
+                                                    <Icon data=LuSlidersHorizontal size=11 />
+                                                    <span>{move || t(language.get(), "Connect AI for best creative results", "اتصال هوش مصنوعی برای نتیجه دقیق‌تر")}</span>
+                                                </button>
+                                            </div>
+                                        }.into_any()
+                                    } else {
+                                        let prov_name = settings.get().map(|s| s.provider).unwrap_or_else(|| "AI".to_string());
+                                        view! {
+                                            <div class="zd-theme-ai-pill-row">
+                                                <span class="zd-theme-ai-pill zd-theme-ai-pill-active" style="background: rgba(16, 185, 129, 0.15); border-color: rgba(16, 185, 129, 0.35); color: #34d399;">
+                                                    <Icon data=LuSparkles size=11 />
+                                                    <span>{move || format!("{} ({})", t(language.get(), "LLM Active", "هوش مصنوعی فعال:"), prov_name)}</span>
+                                                </span>
+                                            </div>
+                                        }.into_any()
+                                    }
+                                }}
                             </div>
                             <div class="zd-theme-builder-input-row">
                                 <input

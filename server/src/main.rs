@@ -38,7 +38,7 @@ use rust_embed::RustEmbed;
 struct StudioAssets;
 
 use agent::{AgentEvent, AgentOrchestrator, CustomThemeTokens, PromptRequest, truncate_words};
-use settings::{Settings, KNOWN_PROVIDERS, PROVIDER_OPENAI};
+use settings::{Settings, KNOWN_PROVIDERS, PROVIDER_ANTHROPIC, PROVIDER_OPENAI};
 
 const DEFAULT_BIND_ADDR: &str = "127.0.0.1:7456";
 const HEARTBEAT_INTERVAL: Duration = Duration::from_secs(2);
@@ -858,7 +858,7 @@ struct ThemeGeneratePayload {
 }
 
 async fn generate_theme(
-    State(_state): State<AppState>,
+    State(state): State<AppState>,
     Json(payload): Json<ThemeGeneratePayload>,
 ) -> impl IntoResponse {
     let prompt = payload.prompt.trim();
@@ -870,8 +870,155 @@ async fn generate_theme(
             .into_response();
     }
 
+    let settings = state.settings.read().await.clone();
+
+    // If an LLM provider (OpenAI, 9Router, Anthropic) is configured, try calling it
+    if settings.provider == PROVIDER_OPENAI || settings.provider == PROVIDER_ANTHROPIC {
+        if let Ok(theme) = generate_llm_theme(&state.http, &settings, prompt).await {
+            info!("Generated theme via LLM provider ({}): {}", settings.provider, theme.name);
+            return (StatusCode::OK, Json(json!({ "theme": theme, "source": "llm" }))).into_response();
+        }
+    }
+
+    // Fallback to high-speed built-in algorithmic engine
     let theme = generate_algorithmic_theme(prompt);
-    (StatusCode::OK, Json(json!({ "theme": theme }))).into_response()
+    (StatusCode::OK, Json(json!({ "theme": theme, "source": "algorithmic" }))).into_response()
+}
+
+async fn generate_llm_theme(
+    client: &reqwest::Client,
+    settings: &Settings,
+    prompt: &str,
+) -> Result<CustomThemeTokens, String> {
+    let is_persian = prompt.chars().any(|c| ('\u{0600}'..='\u{06FF}').contains(&c));
+    let font_guide = if is_persian {
+        "For Persian text, use \"'Vazirmatn', system-ui, sans-serif\" as font_family."
+    } else {
+        "Use a clean modern font stack like \"'Inter', system-ui, sans-serif\"."
+    };
+
+    let system_instructions = format!(
+        "You are an elite Design System Architect & Colorist.\n\
+        Your task is to generate cohesive, beautiful UI design tokens based on the user's theme prompt.\n\
+        {}\n\
+        You MUST respond with valid JSON ONLY (no markdown formatting, no code fences, no commentary).\n\
+        The JSON MUST have exactly these keys:\n\
+        {{\n\
+          \"name\": \"Theme display name\",\n\
+          \"bg\": \"#RRGGBB\",\n\
+          \"text\": \"#RRGGBB\",\n\
+          \"accent\": \"#RRGGBB\",\n\
+          \"card_bg\": \"#RRGGBB\",\n\
+          \"border_color\": \"#RRGGBB\",\n\
+          \"font_family\": \"Font CSS stack\"\n\
+        }}\n\
+        All colors MUST be valid 7-character hexadecimal strings starting with #.",
+        font_guide
+    );
+
+    let raw_text = match settings.provider.as_str() {
+        PROVIDER_OPENAI => {
+            let base = settings.openai.base_url.trim().trim_end_matches('/');
+            let model = settings.openai.model.trim();
+            if base.is_empty() || model.is_empty() {
+                return Err("OpenAI provider unconfigured".to_string());
+            }
+            let key = settings.openai_key();
+            let body = json!({
+                "model": model,
+                "temperature": 0.5,
+                "messages": [
+                    { "role": "system", "content": system_instructions },
+                    { "role": "user", "content": format!("Theme Prompt: {prompt}") }
+                ]
+            });
+            let mut req = client.post(format!("{base}/chat/completions")).json(&body);
+            if !key.is_empty() {
+                req = req.bearer_auth(key);
+            }
+            let resp = req.send().await.map_err(|e| e.to_string())?;
+            if !resp.status().is_success() {
+                return Err(format!("OpenAI returned status {}", resp.status()));
+            }
+            let res_json: serde_json::Value = resp.json().await.map_err(|e| e.to_string())?;
+            res_json["choices"][0]["message"]["content"]
+                .as_str()
+                .unwrap_or_default()
+                .to_string()
+        }
+        PROVIDER_ANTHROPIC => {
+            let base = settings.anthropic.base_url.trim().trim_end_matches('/');
+            let model = if settings.anthropic.model.trim().is_empty() {
+                "claude-opus-4-6"
+            } else {
+                settings.anthropic.model.trim()
+            };
+            let key = settings.anthropic_key();
+            if key.is_empty() {
+                return Err("Anthropic API key missing".to_string());
+            }
+            let body = json!({
+                "model": model,
+                "max_tokens": 1024,
+                "system": system_instructions,
+                "messages": [
+                    { "role": "user", "content": format!("Theme Prompt: {prompt}") }
+                ]
+            });
+            let resp = client
+                .post(format!("{base}/v1/messages"))
+                .header("x-api-key", key.trim())
+                .header("anthropic-version", "2023-06-01")
+                .json(&body)
+                .send()
+                .await
+                .map_err(|e| e.to_string())?;
+            if !resp.status().is_success() {
+                return Err(format!("Anthropic returned status {}", resp.status()));
+            }
+            let res_json: serde_json::Value = resp.json().await.map_err(|e| e.to_string())?;
+            res_json["content"][0]["text"]
+                .as_str()
+                .unwrap_or_default()
+                .to_string()
+        }
+        _ => return Err("Unsupported provider for theme generation".to_string()),
+    };
+
+    // Clean any markdown code blocks if the model wrapped it
+    let clean_json = raw_text
+        .trim()
+        .trim_start_matches("```json")
+        .trim_start_matches("```")
+        .trim_end_matches("```")
+        .trim();
+
+    #[derive(Deserialize)]
+    struct PartialTheme {
+        name: String,
+        bg: String,
+        text: String,
+        accent: String,
+        card_bg: String,
+        border_color: String,
+        font_family: String,
+    }
+
+    let parsed: PartialTheme = serde_json::from_str(clean_json).map_err(|e| e.to_string())?;
+    let dot = parsed.accent.clone();
+    let swatch = format!("linear-gradient(135deg, {} 0%, {} 100%)", parsed.accent, parsed.bg);
+
+    Ok(CustomThemeTokens {
+        name: parsed.name,
+        bg: parsed.bg,
+        text: parsed.text,
+        accent: parsed.accent,
+        font_family: parsed.font_family,
+        card_bg: parsed.card_bg,
+        border_color: parsed.border_color,
+        dot,
+        swatch,
+    })
 }
 
 fn generate_algorithmic_theme(prompt: &str) -> CustomThemeTokens {
