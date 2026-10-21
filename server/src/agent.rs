@@ -31,16 +31,51 @@ const DEEP_BUDGET: Duration = Duration::from_secs(45 * 60);
 /// home or reach back into the daemon API.
 pub const CSP_META: &str = r#"<meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'; script-src 'unsafe-inline'; img-src data: blob:; font-src data:; media-src data: blob:; connect-src 'none'; base-uri 'none'; form-action 'none'; frame-src 'none'">"#;
 
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct CustomThemeTokens {
+    pub name: String,
+    pub bg: String,
+    pub text: String,
+    pub accent: String,
+    pub font_family: String,
+    pub card_bg: String,
+    pub border_color: String,
+    #[serde(default = "default_theme_dot")]
+    pub dot: String,
+    #[serde(default = "default_theme_swatch")]
+    pub swatch: String,
+}
+
+fn default_theme_dot() -> String {
+    "#6366f1".to_string()
+}
+
+fn default_theme_swatch() -> String {
+    "linear-gradient(135deg, #6366f1 0%, #0f172a 100%)".to_string()
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct PromptRequest {
     pub prompt: String,
-    pub design_system: String, // e.g. "stripe", "linear", "cyberpunk", "swiss"
+    pub design_system: String, // e.g. "stripe", "linear", "cyberpunk", "swiss", "custom"
     pub mode: String,          // e.g. "prototype", "slides", "motion"
     /// Render, review and rewrite the artifact up to `DEEP_PASSES` times.
     #[serde(default)]
     pub deep: bool,
     #[serde(default)]
     pub session_id: Option<String>,
+    #[serde(default)]
+    pub custom_theme: Option<CustomThemeTokens>,
+    #[serde(default)]
+    pub aspect_ratio: Option<String>,
+    #[serde(default)]
+    pub duration_secs: Option<u32>,
+    #[serde(default)]
+    pub sound_effects: Option<bool>,
+    #[serde(default)]
+    pub tts_text: Option<String>,
+    #[serde(default)]
+    pub tts_lang: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -50,52 +85,119 @@ pub struct AgentEvent {
 }
 
 /// Design-system tokens shared by the offline template and the model prompt.
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone)]
 pub struct DesignTokens {
-    pub bg: &'static str,
-    pub text: &'static str,
-    pub accent: &'static str,
-    pub font_family: &'static str,
-    pub card_bg: &'static str,
-    pub border_color: &'static str,
+    pub bg: String,
+    pub text: String,
+    pub accent: String,
+    pub font_family: String,
+    pub card_bg: String,
+    pub border_color: String,
 }
 
 pub fn design_tokens(design_system: &str) -> DesignTokens {
     match design_system {
         "linear" => DesignTokens {
-            bg: "#0d0e12",
-            text: "#f3f4f6",
-            accent: "#5e6ad2",
-            font_family: "system-ui, -apple-system, sans-serif",
-            card_bg: "#161822",
-            border_color: "#2b2d3d",
+            bg: "#0d0e12".to_string(),
+            text: "#f3f4f6".to_string(),
+            accent: "#5e6ad2".to_string(),
+            font_family: "system-ui, -apple-system, sans-serif".to_string(),
+            card_bg: "#161822".to_string(),
+            border_color: "#2b2d3d".to_string(),
         },
         "cyberpunk" => DesignTokens {
-            bg: "#0a0a14",
-            text: "#00ffcc",
-            accent: "#ff0055",
-            font_family: "'Courier New', monospace",
-            card_bg: "#14142b",
-            border_color: "#ff0055",
+            bg: "#0a0a14".to_string(),
+            text: "#00ffcc".to_string(),
+            accent: "#ff0055".to_string(),
+            font_family: "'Courier New', monospace".to_string(),
+            card_bg: "#14142b".to_string(),
+            border_color: "#ff0055".to_string(),
         },
         "swiss" => DesignTokens {
-            bg: "#ffffff",
-            text: "#111111",
-            accent: "#e63946",
-            font_family: "Helvetica Neue, Arial, sans-serif",
-            card_bg: "#f8f9fa",
-            border_color: "#111111",
+            bg: "#ffffff".to_string(),
+            text: "#111111".to_string(),
+            accent: "#e63946".to_string(),
+            font_family: "Helvetica Neue, Arial, sans-serif".to_string(),
+            card_bg: "#f8f9fa".to_string(),
+            border_color: "#111111".to_string(),
+        },
+        "nordic" => DesignTokens {
+            bg: "#0f172a".to_string(),
+            text: "#e2e8f0".to_string(),
+            accent: "#10b981".to_string(),
+            font_family: "'Plus Jakarta Sans', system-ui, sans-serif".to_string(),
+            card_bg: "#1e293b".to_string(),
+            border_color: "#334155".to_string(),
+        },
+        "emerald" => DesignTokens {
+            bg: "#022c22".to_string(),
+            text: "#ecfdf5".to_string(),
+            accent: "#059669".to_string(),
+            font_family: "'Cinzel', 'Playfair Display', serif".to_string(),
+            card_bg: "#064e3b55".to_string(),
+            border_color: "#047857".to_string(),
+        },
+        "terminal" => DesignTokens {
+            bg: "#050505".to_string(),
+            text: "#22c55e".to_string(),
+            accent: "#eab308".to_string(),
+            font_family: "'JetBrains Mono', 'Fira Code', monospace".to_string(),
+            card_bg: "#0d1117".to_string(),
+            border_color: "#16a34a40".to_string(),
+        },
+        "sunset" => DesignTokens {
+            bg: "#2b0938".to_string(),
+            text: "#fef2f2".to_string(),
+            accent: "#f97316".to_string(),
+            font_family: "'Outfit', system-ui, sans-serif".to_string(),
+            card_bg: "#4c0519aa".to_string(),
+            border_color: "#f43f5e55".to_string(),
+        },
+        "brutalist" => DesignTokens {
+            bg: "#fffbeb".to_string(),
+            text: "#000000".to_string(),
+            accent: "#eab308".to_string(),
+            font_family: "'Space Grotesk', Impact, sans-serif".to_string(),
+            card_bg: "#ffffff".to_string(),
+            border_color: "#000000".to_string(),
+        },
+        "glass" => DesignTokens {
+            bg: "#09090b".to_string(),
+            text: "#fafafa".to_string(),
+            accent: "#8b5cf6".to_string(),
+            font_family: "'Inter', system-ui, sans-serif".to_string(),
+            card_bg: "rgba(255, 255, 255, 0.05)".to_string(),
+            border_color: "rgba(255, 255, 255, 0.15)".to_string(),
         },
         _ => DesignTokens {
             // Stripe default
-            bg: "#0a2540",
-            text: "#ffffff",
-            accent: "#635bff",
-            font_family: "'Inter', system-ui, sans-serif",
-            card_bg: "#ffffff10",
-            border_color: "#ffffff20",
+            bg: "#0a2540".to_string(),
+            text: "#ffffff".to_string(),
+            accent: "#635bff".to_string(),
+            font_family: "'Inter', system-ui, sans-serif".to_string(),
+            card_bg: "#ffffff10".to_string(),
+            border_color: "#ffffff20".to_string(),
         },
     }
+}
+
+pub fn design_tokens_with_custom(
+    design_system: &str,
+    custom: Option<&CustomThemeTokens>,
+) -> DesignTokens {
+    if design_system == "custom" {
+        if let Some(c) = custom {
+            return DesignTokens {
+                bg: c.bg.clone(),
+                text: c.text.clone(),
+                accent: c.accent.clone(),
+                font_family: c.font_family.clone(),
+                card_bg: c.card_bg.clone(),
+                border_color: c.border_color.clone(),
+            };
+        }
+    }
+    design_tokens(design_system)
 }
 
 pub struct AgentOrchestrator {
@@ -150,15 +252,15 @@ impl AgentOrchestrator {
 
         tokio::time::sleep(Duration::from_millis(500)).await;
 
-        let generated_html = generate_prototype_html(&req.prompt, &req.design_system, &req.mode);
+        let generated_html = generate_prototype_html_from_request(&req);
         self.write_artifact(&generated_html, req.session_id.as_deref())?;
         providers::emit_event(sender, "done", "Artifact rendered successfully.");
         Ok(())
     }
 
     async fn run_provider(&self, req: PromptRequest, settings: &Settings) -> Result<(), String> {
-        let tokens = design_tokens(&req.design_system);
-        let system = build_system_prompt(&tokens, &req.mode);
+        let tokens = design_tokens_with_custom(&req.design_system, req.custom_theme.as_ref());
+        let system = build_system_prompt_with_request(&tokens, &req);
         let user = build_user_prompt(&req.prompt, &req.design_system, &req.mode);
 
         let label = settings.provider_label();
@@ -686,14 +788,31 @@ fn is_inline_reference(value: &str) -> bool {
 /// output. Concrete constraints — a spacing scale, a type scale, contrast
 /// floors, anti-patterns — are what separate a designed page from a template.
 pub fn build_system_prompt(tokens: &DesignTokens, mode: &str) -> String {
-    if mode == "motion" {
-        return build_motion_prompt(tokens);
+    let dummy = PromptRequest {
+        prompt: String::new(),
+        design_system: "stripe".to_string(),
+        mode: mode.to_string(),
+        deep: false,
+        session_id: None,
+        custom_theme: None,
+        aspect_ratio: None,
+        duration_secs: None,
+        sound_effects: None,
+        tts_text: None,
+        tts_lang: None,
+    };
+    build_system_prompt_with_request(tokens, &dummy)
+}
+
+pub fn build_system_prompt_with_request(tokens: &DesignTokens, req: &PromptRequest) -> String {
+    if req.mode == "motion" {
+        return build_motion_prompt_from_request(tokens, req);
     }
-    if mode == "slides" {
+    if req.mode == "slides" {
         return build_slides_prompt(tokens);
     }
 
-    let mode_rules = match mode {
+    let mode_rules = match req.mode.as_str() {
         _ => {
             "- Prototype mode: build an interactive product screen, not a marketing page. \
 Use realistic data (names, numbers, statuses), working hover/click states, and tabs, \
@@ -770,10 +889,72 @@ Output contract:
     )
 }
 
-/// Motion mode is a different artifact type, not a website with animations. This
-/// prompt replaces the page-composition contract entirely: no nav, sections,
-/// pricing, FAQ, CTA or footer — a timed film on a fixed artboard instead.
-fn build_motion_prompt(tokens: &DesignTokens) -> String {
+pub fn build_motion_prompt(tokens: &DesignTokens) -> String {
+    let dummy = PromptRequest {
+        prompt: String::new(),
+        design_system: "stripe".to_string(),
+        mode: "motion".to_string(),
+        deep: false,
+        session_id: None,
+        custom_theme: None,
+        aspect_ratio: None,
+        duration_secs: None,
+        sound_effects: None,
+        tts_text: None,
+        tts_lang: None,
+    };
+    build_motion_prompt_from_request(tokens, &dummy)
+}
+
+fn build_motion_prompt_from_request(tokens: &DesignTokens, req: &PromptRequest) -> String {
+    let aspect_ratio = req.aspect_ratio.as_deref().unwrap_or("16:9");
+    let duration = req.duration_secs.unwrap_or(10).clamp(5, 60);
+    let sfx = req.sound_effects.unwrap_or(false);
+    let tts = req.tts_text.as_deref();
+    let tts_lang = req.tts_lang.as_deref().unwrap_or("fa-IR");
+
+    let artboard_desc = match aspect_ratio {
+        "9:16" => "One fixed 9:16 vertical artboard at 720×1280 (optimised for mobile phones, Reels, TikTok and Stories), centred in the viewport and scaled as a unit with a resize handler: transform: translate(-50%, -50%) scale(min(vw/720, vh/1280)); aspect-ratio: 9/16. No page scroll. The composition never reflows; the frame scales like a phone screen.",
+        "4:3" => "One fixed 4:3 artboard at 1200×900 (classic presentation format), centred in the viewport and scaled as a unit with a resize handler: transform: translate(-50%, -50%) scale(min(vw/1200, vh/900)); aspect-ratio: 4/3. No page scroll.",
+        "1:1" => "One fixed 1:1 square artboard at 1080×1080 (square feed post format), centred in the viewport and scaled as a unit with a resize handler: transform: translate(-50%, -50%) scale(min(vw/1080, vh/1080)); aspect-ratio: 1/1. No page scroll.",
+        "fill" => "Full viewport fluid responsive artboard (width: 100vw; height: 100vh; overflow: hidden). The composition adapts dynamically to the entire viewport without letterboxing.",
+        _ => "One fixed 16:9 artboard at 1440×900, centred in the viewport and scaled as a unit with a resize handler: transform: translate(-50%, -50%) scale(min(vw/1440, vh/900)). No page scroll. The composition never reflows; the frame scales like a film.",
+    };
+
+    let sfx_prompt = if sfx {
+        r#"
+AUDIO & PROCEDURAL SOUND EFFECTS (SFX) ENABLED (Web Audio API):
+- The piece MUST include procedural sound effects using browser Web Audio API inside a <script> block.
+- NO external .mp3/.wav files or CDNs (all network requests are blocked by CSP). Synthesize sounds mathematically via AudioContext, OscillatorNode, GainNode, and BiquadFilterNode.
+- Synthesize three cues:
+  1. Sub-bass punch/impact: Low sine sweep (120Hz down to 40Hz) with punchy decay (0.4s) on major visual beats.
+  2. Kinetic tick/click: Crisp high frequency click (1800Hz pulse, 20ms decay) during text/counter reveals.
+  3. Whoosh / Transition: Soft pitch-swept tone or filtered noise on scene wipe or scale transition.
+- Provide a sleek audio toggle button (Mute / Sound) in a corner. Resume AudioContext upon user gesture.
+"#
+    } else {
+        ""
+    };
+
+    let tts_prompt = if let Some(text) = tts {
+        format!(
+            r#"
+TEXT-TO-SPEECH (TTS) NARRATION ENABLED:
+- Voiceover narration script: "{text}"
+- Narration language code: "{tts_lang}"
+- Implement Web Speech API in the <script> block:
+  const utterance = new SpeechSynthesisUtterance("{text}");
+  utterance.lang = "{tts_lang}";
+- Coordinate kinetic typography and subtitles with the spoken narration so words appear in rhythm.
+- Provide an inviting "Play Voiceover & Film" button or trigger speech synthesis on user interaction.
+"#,
+            text = escape_html(text),
+            tts_lang = tts_lang,
+        )
+    } else {
+        String::new()
+    };
+
     format!(
         r#"You are ZenDesign Motion: a motion designer and creative technologist. You turn a
 brief into one self-playing motion piece that runs in the browser. You are not building a
@@ -788,18 +969,18 @@ Design tokens (derive tints with color-mix() or alpha; never invent new hues):
 - border: {border}
 
 ARTIFACT — this overrides every website instinct:
-- One fixed 16:9 artboard at 1440×900, centred in the viewport and scaled as a unit with a
-  resize handler: transform: translate(-50%, -50%) scale(min(vw/1440, vh/900)). No page
-  scroll. The composition never reflows; the frame scales like a film.
+- {artboard_desc}
 - NO nav bar, header, footer, hero, feature grid, pricing, testimonials, FAQ, contact form,
   CTA row or "sections". If the file contains these, it is the wrong artifact.
 - The only chrome allowed: a tiny replay button and pause toggle in one corner plus a
   hairline progress bar. Understated, low contrast, no labels competing with the film.
-- Autoplay immediately, muted, with no click required. Total runtime 8–12 seconds. Loop
+- Autoplay immediately, muted, with no click required. Total runtime 8–12 seconds (strictly {duration}s dynamic duration). Loop
   seamlessly, or hold the end card and restart cleanly. The first frame must work as a
   poster.
 - 3–5 beats. Each beat has one focal element with a clear entrance and exit. Cut between
   beats with a mask, wipe, scale-through or a single hard cut — not just opacity fades.
+{sfx_prompt}
+{tts_prompt}
 
 STORY AND TYPE:
 - One idea, 10–30 words of real copy total: a product name, a launch line, one number, a
@@ -856,6 +1037,10 @@ Output contract:
         font = tokens.font_family,
         card_bg = tokens.card_bg,
         border = tokens.border_color,
+        artboard_desc = artboard_desc,
+        duration = duration,
+        sfx_prompt = sfx_prompt,
+        tts_prompt = tts_prompt,
     )
 }
 
@@ -1309,25 +1494,46 @@ pub fn ensure_csp(html: &str) -> String {
 }
 
 pub fn generate_prototype_html(prompt: &str, design_system: &str, mode: &str) -> String {
-    let tokens = design_tokens(design_system);
-    let bg = tokens.bg;
-    let text = tokens.text;
-    let accent = tokens.accent;
-    let font_family = tokens.font_family;
-    let card_bg = tokens.card_bg;
-    let border_color = tokens.border_color;
+    let dummy = PromptRequest {
+        prompt: prompt.to_string(),
+        design_system: design_system.to_string(),
+        mode: mode.to_string(),
+        deep: false,
+        session_id: None,
+        custom_theme: None,
+        aspect_ratio: None,
+        duration_secs: None,
+        sound_effects: None,
+        tts_text: None,
+        tts_lang: None,
+    };
+    generate_prototype_html_from_request(&dummy)
+}
 
-    let headline = escape_html(&headline_from_prompt(prompt));
+pub fn generate_prototype_html_from_request(req: &PromptRequest) -> String {
+    let tokens = design_tokens_with_custom(&req.design_system, req.custom_theme.as_ref());
+    if req.mode == "motion" {
+        return generate_motion_html(req, &tokens);
+    }
+
+    let bg = &tokens.bg;
+    let text = &tokens.text;
+    let accent = &tokens.accent;
+    let font_family = &tokens.font_family;
+    let card_bg = &tokens.card_bg;
+    let border_color = &tokens.border_color;
+
+    let headline = escape_html(&headline_from_prompt(&req.prompt));
     let brief = escape_html(&truncate_words(
-        if prompt.trim().is_empty() {
+        if req.prompt.trim().is_empty() {
             "A modern collaborative workspace, rendered live by the ZenDesign agent."
         } else {
-            prompt.trim()
+            req.prompt.trim()
         },
         260,
     ));
-    let design_system = escape_html(design_system);
-    let mode = escape_html(mode);
+    let design_system = escape_html(&req.design_system);
+    let mode = escape_html(&req.mode);
 
     format!(
         r#"<!DOCTYPE html>
@@ -1441,6 +1647,503 @@ pub fn generate_prototype_html(prompt: &str, design_system: &str, mode: &str) ->
     )
 }
 
+fn generate_motion_html(req: &PromptRequest, tokens: &DesignTokens) -> String {
+    let aspect_ratio = req.aspect_ratio.as_deref().unwrap_or("16:9");
+    let duration = req.duration_secs.unwrap_or(10).clamp(5, 60);
+    let sfx = req.sound_effects.unwrap_or(false);
+    let tts_text = req.tts_text.as_deref().unwrap_or("").trim();
+    let tts_lang = req.tts_lang.as_deref().unwrap_or("fa-IR");
+
+    let (artboard_style, artboard_dims) = match aspect_ratio {
+        "9:16" => (
+            "width: 720px; height: 1280px; aspect-ratio: 9/16; transform: translate(-50%, -50%) scale(min(calc(100vw / 750), calc(100vh / 1320)));",
+            "720 × 1280 (Mobile / Reels)",
+        ),
+        "4:3" => (
+            "width: 1200px; height: 900px; aspect-ratio: 4/3; transform: translate(-50%, -50%) scale(min(calc(100vw / 1240), calc(100vh / 940)));",
+            "1200 × 900 (4:3 Classic)",
+        ),
+        "1:1" => (
+            "width: 1080px; height: 1080px; aspect-ratio: 1/1; transform: translate(-50%, -50%) scale(min(calc(100vw / 1120), calc(100vh / 1120)));",
+            "1080 × 1080 (Square)",
+        ),
+        "fill" => (
+            "width: 100vw; height: 100vh; transform: none; position: relative; top: 0; left: 0;",
+            "Fluid Fullscreen",
+        ),
+        _ => (
+            "width: 1440px; height: 810px; aspect-ratio: 16/9; transform: translate(-50%, -50%) scale(min(calc(100vw / 1480), calc(100vh / 850)));",
+            "1440 × 810 (16:9 Landscape)",
+        ),
+    };
+
+    let headline = escape_html(&headline_from_prompt(&req.prompt));
+    let tts_clean = escape_html(tts_text);
+
+    format!(
+        r#"<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    {csp}
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ZenDesign Motion Piece</title>
+    <style>
+        * {{ margin: 0; padding: 0; box-sizing: border-box; }}
+        body {{
+            background: #000000;
+            color: {text};
+            font-family: {font_family};
+            width: 100vw;
+            height: 100vh;
+            overflow: hidden;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }}
+        .motion-artboard {{
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform-origin: center center;
+            background: {bg};
+            border-radius: 20px;
+            overflow: hidden;
+            border: 1px solid {border_color};
+            box-shadow: 0 25px 60px -15px rgba(0, 0, 0, 0.7);
+            {artboard_style}
+            display: flex;
+            flex-direction: column;
+            justify-content: space-between;
+            padding: 48px;
+        }}
+        .top-bar {{
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            z-index: 10;
+        }}
+        .brand-pill {{
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            padding: 8px 16px;
+            background: {card_bg};
+            border: 1px solid {border_color};
+            border-radius: 9999px;
+            font-size: 13px;
+            font-weight: 600;
+            letter-spacing: 0.05em;
+        }}
+        .brand-dot {{
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            background: {accent};
+            box-shadow: 0 0 12px {accent};
+            animation: pulse 2s infinite ease-in-out;
+        }}
+        .controls-pill {{
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            background: {card_bg};
+            border: 1px solid {border_color};
+            border-radius: 9999px;
+            padding: 6px 12px;
+        }}
+        .ctrl-btn {{
+            background: transparent;
+            border: none;
+            color: {text};
+            cursor: pointer;
+            padding: 4px 8px;
+            font-size: 13px;
+            border-radius: 6px;
+            transition: all 0.2s;
+            opacity: 0.85;
+        }}
+        .ctrl-btn:hover {{ opacity: 1; transform: scale(1.08); }}
+
+        /* Timeline Beats */
+        .stage {{
+            position: relative;
+            flex: 1;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            text-align: center;
+        }}
+        .beat {{
+            position: absolute;
+            width: 100%;
+            max-width: 90%;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            opacity: 0;
+            pointer-events: none;
+        }}
+        
+        /* Dynamic keyframes synced to {duration}s */
+        .beat-1 {{ animation: beat1Animation {duration}s infinite cubic-bezier(0.16, 1, 0.3, 1); }}
+        .beat-2 {{ animation: beat2Animation {duration}s infinite cubic-bezier(0.16, 1, 0.3, 1); }}
+        .beat-3 {{ animation: beat3Animation {duration}s infinite cubic-bezier(0.16, 1, 0.3, 1); }}
+
+        @keyframes beat1Animation {{
+            0% {{ opacity: 0; transform: translateY(40px) scale(0.96); }}
+            6% {{ opacity: 1; transform: translateY(0) scale(1); }}
+            28% {{ opacity: 1; transform: translateY(0) scale(1.02); }}
+            34% {{ opacity: 0; transform: translateY(-30px) scale(1.04); }}
+            100% {{ opacity: 0; }}
+        }}
+
+        @keyframes beat2Animation {{
+            0%, 32% {{ opacity: 0; transform: scale(0.9) rotate(-3deg); }}
+            38% {{ opacity: 1; transform: scale(1) rotate(0deg); }}
+            62% {{ opacity: 1; transform: scale(1.03) rotate(0deg); }}
+            68% {{ opacity: 0; transform: scale(1.08) rotate(2deg); }}
+            100% {{ opacity: 0; }}
+        }}
+
+        @keyframes beat3Animation {{
+            0%, 66% {{ opacity: 0; transform: translateY(50px) scale(0.92); }}
+            72% {{ opacity: 1; transform: translateY(0) scale(1); }}
+            94% {{ opacity: 1; transform: translateY(0) scale(1.01); }}
+            99% {{ opacity: 0; transform: translateY(-20px) scale(1.03); }}
+            100% {{ opacity: 0; }}
+        }}
+
+        .display-title {{
+            font-size: clamp(32px, 5vw, 68px);
+            font-weight: 900;
+            letter-spacing: -0.03em;
+            line-height: 1.08;
+            margin-bottom: 20px;
+            text-wrap: balance;
+        }}
+        .accent-gradient {{
+            color: {accent};
+            text-shadow: 0 0 35px {accent}55;
+        }}
+        .kinetic-badge {{
+            display: inline-block;
+            padding: 8px 24px;
+            border-radius: 9999px;
+            font-size: 14px;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 0.15em;
+            background: {accent}20;
+            color: {accent};
+            border: 1px solid {accent}50;
+            margin-bottom: 24px;
+        }}
+        .metrics-row {{
+            display: flex;
+            gap: 24px;
+            justify-content: center;
+            flex-wrap: wrap;
+            margin-top: 24px;
+        }}
+        .metric-card {{
+            background: {card_bg};
+            border: 1px solid {border_color};
+            padding: 24px 36px;
+            border-radius: 18px;
+            text-align: center;
+            min-width: 180px;
+        }}
+        .metric-val {{
+            font-size: clamp(28px, 4vw, 54px);
+            font-weight: 900;
+            color: {accent};
+        }}
+        .metric-lbl {{
+            font-size: 13px;
+            opacity: 0.7;
+            text-transform: uppercase;
+            letter-spacing: 0.08em;
+            margin-top: 4px;
+        }}
+
+        /* Subtitle Bar */
+        .subtitles-banner {{
+            z-index: 10;
+            background: rgba(0, 0, 0, 0.65);
+            backdrop-filter: blur(16px);
+            border: 1px solid {border_color};
+            border-radius: 14px;
+            padding: 12px 24px;
+            text-align: center;
+            font-size: 15px;
+            font-weight: 500;
+            max-width: 800px;
+            margin: 0 auto 12px auto;
+            color: #ffffff;
+            box-shadow: 0 8px 32px rgba(0,0,0,0.4);
+        }}
+
+        /* Progress Bar */
+        .timeline-bar {{
+            width: 100%;
+            height: 4px;
+            background: {border_color};
+            border-radius: 2px;
+            overflow: hidden;
+            position: relative;
+        }}
+        .timeline-fill {{
+            height: 100%;
+            width: 100%;
+            background: {accent};
+            box-shadow: 0 0 10px {accent};
+            transform-origin: left center;
+            animation: progressAnimation {duration}s linear infinite;
+        }}
+        @keyframes progressAnimation {{
+            0% {{ transform: scaleX(0); }}
+            100% {{ transform: scaleX(1); }}
+        }}
+        @keyframes pulse {{
+            0%, 100% {{ opacity: 1; transform: scale(1); }}
+            50% {{ opacity: 0.4; transform: scale(0.85); }}
+        }}
+    </style>
+</head>
+<body>
+    <div class="motion-artboard" id="artboard">
+        <div class="top-bar">
+            <div class="brand-pill">
+                <span class="brand-dot"></span>
+                <span>ZenDesign Motion &bull; {artboard_dims} &bull; {duration}s &bull; DS: {design_system} &bull; Mode: {mode}</span>
+            </div>
+            <div class="controls-pill">
+                <button class="ctrl-btn" id="voiceBtn" title="Play Voiceover & Audio">
+                    <span>🎙 Voiceover</span>
+                </button>
+                <button class="ctrl-btn" id="sfxBtn" title="Sound Effects">
+                    <span id="sfxIcon">🔊 SFX</span>
+                </button>
+                <button class="ctrl-btn" id="restartBtn" title="Replay">
+                    <span>⟳ Restart</span>
+                </button>
+            </div>
+        </div>
+
+        <div class="stage">
+            <!-- Beat 1: Launch Kinetic Title -->
+            <div class="beat beat-1">
+                <span class="kinetic-badge">ZEN MOTION SEQUENCE</span>
+                <h1 class="display-title">{headline}</h1>
+                <p style="font-size: 18px; opacity: 0.8; max-width: 600px; line-height: 1.6;">
+                    Crafted with synchronized dynamic timeline and native procedural synthesis.
+                </p>
+            </div>
+
+            <!-- Beat 2: Core Numbers & Radar -->
+            <div class="beat beat-2">
+                <div style="font-size: 14px; text-transform: uppercase; letter-spacing: 0.2em; color: {accent}; font-weight: 700; margin-bottom: 12px;">
+                    Velocity &bull; Precision &bull; Art Direction
+                </div>
+                <div class="display-title">
+                    <span class="accent-gradient">60 FPS</span> Dynamic Real-time Flow
+                </div>
+                <div class="metrics-row">
+                    <div class="metric-card">
+                        <div class="metric-val">{duration}s</div>
+                        <div class="metric-lbl">Timeline Span</div>
+                    </div>
+                    <div class="metric-card">
+                        <div class="metric-val">100%</div>
+                        <div class="metric-lbl">Local / Zero-CDN</div>
+                    </div>
+                    <div class="metric-card">
+                        <div class="metric-val">0ms</div>
+                        <div class="metric-lbl">Audio Latency</div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Beat 3: Grand Finale & Mark -->
+            <div class="beat beat-3">
+                <div style="width: 72px; height: 72px; border-radius: 20px; background: {accent}; color: white; display: flex; align-items: center; justify-content: center; font-size: 36px; font-weight: 900; box-shadow: 0 0 50px {accent}88; margin-bottom: 24px;">
+                    Z
+                </div>
+                <h2 class="display-title">Designed for Distinction</h2>
+                <p style="font-size: 16px; opacity: 0.75; letter-spacing: 0.05em;">
+                    Engineered by ZenDesign AI &bull; Seamless Continuous Loop
+                </p>
+            </div>
+        </div>
+
+        <div>
+            <!-- Subtitle box if TTS active -->
+            <div class="subtitles-banner" id="subtitleBox" style="{subtitle_display}">
+                "{tts_clean}"
+            </div>
+            <div class="timeline-bar">
+                <div class="timeline-fill" id="timelineProgress"></div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const DURATION = {duration};
+        const HAS_SFX = {sfx_enabled};
+        const TTS_TEXT = "{tts_clean_js}";
+        const TTS_LANG = "{tts_lang}";
+
+        let audioCtx = null;
+        let sfxMuted = !HAS_SFX;
+
+        function getAudioContext() {{
+            if (!audioCtx) {{
+                audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+            }}
+            if (audioCtx.state === 'suspended') {{
+                audioCtx.resume();
+            }}
+            return audioCtx;
+        }}
+
+        function playPunch() {{
+            if (sfxMuted) return;
+            try {{
+                const ctx = getAudioContext();
+                const osc = ctx.createOscillator();
+                const gain = ctx.createGain();
+                osc.type = 'sine';
+                osc.frequency.setValueAtTime(140, ctx.currentTime);
+                osc.frequency.exponentialRampToValueAtTime(38, ctx.currentTime + 0.35);
+                gain.gain.setValueAtTime(0.35, ctx.currentTime);
+                gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.35);
+                osc.connect(gain);
+                gain.connect(ctx.destination);
+                osc.start();
+                osc.stop(ctx.currentTime + 0.36);
+            }} catch(e) {{}}
+        }}
+
+        function playTick() {{
+            if (sfxMuted) return;
+            try {{
+                const ctx = getAudioContext();
+                const osc = ctx.createOscillator();
+                const gain = ctx.createGain();
+                osc.type = 'triangle';
+                osc.frequency.setValueAtTime(1800, ctx.currentTime);
+                gain.gain.setValueAtTime(0.12, ctx.currentTime);
+                gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.03);
+                osc.connect(gain);
+                gain.connect(ctx.destination);
+                osc.start();
+                osc.stop(ctx.currentTime + 0.04);
+            }} catch(e) {{}}
+        }}
+
+        function playWhoosh() {{
+            if (sfxMuted) return;
+            try {{
+                const ctx = getAudioContext();
+                const osc = ctx.createOscillator();
+                const gain = ctx.createGain();
+                osc.type = 'sine';
+                osc.frequency.setValueAtTime(320, ctx.currentTime);
+                osc.frequency.exponentialRampToValueAtTime(90, ctx.currentTime + 0.38);
+                gain.gain.setValueAtTime(0.18, ctx.currentTime);
+                gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.38);
+                osc.connect(gain);
+                gain.connect(ctx.destination);
+                osc.start();
+                osc.stop(ctx.currentTime + 0.39);
+            }} catch(e) {{}}
+        }}
+
+        function speakNarration() {{
+            if (!window.speechSynthesis || !TTS_TEXT) return;
+            try {{
+                window.speechSynthesis.cancel();
+                const utterance = new SpeechSynthesisUtterance(TTS_TEXT);
+                utterance.lang = TTS_LANG;
+                utterance.rate = 1.0;
+                window.speechSynthesis.speak(utterance);
+            }} catch(e) {{}}
+        }}
+
+        // Schedule SFX beats
+        function scheduleAudioBeats() {{
+            if (sfxMuted) return;
+            playPunch();
+            setTimeout(() => playWhoosh(), (DURATION * 0.33) * 1000);
+            setTimeout(() => playTick(), (DURATION * 0.45) * 1000);
+            setTimeout(() => playPunch(), (DURATION * 0.68) * 1000);
+        }}
+
+        const sfxBtn = document.getElementById('sfxBtn');
+        const sfxIcon = document.getElementById('sfxIcon');
+        const voiceBtn = document.getElementById('voiceBtn');
+        const restartBtn = document.getElementById('restartBtn');
+
+        sfxBtn.addEventListener('click', () => {{
+            sfxMuted = !sfxMuted;
+            sfxIcon.textContent = sfxMuted ? '🔇 SFX Off' : '🔊 SFX On';
+            if (!sfxMuted) {{
+                getAudioContext();
+                playPunch();
+            }}
+        }});
+
+        voiceBtn.addEventListener('click', () => {{
+            getAudioContext();
+            speakNarration();
+            if (!sfxMuted) scheduleAudioBeats();
+        }});
+
+        restartBtn.addEventListener('click', () => {{
+            const artboard = document.getElementById('artboard');
+            artboard.style.animation = 'none';
+            artboard.offsetHeight;
+            artboard.style.animation = '';
+            const progress = document.getElementById('timelineProgress');
+            progress.style.animation = 'none';
+            progress.offsetHeight;
+            progress.style.animation = '';
+            if (TTS_TEXT) speakNarration();
+            scheduleAudioBeats();
+        }});
+
+        // Auto audio beat loop
+        if (HAS_SFX) {{
+            setInterval(() => {{
+                scheduleAudioBeats();
+            }}, DURATION * 1000);
+        }}
+    </script>
+</body>
+</html>"#,
+        csp = CSP_META,
+        bg = tokens.bg,
+        text = tokens.text,
+        accent = tokens.accent,
+        font_family = tokens.font_family,
+        card_bg = tokens.card_bg,
+        border_color = tokens.border_color,
+        artboard_style = artboard_style,
+        artboard_dims = artboard_dims,
+        duration = duration,
+        headline = headline,
+        tts_clean = tts_clean,
+        tts_clean_js = tts_clean.replace('"', "\\\"").replace('\n', " "),
+        tts_lang = tts_lang,
+        subtitle_display = if tts_text.is_empty() { "display: none;" } else { "display: block;" },
+        sfx_enabled = if sfx { "true" } else { "false" },
+        design_system = escape_html(&req.design_system),
+        mode = escape_html(&req.mode),
+    )
+}
+
 fn escape_html(value: &str) -> String {
     value
         .replace('&', "&amp;")
@@ -1506,7 +2209,7 @@ fn truncate(text: &str, max_chars: usize) -> String {
     format!("{cut}…")
 }
 
-fn truncate_words(text: &str, max_chars: usize) -> String {
+pub fn truncate_words(text: &str, max_chars: usize) -> String {
     if text.chars().count() <= max_chars {
         return text.to_string();
     }

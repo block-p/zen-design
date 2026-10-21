@@ -37,7 +37,7 @@ use rust_embed::RustEmbed;
 #[folder = "../studio/dist/"]
 struct StudioAssets;
 
-use agent::{AgentEvent, AgentOrchestrator, PromptRequest};
+use agent::{AgentEvent, AgentOrchestrator, CustomThemeTokens, PromptRequest, truncate_words};
 use settings::{Settings, KNOWN_PROVIDERS, PROVIDER_OPENAI};
 
 const DEFAULT_BIND_ADDR: &str = "127.0.0.1:7456";
@@ -161,6 +161,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .route("/api/history/:id", delete(delete_history_item))
         .route("/api/history/:id/activate", post(activate_history_item))
         .route("/api/history/new-project", post(new_project))
+        .route("/api/themes/generate", post(generate_theme))
         // Serve the agent's live output. ServeDir handles traversal protection
         // and content types; index.html is served for `/preview/`.
         .nest_service(
@@ -847,6 +848,137 @@ async fn stop_agent(State(state): State<AppState>) -> impl IntoResponse {
             (StatusCode::OK, Json(json!({ "status": "stopped" }))).into_response()
         }
         _ => (StatusCode::OK, Json(json!({ "status": "idle" }))).into_response(),
+    }
+}
+
+#[derive(Deserialize)]
+struct ThemeGeneratePayload {
+    prompt: String,
+}
+
+async fn generate_theme(
+    State(_state): State<AppState>,
+    Json(payload): Json<ThemeGeneratePayload>,
+) -> impl IntoResponse {
+    let prompt = payload.prompt.trim();
+    if prompt.is_empty() {
+        return (
+            StatusCode::BAD_REQUEST,
+            Json(json!({ "error": "prompt must not be empty" })),
+        )
+            .into_response();
+    }
+
+    let theme = generate_algorithmic_theme(prompt);
+    (StatusCode::OK, Json(json!({ "theme": theme }))).into_response()
+}
+
+fn generate_algorithmic_theme(prompt: &str) -> CustomThemeTokens {
+    let lower = prompt.to_lowercase();
+
+    if lower.contains("cyber") || lower.contains("neon") || lower.contains("arcade") || lower.contains("matrix") {
+        CustomThemeTokens {
+            name: "Neon Cyberpunk".to_string(),
+            bg: "#090a0f".to_string(),
+            text: "#00f0ff".to_string(),
+            accent: "#ff007f".to_string(),
+            font_family: "'JetBrains Mono', monospace".to_string(),
+            card_bg: "#121420".to_string(),
+            border_color: "#ff007f55".to_string(),
+            dot: "#00f0ff".to_string(),
+            swatch: "linear-gradient(135deg, #ff007f 0%, #090a0f 100%)".to_string(),
+        }
+    } else if lower.contains("forest") || lower.contains("moss") || lower.contains("pine") || lower.contains("nature") || lower.contains("green") || lower.contains("سبز") || lower.contains("جنگل") {
+        CustomThemeTokens {
+            name: "Nordic Pine".to_string(),
+            bg: "#0a1410".to_string(),
+            text: "#ecfdf5".to_string(),
+            accent: "#10b981".to_string(),
+            font_family: "'Plus Jakarta Sans', system-ui, sans-serif".to_string(),
+            card_bg: "#12241d".to_string(),
+            border_color: "#1f4034".to_string(),
+            dot: "#10b981".to_string(),
+            swatch: "linear-gradient(135deg, #10b981 0%, #0a1410 100%)".to_string(),
+        }
+    } else if lower.contains("sunset") || lower.contains("warm") || lower.contains("coral") || lower.contains("autumn") || lower.contains("پاییز") || lower.contains("نارنجی") {
+        CustomThemeTokens {
+            name: "Sunset Ember".to_string(),
+            bg: "#1f0d14".to_string(),
+            text: "#fff1f2".to_string(),
+            accent: "#f97316".to_string(),
+            font_family: "'Outfit', system-ui, sans-serif".to_string(),
+            card_bg: "#321620".to_string(),
+            border_color: "#582436".to_string(),
+            dot: "#f97316".to_string(),
+            swatch: "linear-gradient(135deg, #f97316 0%, #1f0d14 100%)".to_string(),
+        }
+    } else if lower.contains("gold") || lower.contains("luxury") || lower.contains("champagne") || lower.contains("royal") || lower.contains("طلا") || lower.contains("لوکس") {
+        CustomThemeTokens {
+            name: "Imperial Obsidian".to_string(),
+            bg: "#0a0a0c".to_string(),
+            text: "#faf5ef".to_string(),
+            accent: "#eab308".to_string(),
+            font_family: "'Cinzel', 'Playfair Display', serif".to_string(),
+            card_bg: "#16161c".to_string(),
+            border_color: "#caa23440".to_string(),
+            dot: "#eab308".to_string(),
+            swatch: "linear-gradient(135deg, #eab308 0%, #0a0a0c 100%)".to_string(),
+        }
+    } else if lower.contains("ocean") || lower.contains("sea") || lower.contains("aqua") || lower.contains("blue") || lower.contains("دریا") || lower.contains("آبی") {
+        CustomThemeTokens {
+            name: "Abyssal Azure".to_string(),
+            bg: "#05111e".to_string(),
+            text: "#f0f9ff".to_string(),
+            accent: "#0284c7".to_string(),
+            font_family: "'Inter', system-ui, sans-serif".to_string(),
+            card_bg: "#0b2038".to_string(),
+            border_color: "#133860".to_string(),
+            dot: "#0284c7".to_string(),
+            swatch: "linear-gradient(135deg, #0284c7 0%, #05111e 100%)".to_string(),
+        }
+    } else if lower.contains("purple") || lower.contains("violet") || lower.contains("lavender") || lower.contains("بنفش") {
+        CustomThemeTokens {
+            name: "Velvet Nebula".to_string(),
+            bg: "#120a22".to_string(),
+            text: "#f5f3ff".to_string(),
+            accent: "#a855f7".to_string(),
+            font_family: "'Inter', system-ui, sans-serif".to_string(),
+            card_bg: "#1d1236".to_string(),
+            border_color: "#341f5e".to_string(),
+            dot: "#a855f7".to_string(),
+            swatch: "linear-gradient(135deg, #a855f7 0%, #120a22 100%)".to_string(),
+        }
+    } else if lower.contains("minimal") || lower.contains("light") || lower.contains("white") || lower.contains("paper") || lower.contains("سفید") || lower.contains("روشن") {
+        CustomThemeTokens {
+            name: "Atelier Paper".to_string(),
+            bg: "#f8f9fa".to_string(),
+            text: "#18181b".to_string(),
+            accent: "#2563eb".to_string(),
+            font_family: "'Helvetica Neue', Arial, sans-serif".to_string(),
+            card_bg: "#ffffff".to_string(),
+            border_color: "#e4e4e7".to_string(),
+            dot: "#2563eb".to_string(),
+            swatch: "linear-gradient(135deg, #2563eb 0%, #f8f9fa 100%)".to_string(),
+        }
+    } else {
+        // Deterministic hash-based derivation
+        let hash: u64 = prompt.bytes().fold(5381, |acc, b| acc.wrapping_mul(33).wrapping_add(b as u64));
+        let hue = hash % 360;
+        let accent = format!("hsl({hue}, 85%, 60%)");
+        let dot = format!("hsl({hue}, 85%, 60%)");
+        let swatch = format!("linear-gradient(135deg, hsl({hue}, 85%, 60%) 0%, #0a0d14 100%)");
+
+        CustomThemeTokens {
+            name: format!("Custom ({})", truncate_words(prompt, 18).trim_end_matches('…')),
+            bg: "#0a0d14".to_string(),
+            text: "#f1f5f9".to_string(),
+            accent,
+            font_family: "'Inter', system-ui, sans-serif".to_string(),
+            card_bg: "#131824".to_string(),
+            border_color: "#1e293b".to_string(),
+            dot,
+            swatch,
+        }
     }
 }
 

@@ -6,7 +6,10 @@ use icondata_lu::{
 use leptos::prelude::*;
 
 use crate::actions::export_video;
-use crate::data::{device_meta, ActivityEntry, ConnectionState, DeviceId, DEVICES};
+use crate::data::{
+    device_meta, ActivityEntry, AspectRatio, ConnectionState, DeviceId, ModeId, ASPECT_RATIOS,
+    DEVICES,
+};
 use crate::i18n::{t, Language};
 use crate::icons::Icon;
 
@@ -40,6 +43,8 @@ pub fn PreviewPanel(
     running: RwSignal<bool>,
     exporting: RwSignal<bool>,
     entries: RwSignal<Vec<ActivityEntry>>,
+    mode: RwSignal<ModeId>,
+    aspect_ratio: RwSignal<AspectRatio>,
 ) -> impl IntoView {
     let frame_status = RwSignal::new(FrameStatus::Loading);
     let has_loaded = RwSignal::new(false);
@@ -186,32 +191,63 @@ pub fn PreviewPanel(
                 </div>
 
                 <div class="zd-preview-actions">
-                    <div class="zd-segmented">
-                        {DEVICES
-                            .iter()
-                            .map(|item| {
-                                let item = *item;
-                                view! {
-                                    <button
-                                        type="button"
-                                        on:click=move |_| device.set(item.id)
-                                        aria-pressed=move || (device.get() == item.id).to_string()
-                                        title=move || format!("{} — {}", item.label(language.get()), item.width_label(language.get()))
-                                        class=move || {
-                                            if device.get() == item.id {
-                                                "zd-segmented-btn zd-segmented-btn--active"
-                                            } else {
-                                                "zd-segmented-btn"
-                                            }
+                    <Show
+                        when=move || mode.get() == ModeId::Motion
+                        fallback=move || view! {
+                            <div class="zd-segmented">
+                                {DEVICES
+                                    .iter()
+                                    .map(|item| {
+                                        let item = *item;
+                                        view! {
+                                            <button
+                                                type="button"
+                                                on:click=move |_| device.set(item.id)
+                                                aria-pressed=move || (device.get() == item.id).to_string()
+                                                title=move || format!("{} — {}", item.label(language.get()), item.width_label(language.get()))
+                                                class=move || {
+                                                    if device.get() == item.id {
+                                                        "zd-segmented-btn zd-segmented-btn--active"
+                                                    } else {
+                                                        "zd-segmented-btn"
+                                                    }
+                                                }
+                                            >
+                                                <Icon data=item.icon size=13 stroke_width=1.9 />
+                                                <span class="zd-segmented-btn-label">{move || item.label(language.get())}</span>
+                                            </button>
                                         }
-                                    >
-                                        <Icon data=item.icon size=13 stroke_width=1.9 />
-                                        <span class="zd-segmented-btn-label">{move || item.label(language.get())}</span>
-                                    </button>
-                                }
-                            })
-                            .collect_view()}
-                    </div>
+                                    })
+                                    .collect_view()}
+                            </div>
+                        }
+                    >
+                        <div class="zd-segmented">
+                            {ASPECT_RATIOS
+                                .iter()
+                                .map(|item| {
+                                    let item = *item;
+                                    view! {
+                                        <button
+                                            type="button"
+                                            on:click=move |_| aspect_ratio.set(item.id)
+                                            aria-pressed=move || (aspect_ratio.get() == item.id).to_string()
+                                            title=move || format!("{} — {}", item.label(language.get()), item.description(language.get()))
+                                            class=move || {
+                                                if aspect_ratio.get() == item.id {
+                                                    "zd-segmented-btn zd-segmented-btn--active"
+                                                } else {
+                                                    "zd-segmented-btn"
+                                                }
+                                            }
+                                        >
+                                            <span class="zd-segmented-btn-label">{move || item.label(language.get())}</span>
+                                        </button>
+                                    }
+                                })
+                                .collect_view()}
+                        </div>
+                    </Show>
 
                     <div class="zd-preview-divider"></div>
 
@@ -277,7 +313,18 @@ pub fn PreviewPanel(
 
             <div class="zd-preview-canvas">
                 <div class=move || {
-                    format!("zd-device-frame {}", device_meta(device.get()).frame_class)
+                    if mode.get() == ModeId::Motion {
+                        let ratio_class = match aspect_ratio.get() {
+                            AspectRatio::R16_9 => "zd-frame--aspect-16-9",
+                            AspectRatio::R9_16 => "zd-frame--aspect-9-16",
+                            AspectRatio::R4_3 => "zd-frame--aspect-4-3",
+                            AspectRatio::R1_1 => "zd-frame--aspect-1-1",
+                            AspectRatio::Fill => "zd-frame--aspect-fill",
+                        };
+                        format!("zd-device-frame {ratio_class}")
+                    } else {
+                        format!("zd-device-frame {}", device_meta(device.get()).frame_class)
+                    }
                 }>
                     <div class="zd-device-viewport">
                         <iframe

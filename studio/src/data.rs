@@ -6,12 +6,42 @@ use icondata_lu::{
 
 use crate::i18n::Language;
 
-#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+#[derive(Clone, Copy, PartialEq, Eq, Debug, serde::Serialize, serde::Deserialize)]
 pub enum DesignSystemId {
     Stripe,
     Linear,
     Cyberpunk,
     Swiss,
+    Nordic,
+    Emerald,
+    Terminal,
+    Sunset,
+    Brutalist,
+    Glass,
+    Custom,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+pub struct CustomThemeTokens {
+    pub name: String,
+    pub bg: String,
+    pub text: String,
+    pub accent: String,
+    pub font_family: String,
+    pub card_bg: String,
+    pub border_color: String,
+    #[serde(default = "default_dot")]
+    pub dot: String,
+    #[serde(default = "default_swatch")]
+    pub swatch: String,
+}
+
+fn default_dot() -> String {
+    "#6366f1".to_string()
+}
+
+fn default_swatch() -> String {
+    "linear-gradient(135deg, #6366f1 0%, #0f172a 100%)".to_string()
 }
 
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
@@ -25,7 +55,7 @@ pub struct DesignSystemOption {
     pub swatch: &'static str,
 }
 
-pub const DESIGN_SYSTEMS: [DesignSystemOption; 4] = [
+pub const DESIGN_SYSTEMS: [DesignSystemOption; 10] = [
     DesignSystemOption {
         id: DesignSystemId::Stripe,
         label: "Stripe Clean",
@@ -62,6 +92,60 @@ pub const DESIGN_SYSTEMS: [DesignSystemOption; 4] = [
         dot: "#e63946",
         swatch: "linear-gradient(135deg, #e63946 0%, #f8f9fa 100%)",
     },
+    DesignSystemOption {
+        id: DesignSystemId::Nordic,
+        label: "Nordic Frost",
+        label_fa: "Nordic Frost",
+        tagline: "Sage pine & warm stone slate",
+        tagline_fa: "مریم‌گلی، درخت کاج و اسلیت ملایم",
+        dot: "#10b981",
+        swatch: "linear-gradient(135deg, #10b981 0%, #1e293b 100%)",
+    },
+    DesignSystemOption {
+        id: DesignSystemId::Emerald,
+        label: "Midnight Emerald",
+        label_fa: "Midnight Emerald",
+        tagline: "Deep obsidian with emerald luxury",
+        tagline_fa: "مشکی آبسیدین با زمرد و طلای تاریک",
+        dot: "#059669",
+        swatch: "linear-gradient(135deg, #059669 0%, #022c22 100%)",
+    },
+    DesignSystemOption {
+        id: DesignSystemId::Terminal,
+        label: "Retro Terminal",
+        label_fa: "Retro Terminal",
+        tagline: "Amber & phosphor green CRT monospace",
+        tagline_fa: "فسفر سبز و کهربایی روی مانیتور لامپی",
+        dot: "#22c55e",
+        swatch: "linear-gradient(135deg, #22c55e 0%, #050505 100%)",
+    },
+    DesignSystemOption {
+        id: DesignSystemId::Sunset,
+        label: "Sunset Warmth",
+        label_fa: "Sunset Warmth",
+        tagline: "Coral, tangerine & rich plum",
+        tagline_fa: "مرجانی، نارنجی غروب و آلوی عمیق",
+        dot: "#f97316",
+        swatch: "linear-gradient(135deg, #f97316 0%, #4c0519 100%)",
+    },
+    DesignSystemOption {
+        id: DesignSystemId::Brutalist,
+        label: "Brutalist Stark",
+        label_fa: "Brutalist Stark",
+        tagline: "Bold industrial yellow & stark contrast",
+        tagline_fa: "زرد بولد صنعتی و تایپوگرافی سنگین",
+        dot: "#eab308",
+        swatch: "linear-gradient(135deg, #eab308 0%, #000000 100%)",
+    },
+    DesignSystemOption {
+        id: DesignSystemId::Glass,
+        label: "Neumorphic Glass",
+        label_fa: "Neumorphic Glass",
+        tagline: "Frosted glassmorphism & soft violet",
+        tagline_fa: "شیشه مات بلوری با هاله بنفش ملایم",
+        dot: "#8b5cf6",
+        swatch: "linear-gradient(135deg, #8b5cf6 0%, #18181b 100%)",
+    },
 ];
 
 pub fn system_meta(id: DesignSystemId) -> &'static DesignSystemOption {
@@ -94,6 +178,13 @@ impl DesignSystemId {
             Self::Linear => "linear",
             Self::Cyberpunk => "cyberpunk",
             Self::Swiss => "swiss",
+            Self::Nordic => "nordic",
+            Self::Emerald => "emerald",
+            Self::Terminal => "terminal",
+            Self::Sunset => "sunset",
+            Self::Brutalist => "brutalist",
+            Self::Glass => "glass",
+            Self::Custom => "custom",
         }
     }
 
@@ -102,7 +193,139 @@ impl DesignSystemId {
             "linear" => Self::Linear,
             "cyberpunk" => Self::Cyberpunk,
             "swiss" => Self::Swiss,
+            "nordic" => Self::Nordic,
+            "emerald" => Self::Emerald,
+            "terminal" => Self::Terminal,
+            "sunset" => Self::Sunset,
+            "brutalist" => Self::Brutalist,
+            "glass" => Self::Glass,
+            "custom" => Self::Custom,
             _ => Self::Stripe,
+        }
+    }
+}
+
+#[derive(Clone, Copy, PartialEq, Eq, Debug, serde::Serialize, serde::Deserialize)]
+pub enum AspectRatio {
+    R16_9,
+    R9_16,
+    R4_3,
+    R1_1,
+    Fill,
+}
+
+#[derive(Clone, Copy)]
+pub struct AspectRatioOption {
+    pub id: AspectRatio,
+    pub label: &'static str,
+    pub label_fa: &'static str,
+    pub icon_name: &'static str,
+    pub description: &'static str,
+    pub description_fa: &'static str,
+    pub css_ratio: &'static str,
+    pub width: u32,
+    pub height: u32,
+}
+
+pub const ASPECT_RATIOS: [AspectRatioOption; 5] = [
+    AspectRatioOption {
+        id: AspectRatio::R16_9,
+        label: "16:9",
+        label_fa: "۱۶:۹",
+        icon_name: "monitor",
+        description: "Landscape / Desktop",
+        description_fa: "افقی / دسکتاپ و یوتیوب",
+        css_ratio: "16 / 9",
+        width: 1440,
+        height: 810,
+    },
+    AspectRatioOption {
+        id: AspectRatio::R9_16,
+        label: "9:16",
+        label_fa: "۹:۱۶",
+        icon_name: "smartphone",
+        description: "Vertical / Reels & Mobile",
+        description_fa: "عمودی / استوری و ریلز گوشی",
+        css_ratio: "9 / 16",
+        width: 720,
+        height: 1280,
+    },
+    AspectRatioOption {
+        id: AspectRatio::R4_3,
+        label: "4:3",
+        label_fa: "۴:۳",
+        icon_name: "tablet",
+        description: "Classic Presentation",
+        description_fa: "کلاسیک / ارائه و مانیتور قدیمی",
+        css_ratio: "4 / 3",
+        width: 1200,
+        height: 900,
+    },
+    AspectRatioOption {
+        id: AspectRatio::R1_1,
+        label: "1:1",
+        label_fa: "۱:۱",
+        icon_name: "square",
+        description: "Square / Feed",
+        description_fa: "مربع / فید و پست",
+        css_ratio: "1 / 1",
+        width: 1080,
+        height: 1080,
+    },
+    AspectRatioOption {
+        id: AspectRatio::Fill,
+        label: "Fill",
+        label_fa: "تمام صفحه",
+        icon_name: "maximize",
+        description: "Responsive Full Viewport",
+        description_fa: "واکنش‌گرا و هم‌اندازه صفحه",
+        css_ratio: "100%",
+        width: 1440,
+        height: 900,
+    },
+];
+
+pub fn aspect_ratio_meta(ratio: AspectRatio) -> &'static AspectRatioOption {
+    ASPECT_RATIOS
+        .iter()
+        .find(|r| r.id == ratio)
+        .unwrap_or(&ASPECT_RATIOS[0])
+}
+
+impl AspectRatioOption {
+    pub fn label(self, lang: Language) -> &'static str {
+        match lang {
+            Language::En => self.label,
+            Language::Fa => self.label_fa,
+        }
+    }
+
+    pub fn description(self, lang: Language) -> &'static str {
+        match lang {
+            Language::En => self.description,
+            Language::Fa => self.description_fa,
+        }
+    }
+}
+
+impl AspectRatio {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::R16_9 => "16:9",
+            Self::R9_16 => "9:16",
+            Self::R4_3 => "4:3",
+            Self::R1_1 => "1:1",
+            Self::Fill => "fill",
+        }
+    }
+
+    pub fn parse(s: &str) -> Self {
+        match s {
+            "9:16" => Self::R9_16,
+            "4:3" => Self::R4_3,
+            "1:1" => Self::R1_1,
+            "fill" => Self::Fill,
+            _ => Self::R16_9,
         }
     }
 }

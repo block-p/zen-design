@@ -1,5 +1,6 @@
 use icondata_lu::{
-    LuArrowUp, LuCommand, LuCornerDownLeft, LuGripHorizontal, LuHistory, LuPlus, LuSparkles, LuX, LuZap,
+    LuArrowUp, LuClock, LuCommand, LuCornerDownLeft, LuGripHorizontal, LuHistory, LuMic, LuPalette,
+    LuPlus, LuSparkles, LuVolume2, LuVolumeX, LuX, LuZap,
 };
 use leptos::prelude::*;
 use web_sys::{KeyboardEvent, MouseEvent, SubmitEvent};
@@ -7,8 +8,8 @@ use web_sys::{KeyboardEvent, MouseEvent, SubmitEvent};
 use crate::actions::{create_new_project, generate, stop_agent};
 use crate::components::activity_log::ActivityLog;
 use crate::data::{
-    mode_meta, system_meta, ActivityEntry, ChatHistoryItem, ConnectionState, DesignSystemId,
-    ModeId, PRESETS,
+    aspect_ratio_meta, mode_meta, system_meta, ActivityEntry, AspectRatio, ChatHistoryItem,
+    ConnectionState, CustomThemeTokens, DesignSystemId, ModeId, ASPECT_RATIOS, PRESETS,
 };
 use crate::i18n::{localize_digits, t, Language};
 use crate::icons::Icon;
@@ -28,6 +29,13 @@ pub fn AgentPanel(
     history: RwSignal<Vec<ChatHistoryItem>>,
     history_open: RwSignal<bool>,
     preview_version: RwSignal<u64>,
+    custom_theme: RwSignal<Option<CustomThemeTokens>>,
+    theme_builder_open: RwSignal<bool>,
+    aspect_ratio: RwSignal<AspectRatio>,
+    duration_secs: RwSignal<u32>,
+    sound_effects: RwSignal<bool>,
+    tts_text: RwSignal<String>,
+    tts_lang: RwSignal<String>,
 ) -> impl IntoView {
     let can_generate = Memo::new(move |_| !prompt.get().trim().is_empty() && !running.get());
     let activity_height = RwSignal::new(260_i32);
@@ -54,6 +62,24 @@ pub fn AgentPanel(
         if is_dragging.get() {
             is_dragging.set(false);
         }
+    };
+
+    let trigger_generate = move || {
+        generate(
+            prompt,
+            running,
+            design_system,
+            mode,
+            deep,
+            entries,
+            Some(history),
+            Some(custom_theme),
+            Some(aspect_ratio),
+            Some(duration_secs),
+            Some(sound_effects),
+            Some(tts_text),
+            Some(tts_lang),
+        );
     };
 
     view! {
@@ -147,7 +173,7 @@ pub fn AgentPanel(
 
                 <form on:submit=move |event: SubmitEvent| {
                     event.prevent_default();
-                    generate(prompt, running, design_system, mode, deep, entries, Some(history));
+                    trigger_generate();
                 }>
                     <div class="zd-composer">
                         <textarea
@@ -156,7 +182,7 @@ pub fn AgentPanel(
                             on:keydown=move |event: KeyboardEvent| {
                                 if (event.meta_key() || event.ctrl_key()) && event.key() == "Enter" {
                                     event.prevent_default();
-                                    generate(prompt, running, design_system, mode, deep, entries, Some(history));
+                                    trigger_generate();
                                 }
                             }
                             rows="4"
@@ -222,6 +248,142 @@ pub fn AgentPanel(
                     </div>
                 </form>
 
+                <!-- Motion Controls Card (when ModeId::Motion is active) -->
+                <Show when=move || mode.get() == ModeId::Motion>
+                    <div class="zd-motion-card">
+                        <div class="zd-motion-header">
+                            <span class="zd-motion-title">
+                                {move || t(language.get(), "Motion Studio Controls", "تنظیمات موشن استودیو")}
+                            </span>
+                        </div>
+
+                        <!-- Aspect Ratio Selector -->
+                        <div class="zd-motion-field">
+                            <div class="zd-motion-field-label-row">
+                                <span class="zd-motion-field-label">
+                                    {move || t(language.get(), "Aspect Ratio / Canvas", "نسبت ابعاد / اندازه بوم")}
+                                </span>
+                                <span class="zd-motion-field-tag">
+                                    {move || aspect_ratio_meta(aspect_ratio.get()).label(language.get())}
+                                </span>
+                            </div>
+                            <div class="zd-segmented zd-segmented--full">
+                                {ASPECT_RATIOS
+                                    .iter()
+                                    .map(|opt| {
+                                        let opt = *opt;
+                                        view! {
+                                            <button
+                                                type="button"
+                                                class=move || {
+                                                    if aspect_ratio.get() == opt.id {
+                                                        "zd-segmented-btn zd-segmented-btn--active"
+                                                    } else {
+                                                        "zd-segmented-btn"
+                                                    }
+                                                }
+                                                title=move || opt.description(language.get())
+                                                on:click=move |_| aspect_ratio.set(opt.id)
+                                            >
+                                                <span class="zd-segmented-btn-label">{move || opt.label(language.get())}</span>
+                                            </button>
+                                        }
+                                    })
+                                    .collect_view()}
+                            </div>
+                        </div>
+
+                        <!-- Dynamic Duration Slider -->
+                        <div class="zd-motion-field">
+                            <div class="zd-motion-field-label-row">
+                                <span class="zd-motion-field-label">
+                                    <Icon data=LuClock size=11 />
+                                    <span>{move || t(language.get(), "Duration", "مدت زمان موشن")}</span>
+                                </span>
+                                <span class="zd-motion-field-tag">
+                                    {move || {
+                                        let text = format!("{}s", duration_secs.get());
+                                        localize_digits(&text, language.get())
+                                    }}
+                                </span>
+                            </div>
+                            <input
+                                type="range"
+                                min="5"
+                                max="60"
+                                step="1"
+                                class="zd-range-slider"
+                                prop:value=move || duration_secs.get().to_string()
+                                on:input=move |ev| {
+                                    if let Ok(val) = event_target_value(&ev).parse::<u32>() {
+                                        duration_secs.set(val);
+                                    }
+                                }
+                            />
+                        </div>
+
+                        <!-- Sound Effects Toggle -->
+                        <div class="zd-motion-row-toggle">
+                            <div class="zd-motion-toggle-info">
+                                <Show
+                                    when=move || sound_effects.get()
+                                    fallback=move || view! { <Icon data=LuVolumeX size=13 class="zd-sfx-icon zd-sfx-icon--off" /> }
+                                >
+                                    <Icon data=LuVolume2 size=13 class="zd-sfx-icon zd-sfx-icon--on" />
+                                </Show>
+                                <div>
+                                    <div class="zd-motion-toggle-title">
+                                        {move || t(language.get(), "Procedural SFX Audio", "جلوه‌های صوتی موشن (SFX)")}
+                                    </div>
+                                    <div class="zd-motion-toggle-desc">
+                                        {move || t(language.get(), "Synthesized Web Audio bass & ticks", "صداگذاری ریتمیک سینت با وب‌آدیو")}
+                                    </div>
+                                </div>
+                            </div>
+                            <button
+                                type="button"
+                                role="switch"
+                                aria-checked=move || if sound_effects.get() { "true" } else { "false" }
+                                on:click=move |_| sound_effects.update(|v| *v = !*v)
+                                class=move || {
+                                    if sound_effects.get() { "zd-toggle zd-toggle--on" } else { "zd-toggle zd-toggle--off" }
+                                }
+                            >
+                                <span class="zd-toggle-thumb"></span>
+                            </button>
+                        </div>
+
+                        <!-- TTS Voiceover Narration Input & Language Selector -->
+                        <div class="zd-motion-field">
+                            <div class="zd-motion-field-label-row">
+                                <span class="zd-motion-field-label">
+                                    <Icon data=LuMic size=11 />
+                                    <span>{move || t(language.get(), "Voiceover Narration (TTS)", "نریشن و صداگذاری صوتی (TTS)")}</span>
+                                </span>
+                                <select
+                                    class="zd-motion-lang-select"
+                                    prop:value=move || tts_lang.get()
+                                    on:change=move |ev| tts_lang.set(event_target_value(&ev))
+                                >
+                                    <option value="fa-IR">"فارسی (fa-IR)"</option>
+                                    <option value="en-US">"English (en-US)"</option>
+                                </select>
+                            </div>
+                            <input
+                                type="text"
+                                class="zd-input zd-motion-tts-input"
+                                placeholder=move || t(
+                                    language.get(),
+                                    "Narration text to voiceover in the video…",
+                                    "متن نریشن که روی موشن با صدا خوانده شود…"
+                                )
+                                prop:value=move || tts_text.get()
+                                on:input=move |ev| tts_text.set(event_target_value(&ev))
+                            />
+                        </div>
+                    </div>
+                </Show>
+
                 <div class="zd-deep-review-card">
                     <div class="zd-deep-review-info">
                         <Icon data=LuSparkles size=12 class="zd-deep-review-sparkle" />
@@ -263,11 +425,34 @@ pub fn AgentPanel(
                     <span class="zd-agent-substrip-meta">
                         <span
                             class="zd-agent-substrip-dot"
-                            style=move || format!("background-color: {}", system_meta(design_system.get()).dot)
+                            style=move || {
+                                if design_system.get() == DesignSystemId::Custom {
+                                    custom_theme.get().map(|c| c.dot).unwrap_or_else(|| "#6366f1".to_string())
+                                } else {
+                                    system_meta(design_system.get()).dot.to_string()
+                                }
+                            }
                         ></span>
                         <span class="zd-agent-substrip-text">
-                            {move || system_meta(design_system.get()).label(language.get())}
+                            {move || {
+                                if design_system.get() == DesignSystemId::Custom {
+                                    custom_theme.get().map(|c| c.name).unwrap_or_else(|| "Custom Theme".to_string())
+                                } else {
+                                    system_meta(design_system.get()).label(language.get()).to_string()
+                                }
+                            }}
                         </span>
+                        <Show when=move || design_system.get() == DesignSystemId::Custom>
+                            <button
+                                type="button"
+                                class="zd-btn-theme-edit"
+                                on:click=move |_| theme_builder_open.set(true)
+                                title=move || t(language.get(), "Edit custom theme", "ویرایش تم سفارشی")
+                            >
+                                <Icon data=LuPalette size=10 />
+                                <span>{move || t(language.get(), "Edit", "ویرایش")}</span>
+                            </button>
+                        </Show>
                         <span class="zd-agent-substrip-sep">"/"</span>
                         <span class="zd-agent-substrip-text">
                             {move || mode_meta(mode.get()).label(language.get())}

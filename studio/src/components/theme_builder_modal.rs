@@ -1,0 +1,440 @@
+use gloo_net::http::Request;
+use icondata_lu::{LuCheck, LuPalette, LuSparkles, LuWand, LuX};
+use leptos::portal::Portal;
+use leptos::prelude::*;
+use serde::Deserialize;
+use serde_json::json;
+use wasm_bindgen_futures::spawn_local;
+use web_sys::KeyboardEvent;
+
+use crate::data::{ActivityEntry, ActivityKind, CustomThemeTokens, DesignSystemId};
+use crate::i18n::{t, Language};
+use crate::icons::Icon;
+use crate::stream::push_activity;
+
+#[derive(Deserialize)]
+struct ThemeGenerateResponse {
+    theme: CustomThemeTokens,
+}
+
+#[component]
+pub fn ThemeBuilderModal(
+    language: RwSignal<Language>,
+    open: RwSignal<bool>,
+    custom_theme: RwSignal<Option<CustomThemeTokens>>,
+    design_system: RwSignal<DesignSystemId>,
+    entries: RwSignal<Vec<ActivityEntry>>,
+) -> impl IntoView {
+    let prompt_input = RwSignal::new(String::new());
+    let generating = RwSignal::new(false);
+    let error_msg = RwSignal::new(None::<String>);
+
+    // Working copy of theme tokens
+    let theme_name = RwSignal::new("My Custom Theme".to_string());
+    let bg_color = RwSignal::new("#0d1117".to_string());
+    let text_color = RwSignal::new("#f0f6fc".to_string());
+    let accent_color = RwSignal::new("#38bdf8".to_string());
+    let card_bg = RwSignal::new("#161b22".to_string());
+    let border_color = RwSignal::new("#30363d".to_string());
+    let font_family = RwSignal::new("'Plus Jakarta Sans', system-ui, sans-serif".to_string());
+
+    // When modal opens or custom_theme changes, populate fields
+    Effect::new(move |_| {
+        if open.get() {
+            if let Some(existing) = custom_theme.get() {
+                theme_name.set(existing.name);
+                bg_color.set(existing.bg);
+                text_color.set(existing.text);
+                accent_color.set(existing.accent);
+                card_bg.set(existing.card_bg);
+                border_color.set(existing.border_color);
+                font_family.set(existing.font_family);
+            }
+        }
+    });
+
+    let on_generate = move |_| {
+        let prompt = prompt_input.get().trim().to_string();
+        if prompt.is_empty() || generating.get() {
+            return;
+        }
+
+        generating.set(true);
+        error_msg.set(None);
+
+        spawn_local(async move {
+            let body = json!({ "prompt": prompt }).to_string();
+            let req = Request::post("/api/themes/generate")
+                .header("Content-Type", "application/json")
+                .body(body);
+
+            match req {
+                Ok(request) => match request.send().await {
+                    Ok(resp) if resp.ok() => {
+                        if let Ok(data) = resp.json::<ThemeGenerateResponse>().await {
+                            theme_name.set(data.theme.name);
+                            bg_color.set(data.theme.bg);
+                            text_color.set(data.theme.text);
+                            accent_color.set(data.theme.accent);
+                            card_bg.set(data.theme.card_bg);
+                            border_color.set(data.theme.border_color);
+                            font_family.set(data.theme.font_family);
+                        } else {
+                            error_msg.set(Some("Failed to parse generated theme".to_string()));
+                        }
+                    }
+                    _ => {
+                        error_msg.set(Some("Failed to generate theme from server".to_string()));
+                    }
+                },
+                Err(e) => {
+                    error_msg.set(Some(format!("Request error: {e}")));
+                }
+            }
+            generating.set(false);
+        });
+    };
+
+    let on_apply = move |_| {
+        let name = theme_name.get();
+        let bg = bg_color.get();
+        let text = text_color.get();
+        let accent = accent_color.get();
+        let card = card_bg.get();
+        let border = border_color.get();
+        let font = font_family.get();
+
+        let dot = accent.clone();
+        let swatch = format!("linear-gradient(135deg, {accent} 0%, {bg} 100%)");
+
+        let tokens = CustomThemeTokens {
+            name: name.clone(),
+            bg,
+            text,
+            accent,
+            font_family: font,
+            card_bg: card,
+            border_color: border,
+            dot,
+            swatch,
+        };
+
+        custom_theme.set(Some(tokens));
+        design_system.set(DesignSystemId::Custom);
+        open.set(false);
+
+        push_activity(
+            entries,
+            ActivityKind::Status,
+            format!("Custom theme '{name}' applied to session."),
+        );
+    };
+
+    view! {
+        <Show when=move || open.get()>
+            <Portal>
+                <div
+                    class="zd-modal-backdrop"
+                    on:click=move |_| open.set(false)
+                ></div>
+                <div
+                    class="zd-modal-dialog zd-theme-builder-dialog"
+                    role="dialog"
+                    aria-modal="true"
+                    on:keydown=move |ev: KeyboardEvent| {
+                        if ev.key() == "Escape" {
+                            open.set(false);
+                        }
+                    }
+                >
+                    <div class="zd-modal-header">
+                        <div class="zd-modal-title-row">
+                            <Icon data=LuPalette size=18 class="zd-modal-title-icon" />
+                            <h2 class="zd-modal-title">
+                                {move || t(language.get(), "Theme Builder", "سازنده تم سفارشی")}
+                            </h2>
+                        </div>
+                        <button
+                            type="button"
+                            class="zd-btn-icon"
+                            on:click=move |_| open.set(false)
+                            title=move || t(language.get(), "Close", "بستن")
+                        >
+                            <Icon data=LuX size=16 />
+                        </button>
+                    </div>
+
+                    <div class="zd-modal-body zd-theme-builder-body">
+                        <!-- AI Prompt Generation Box -->
+                        <div class="zd-theme-builder-prompt-card">
+                            <label class="zd-form-label">
+                                <Icon data=LuWand size=13 />
+                                <span>{move || t(language.get(), "Describe Your Dream Theme", "توصیف تم مورد نظر شما")}</span>
+                            </label>
+                            <div class="zd-theme-builder-input-row">
+                                <input
+                                    type="text"
+                                    class="zd-input zd-theme-builder-prompt-input"
+                                    placeholder=move || t(
+                                        language.get(),
+                                        "e.g. Autumn forest with burnt orange, warm stone & pine slate…",
+                                        "مثلاً: جنگل پاییزی با نارنجی سوخته، سنگ گرم و اسلیت کاج…"
+                                    )
+                                    prop:value=move || prompt_input.get()
+                                    on:input=move |ev| prompt_input.set(event_target_value(&ev))
+                                />
+                                <button
+                                    type="button"
+                                    class="zd-btn-primary zd-theme-builder-gen-btn"
+                                    disabled=move || generating.get() || prompt_input.get().trim().is_empty()
+                                    on:click=on_generate
+                                >
+                                    <Show
+                                        when=move || generating.get()
+                                        fallback=move || view! {
+                                            <Icon data=LuSparkles size=13 />
+                                            <span>{move || t(language.get(), "Generate", "ساخت تم")}</span>
+                                        }
+                                    >
+                                        <span>{move || t(language.get(), "Generating…", "در حال ساخت…")}</span>
+                                    </Show>
+                                </button>
+                            </div>
+                            <Show when=move || error_msg.get().is_some()>
+                                <p class="zd-theme-builder-error">
+                                    {move || error_msg.get().unwrap_or_default()}
+                                </p>
+                            </Show>
+                        </div>
+
+                        <!-- Split editor and preview -->
+                        <div class="zd-theme-builder-columns">
+                            <!-- Token Controls -->
+                            <div class="zd-theme-builder-form">
+                                <div class="zd-form-field">
+                                    <label class="zd-form-label">{move || t(language.get(), "Theme Name", "نام تم")}</label>
+                                    <input
+                                        type="text"
+                                        class="zd-input"
+                                        prop:value=move || theme_name.get()
+                                        on:input=move |ev| theme_name.set(event_target_value(&ev))
+                                    />
+                                </div>
+
+                                <div class="zd-color-grid">
+                                    <div class="zd-color-field">
+                                        <label class="zd-color-label">{move || t(language.get(), "Background", "پس‌زمینه")}</label>
+                                        <div class="zd-color-picker-wrap">
+                                            <input
+                                                type="color"
+                                                class="zd-color-input"
+                                                prop:value=move || bg_color.get()
+                                                on:input=move |ev| bg_color.set(event_target_value(&ev))
+                                            />
+                                            <input
+                                                type="text"
+                                                class="zd-color-text"
+                                                prop:value=move || bg_color.get()
+                                                on:input=move |ev| bg_color.set(event_target_value(&ev))
+                                            />
+                                        </div>
+                                    </div>
+
+                                    <div class="zd-color-field">
+                                        <label class="zd-color-label">{move || t(language.get(), "Text Color", "رنگ متن")}</label>
+                                        <div class="zd-color-picker-wrap">
+                                            <input
+                                                type="color"
+                                                class="zd-color-input"
+                                                prop:value=move || text_color.get()
+                                                on:input=move |ev| text_color.set(event_target_value(&ev))
+                                            />
+                                            <input
+                                                type="text"
+                                                class="zd-color-text"
+                                                prop:value=move || text_color.get()
+                                                on:input=move |ev| text_color.set(event_target_value(&ev))
+                                            />
+                                        </div>
+                                    </div>
+
+                                    <div class="zd-color-field">
+                                        <label class="zd-color-label">{move || t(language.get(), "Accent", "رنگ شاخص")}</label>
+                                        <div class="zd-color-picker-wrap">
+                                            <input
+                                                type="color"
+                                                class="zd-color-input"
+                                                prop:value=move || accent_color.get()
+                                                on:input=move |ev| accent_color.set(event_target_value(&ev))
+                                            />
+                                            <input
+                                                type="text"
+                                                class="zd-color-text"
+                                                prop:value=move || accent_color.get()
+                                                on:input=move |ev| accent_color.set(event_target_value(&ev))
+                                            />
+                                        </div>
+                                    </div>
+
+                                    <div class="zd-color-field">
+                                        <label class="zd-color-label">{move || t(language.get(), "Card Surface", "پس‌زمینه کارت")}</label>
+                                        <div class="zd-color-picker-wrap">
+                                            <input
+                                                type="color"
+                                                class="zd-color-input"
+                                                prop:value=move || card_bg.get()
+                                                on:input=move |ev| card_bg.set(event_target_value(&ev))
+                                            />
+                                            <input
+                                                type="text"
+                                                class="zd-color-text"
+                                                prop:value=move || card_bg.get()
+                                                on:input=move |ev| card_bg.set(event_target_value(&ev))
+                                            />
+                                        </div>
+                                    </div>
+
+                                    <div class="zd-color-field">
+                                        <label class="zd-color-label">{move || t(language.get(), "Border", "حاشیه")}</label>
+                                        <div class="zd-color-picker-wrap">
+                                            <input
+                                                type="color"
+                                                class="zd-color-input"
+                                                prop:value=move || border_color.get()
+                                                on:input=move |ev| border_color.set(event_target_value(&ev))
+                                            />
+                                            <input
+                                                type="text"
+                                                class="zd-color-text"
+                                                prop:value=move || border_color.get()
+                                                on:input=move |ev| border_color.set(event_target_value(&ev))
+                                            />
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <div class="zd-form-field" style="margin-top: 12px;">
+                                    <label class="zd-form-label">{move || t(language.get(), "Font Family", "خانواده فونت")}</label>
+                                    <select
+                                        class="zd-select"
+                                        prop:value=move || font_family.get()
+                                        on:change=move |ev| font_family.set(event_target_value(&ev))
+                                    >
+                                        <option value="'Plus Jakarta Sans', system-ui, sans-serif">"Plus Jakarta Sans (Modern Editorial)"</option>
+                                        <option value="'Inter', system-ui, sans-serif">"Inter (Clean Tech)"</option>
+                                        <option value="'Outfit', system-ui, sans-serif">"Outfit (Warm Geometric)"</option>
+                                        <option value="'JetBrains Mono', monospace">"JetBrains Mono (Developer)"</option>
+                                        <option value="'Cinzel', 'Playfair Display', serif">"Cinzel (Luxury Serif)"</option>
+                                        <option value="'Space Grotesk', Impact, sans-serif">"Space Grotesk (Brutalist)"</option>
+                                        <option value="system-ui, -apple-system, sans-serif">"System Native Stack"</option>
+                                    </select>
+                                </div>
+                            </div>
+
+                            <!-- Live Preview Card -->
+                            <div class="zd-theme-builder-preview">
+                                <label class="zd-form-label">
+                                    <span>{move || t(language.get(), "Live Preview", "پیش‌نمایش زنده تم")}</span>
+                                </label>
+                                <div
+                                    class="zd-theme-preview-card"
+                                    style=move || format!(
+                                        "background-color: {}; color: {}; font-family: {}; border: 1px solid {};",
+                                        bg_color.get(),
+                                        text_color.get(),
+                                        font_family.get(),
+                                        border_color.get()
+                                    )
+                                >
+                                    <div class="zd-preview-top-row">
+                                        <span
+                                            class="zd-preview-badge"
+                                            style=move || format!(
+                                                "background-color: {}; border: 1px solid {}; color: {};",
+                                                card_bg.get(),
+                                                border_color.get(),
+                                                accent_color.get()
+                                            )
+                                        >
+                                            {move || theme_name.get()}
+                                        </span>
+                                        <span
+                                            class="zd-preview-dot"
+                                            style=move || format!("background-color: {}; box-shadow: 0 0 10px {};", accent_color.get(), accent_color.get())
+                                        ></span>
+                                    </div>
+
+                                    <h3 class="zd-preview-heading">
+                                        "Crafting Next-Gen Interfaces"
+                                    </h3>
+                                    <p class="zd-preview-desc" style=move || format!("color: {}bb;", text_color.get())>
+                                        "Synchronized tokens applied to every button, card, and motion timeline."
+                                    </p>
+
+                                    <div
+                                        class="zd-preview-subcard"
+                                        style=move || format!(
+                                            "background-color: {}; border: 1px solid {};",
+                                            card_bg.get(),
+                                            border_color.get()
+                                        )
+                                    >
+                                        <div class="zd-preview-stat-val" style=move || format!("color: {};", accent_color.get())>
+                                            "99.8%"
+                                        </div>
+                                        <div class="zd-preview-stat-lbl">
+                                            "Design Fidelity"
+                                        </div>
+                                    </div>
+
+                                    <div class="zd-preview-actions">
+                                        <button
+                                            type="button"
+                                            class="zd-preview-primary-btn"
+                                            style=move || format!(
+                                                "background-color: {}; color: #ffffff;",
+                                                accent_color.get()
+                                            )
+                                        >
+                                            "Explore"
+                                        </button>
+                                        <button
+                                            type="button"
+                                            class="zd-preview-secondary-btn"
+                                            style=move || format!(
+                                                "background-color: {}; border: 1px solid {}; color: {};",
+                                                card_bg.get(),
+                                                border_color.get(),
+                                                text_color.get()
+                                            )
+                                        >
+                                            "Inspect"
+                                        </button>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="zd-modal-footer">
+                        <button
+                            type="button"
+                            class="zd-btn-secondary"
+                            on:click=move |_| open.set(false)
+                        >
+                            {move || t(language.get(), "Cancel", "انصراف")}
+                        </button>
+                        <button
+                            type="button"
+                            class="zd-btn-primary"
+                            on:click=on_apply
+                        >
+                            <Icon data=LuCheck size=14 />
+                            <span>{move || t(language.get(), "Apply to Current Session", "اعمال به سشن فعلی")}</span>
+                        </button>
+                    </div>
+                </div>
+            </Portal>
+        </Show>
+    }
+}

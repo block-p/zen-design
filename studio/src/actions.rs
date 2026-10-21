@@ -4,8 +4,8 @@ use serde_json::json;
 use wasm_bindgen_futures::spawn_local;
 
 use crate::data::{
-    mode_meta, system_meta, ActivityEntry, ActivityKind, ChatHistoryItem, DesignSystemId,
-    HistoryResponse, ModeId,
+    mode_meta, system_meta, ActivityEntry, ActivityKind, AspectRatio, ChatHistoryItem,
+    CustomThemeTokens, DesignSystemId, HistoryResponse, ModeId,
 };
 use crate::i18n::{t, Language};
 use crate::settings::{
@@ -24,6 +24,12 @@ pub fn generate(
     deep: RwSignal<bool>,
     entries: RwSignal<Vec<ActivityEntry>>,
     history: Option<RwSignal<Vec<ChatHistoryItem>>>,
+    custom_theme: Option<RwSignal<Option<CustomThemeTokens>>>,
+    aspect_ratio: Option<RwSignal<AspectRatio>>,
+    duration_secs: Option<RwSignal<u32>>,
+    sound_effects: Option<RwSignal<bool>>,
+    tts_text: Option<RwSignal<String>>,
+    tts_lang: Option<RwSignal<String>>,
 ) {
     let brief = prompt.get_untracked().trim().to_string();
     if brief.is_empty() || running.get_untracked() {
@@ -39,13 +45,45 @@ pub fn generate(
     let system_label = system_meta(system).label;
     let mode_label = mode_meta(selected_mode).label;
 
+    let custom_theme_val = custom_theme.and_then(|ct| ct.get_untracked());
+    let aspect_ratio_val = aspect_ratio.map(|ar| ar.get_untracked());
+    let duration_secs_val = duration_secs.map(|d| d.get_untracked());
+    let sound_effects_val = sound_effects.map(|s| s.get_untracked());
+    let tts_text_val = tts_text.map(|t| t.get_untracked().trim().to_string());
+    let tts_lang_val = tts_lang.map(|l| l.get_untracked());
+
     spawn_local(async move {
-        let payload = json!({
-            "prompt": brief,
-            "design_system": system.as_str(),
-            "mode": selected_mode.as_str(),
-            "deep": deep_review,
-        });
+        let mut map = serde_json::Map::new();
+        map.insert("prompt".to_string(), json!(brief));
+        map.insert("design_system".to_string(), json!(system.as_str()));
+        map.insert("mode".to_string(), json!(selected_mode.as_str()));
+        map.insert("deep".to_string(), json!(deep_review));
+
+        if let Some(ct) = custom_theme_val {
+            map.insert("custom_theme".to_string(), json!(ct));
+        }
+
+        if selected_mode == ModeId::Motion {
+            if let Some(ar) = aspect_ratio_val {
+                map.insert("aspect_ratio".to_string(), json!(ar.as_str()));
+            }
+            if let Some(d) = duration_secs_val {
+                map.insert("duration_secs".to_string(), json!(d));
+            }
+            if let Some(sfx) = sound_effects_val {
+                map.insert("sound_effects".to_string(), json!(sfx));
+            }
+            if let Some(tts) = tts_text_val {
+                if !tts.is_empty() {
+                    map.insert("tts_text".to_string(), json!(tts));
+                    if let Some(lang) = tts_lang_val {
+                        map.insert("tts_lang".to_string(), json!(lang));
+                    }
+                }
+            }
+        }
+
+        let payload = serde_json::Value::Object(map);
 
         let request = Request::post("/api/prompt")
             .header("Content-Type", "application/json")

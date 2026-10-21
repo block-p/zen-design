@@ -2,9 +2,12 @@ use leptos::prelude::*;
 use send_wrapper::SendWrapper;
 
 use crate::actions::{load_history, load_settings};
-use crate::components::{AgentPanel, Header, HistoryModal, PreviewPanel, SettingsPanel};
+use crate::components::{
+    AgentPanel, Header, HistoryModal, PreviewPanel, SettingsPanel, ThemeBuilderModal,
+};
 use crate::data::{
-    ActivityEntry, ActivityKind, ChatHistoryItem, ConnectionState, DesignSystemId, DeviceId, ModeId,
+    ActivityEntry, ActivityKind, AspectRatio, ChatHistoryItem, ConnectionState, CustomThemeTokens,
+    DesignSystemId, DeviceId, ModeId,
 };
 use crate::i18n::{load_language, load_theme, store_language, store_theme};
 use crate::settings::SettingsView;
@@ -37,6 +40,14 @@ pub fn App() -> impl IntoView {
     });
 
     let design_system = RwSignal::new(DesignSystemId::Stripe);
+    let custom_theme = RwSignal::new(None::<CustomThemeTokens>);
+    let theme_builder_open = RwSignal::new(false);
+    let aspect_ratio = RwSignal::new(AspectRatio::R16_9);
+    let duration_secs = RwSignal::new(10_u32);
+    let sound_effects = RwSignal::new(true);
+    let tts_text = RwSignal::new(String::new());
+    let tts_lang = RwSignal::new("fa-IR".to_string());
+
     let mode = RwSignal::new(ModeId::Prototype);
     let device = RwSignal::new(DeviceId::Desktop);
 
@@ -102,6 +113,8 @@ pub fn App() -> impl IntoView {
                     last_heartbeat=last_heartbeat
                     settings=settings
                     settings_open=settings_open
+                    custom_theme=custom_theme
+                    theme_builder_open=theme_builder_open
                 />
 
                 <main class="zd-main">
@@ -118,6 +131,13 @@ pub fn App() -> impl IntoView {
                         history=history
                         history_open=history_open
                         preview_version=preview_version
+                        custom_theme=custom_theme
+                        theme_builder_open=theme_builder_open
+                        aspect_ratio=aspect_ratio
+                        duration_secs=duration_secs
+                        sound_effects=sound_effects
+                        tts_text=tts_text
+                        tts_lang=tts_lang
                     />
 
                     <PreviewPanel
@@ -130,6 +150,8 @@ pub fn App() -> impl IntoView {
                         running=running
                         exporting=exporting
                         entries=entries
+                        mode=mode
+                        aspect_ratio=aspect_ratio
                     />
                 </main>
 
@@ -152,6 +174,14 @@ pub fn App() -> impl IntoView {
                     running=running
                     entries=entries
                     preview_version=preview_version
+                />
+
+                <ThemeBuilderModal
+                    language=language
+                    open=theme_builder_open
+                    custom_theme=custom_theme
+                    design_system=design_system
+                    entries=entries
                 />
             </div>
         </div>

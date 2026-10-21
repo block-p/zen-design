@@ -1,9 +1,11 @@
-use icondata_lu::{LuCheck, LuChevronDown, LuGlobe, LuMoon, LuSettings, LuSparkles, LuSun};
+use icondata_lu::{LuCheck, LuChevronDown, LuGlobe, LuMoon, LuPalette, LuSettings, LuSparkles, LuSun};
 use leptos::portal::Portal;
 use leptos::prelude::*;
 use web_sys::KeyboardEvent;
 
-use crate::data::{system_meta, ConnectionState, DesignSystemId, ModeId, DESIGN_SYSTEMS, MODES};
+use crate::data::{
+    system_meta, ConnectionState, CustomThemeTokens, DesignSystemId, ModeId, DESIGN_SYSTEMS, MODES,
+};
 use crate::i18n::{t, Language, Theme};
 use crate::icons::Icon;
 use crate::settings::SettingsView;
@@ -19,6 +21,8 @@ pub fn Header(
     last_heartbeat: RwSignal<Option<f64>>,
     settings: RwSignal<Option<SettingsView>>,
     settings_open: RwSignal<bool>,
+    custom_theme: RwSignal<Option<CustomThemeTokens>>,
+    theme_builder_open: RwSignal<bool>,
 ) -> impl IntoView {
     view! {
         <header class="zd-header">
@@ -45,7 +49,12 @@ pub fn Header(
                         <span class="zd-header-label">
                             {move || t(language.get(), "Design system", "سیستم طراحی")}
                         </span>
-                        <DesignSystemPicker language=language value=design_system />
+                        <DesignSystemPicker
+                            language=language
+                            value=design_system
+                            custom_theme=custom_theme
+                            theme_builder_open=theme_builder_open
+                        />
                     </div>
 
                     <div class="zd-header-divider"></div>
@@ -146,8 +155,32 @@ pub fn Header(
 fn DesignSystemPicker(
     language: RwSignal<Language>,
     value: RwSignal<DesignSystemId>,
+    custom_theme: RwSignal<Option<CustomThemeTokens>>,
+    theme_builder_open: RwSignal<bool>,
 ) -> impl IntoView {
     let open = RwSignal::new(false);
+
+    let active_dot = move || {
+        if value.get() == DesignSystemId::Custom {
+            custom_theme
+                .get()
+                .map(|c| c.dot)
+                .unwrap_or_else(|| "#6366f1".to_string())
+        } else {
+            system_meta(value.get()).dot.to_string()
+        }
+    };
+
+    let active_label = move || {
+        if value.get() == DesignSystemId::Custom {
+            custom_theme
+                .get()
+                .map(|c| c.name)
+                .unwrap_or_else(|| t(language.get(), "Custom", "سفارشی").to_string())
+        } else {
+            system_meta(value.get()).label(language.get()).to_string()
+        }
+    };
 
     view! {
         <div
@@ -174,15 +207,15 @@ fn DesignSystemPicker(
                 <span
                     class="zd-picker-dot"
                     style=move || {
-                        let active = system_meta(value.get());
+                        let dot = active_dot();
                         format!(
                             "background-color: {}; box-shadow: 0 0 0 2px {}26;",
-                            active.dot, active.dot,
+                            dot, dot,
                         )
                     }
                 ></span>
                 <span class="zd-picker-label">
-                    {move || system_meta(value.get()).label(language.get())}
+                    {active_label}
                 </span>
                 <span class=move || {
                     if open.get() {
@@ -214,46 +247,107 @@ fn DesignSystemPicker(
                     <p class="zd-picker-dropdown-header">
                         {move || t(language.get(), "Design system", "سیستم طراحی")}
                     </p>
-                    {DESIGN_SYSTEMS
-                        .iter()
-                        .map(|system| {
-                            let system = *system;
-                            view! {
-                                <button
-                                    type="button"
-                                    role="option"
-                                    aria-selected=move || (value.get() == system.id).to_string()
-                                    on:click=move |_| {
-                                        value.set(system.id);
-                                        open.set(false);
-                                    }
-                                    class=move || {
-                                        if value.get() == system.id {
-                                            "zd-picker-option zd-picker-option--selected"
-                                        } else {
-                                            "zd-picker-option"
+
+                    <div class="zd-picker-options-scroll">
+                        {DESIGN_SYSTEMS
+                            .iter()
+                            .map(|system| {
+                                let system = *system;
+                                view! {
+                                    <button
+                                        type="button"
+                                        role="option"
+                                        aria-selected=move || (value.get() == system.id).to_string()
+                                        on:click=move |_| {
+                                            value.set(system.id);
+                                            open.set(false);
                                         }
-                                    }
-                                >
-                                    <span
-                                        class="zd-picker-swatch"
-                                        style=format!("background-image: {}", system.swatch)
-                                    ></span>
-                                    <span class="zd-picker-option-meta">
-                                        <span class="zd-picker-option-title">
-                                            {move || system.label(language.get())}
+                                        class=move || {
+                                            if value.get() == system.id {
+                                                "zd-picker-option zd-picker-option--selected"
+                                            } else {
+                                                "zd-picker-option"
+                                            }
+                                        }
+                                    >
+                                        <span
+                                            class="zd-picker-swatch"
+                                            style=format!("background-image: {}", system.swatch)
+                                        ></span>
+                                        <span class="zd-picker-option-meta">
+                                            <span class="zd-picker-option-title">
+                                                {move || system.label(language.get())}
+                                            </span>
+                                            <span class="zd-picker-option-desc">
+                                                {move || system.tagline(language.get())}
+                                            </span>
                                         </span>
-                                        <span class="zd-picker-option-desc">
-                                            {move || system.tagline(language.get())}
+                                        <Show when=move || value.get() == system.id>
+                                            <Icon data=LuCheck size=14 class="zd-picker-option-check" />
+                                        </Show>
+                                    </button>
+                                }
+                            })
+                            .collect_view()}
+
+                        <Show when=move || custom_theme.get().is_some()>
+                            {move || {
+                                let ct = custom_theme.get().unwrap();
+                                let swatch = ct.swatch.clone();
+                                let name = ct.name.clone();
+                                view! {
+                                    <button
+                                        type="button"
+                                        role="option"
+                                        aria-selected=move || (value.get() == DesignSystemId::Custom).to_string()
+                                        on:click=move |_| {
+                                            value.set(DesignSystemId::Custom);
+                                            open.set(false);
+                                        }
+                                        class=move || {
+                                            if value.get() == DesignSystemId::Custom {
+                                                "zd-picker-option zd-picker-option--selected"
+                                            } else {
+                                                "zd-picker-option"
+                                            }
+                                        }
+                                    >
+                                        <span
+                                            class="zd-picker-swatch"
+                                            style=format!("background-image: {}", swatch)
+                                        ></span>
+                                        <span class="zd-picker-option-meta">
+                                            <span class="zd-picker-option-title">
+                                                {name}
+                                            </span>
+                                            <span class="zd-picker-option-desc">
+                                                {move || t(language.get(), "Custom Session Theme", "تم اختصاصی این سشن")}
+                                            </span>
                                         </span>
-                                    </span>
-                                    <Show when=move || value.get() == system.id>
-                                        <Icon data=LuCheck size=14 class="zd-picker-option-check" />
-                                    </Show>
-                                </button>
+                                        <Show when=move || value.get() == DesignSystemId::Custom>
+                                            <Icon data=LuCheck size=14 class="zd-picker-option-check" />
+                                        </Show>
+                                    </button>
+                                }
+                            }}
+                        </Show>
+                    </div>
+
+                    <div class="zd-picker-footer">
+                        <button
+                            type="button"
+                            class="zd-picker-builder-btn"
+                            on:click=move |_| {
+                                open.set(false);
+                                theme_builder_open.set(true);
                             }
-                        })
-                        .collect_view()}
+                        >
+                            <Icon data=LuPalette size=13 />
+                            <span>
+                                {move || t(language.get(), "Build Custom Theme (AI)…", "سازنده تم سفارشی (هوش مصنوعی)…")}
+                            </span>
+                        </button>
+                    </div>
                 </div>
             </Show>
         </div>

@@ -269,7 +269,10 @@ pub fn HistoryModal(
                                                                     mode.set(md);
                                                                     deep.set(is_deep);
                                                                     open.set(false);
-                                                                    generate(prompt, running, design_system, mode, deep, entries, Some(history));
+                                                                    generate(
+                                                                        prompt, running, design_system, mode, deep, entries,
+                                                                        Some(history), None, None, None, None, None, None,
+                                                                    );
                                                                 }
                                                                 title=move || t(lang, "Re-run this prompt immediately", "اجرای مجدد این پرامپت")
                                                             >
