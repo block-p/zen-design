@@ -215,7 +215,6 @@ pub fn AgentPanel(
                                 }
                             }
                             rows="4"
-                            maxlength="2000"
                             placeholder=move || {
                                 let lang = language.get();
                                 match mode.get() {
