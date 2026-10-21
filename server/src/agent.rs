@@ -258,7 +258,7 @@ impl AgentOrchestrator {
                     "status",
                     "🧠 Autonomous Research Agent: Analyzing domain, extracting core concepts, metrics & narrative structure…",
                 );
-                if let Ok(expanded) = expand_brief_with_research(&self.http, &settings, &req.prompt, &req.mode).await {
+                if let Ok(expanded) = expand_brief_with_research(&self.http, &settings, &req.prompt, &req.mode, req.duration_secs.unwrap_or(10)).await {
                     providers::emit_event(
                         &self.event_sender,
                         "status",
@@ -2449,6 +2449,7 @@ pub async fn expand_brief_with_research(
     settings: &Settings,
     prompt: &str,
     mode: &str,
+    duration_secs: u32,
 ) -> Result<String, String> {
     let is_persian = prompt.chars().any(|c| ('\u{0600}'..='\u{06FF}').contains(&c));
     let lang_instruction = if is_persian {
@@ -2458,9 +2459,23 @@ pub async fn expand_brief_with_research(
     };
 
     let duration_note = match mode {
-        "motion" => "For motion mode, construct a full timeline breakdown with sequential narrative scenes/beats that scale to the requested duration. Specify concrete visual assets (SVG shapes, stats, typography lines, timing percentages).",
-        "slides" => "For slides mode, construct an exact slide-by-slide deck (Cover, Problem, Architecture, Key Metrics, Deep Dive, Case Study, Conclusion) with specific content, titles, and stat callouts for every slide.",
-        _ => "For prototype mode, construct a full Product Requirements Document (PRD) with user journey, dashboard cards, table columns, interactive controls, and realistic dataset.",
+        "motion" => {
+            if duration_secs >= 60 {
+                let minutes = duration_secs / 60;
+                format!(
+                    "For LONG-FORM MOTION ({minutes} minutes / {duration_secs}s TOTAL RUNTIME):\n\
+                    - Break down into a complete multi-chapter episodic narrative (e.g. 6 to 10 distinct scenes/acts) spanning the FULL {duration_secs} SECONDS.\n\
+                    - For each chapter, specify: Timestamp range (e.g. 00:00-00:45), Chapter Title, Kinetic Typographic Message, Graphic/Data Visual Event (charts, metrics, node networks), and Camera transition.\n\
+                    - Crucial: The animation timeline must NOT finish early. Sustained pacing across the entire {duration_secs} seconds is strictly required."
+                )
+            } else {
+                format!(
+                    "For motion mode ({duration_secs}s runtime): Construct a 4-beat sequential narrative (Hook, Friction, Resolution, Climax) pacing across the entire {duration_secs}s with kinetic typography and SVG events."
+                )
+            }
+        }
+        "slides" => "For slides mode, construct an exact slide-by-slide deck (Cover, Problem, Architecture, Key Metrics, Deep Dive, Case Study, Conclusion) with specific content, titles, and stat callouts for every slide.".to_string(),
+        _ => "For prototype mode, construct a full Product Requirements Document (PRD) with user journey, dashboard cards, table columns, interactive controls, and realistic dataset.".to_string(),
     };
 
     let research_prompt = format!(
