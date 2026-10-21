@@ -1037,14 +1037,16 @@ AUDIO & CINEMATIC PROCEDURAL SOUND DESIGN (Web Audio API):
 - The piece MUST include high-production procedural audio using browser Web Audio API inside a <script> block.
 - NO external .mp3/.wav files or CDNs (all network requests are blocked by CSP). Synthesize sounds mathematically via AudioContext, OscillatorNode, GainNode, ConvolverNode/Delay, and BiquadFilterNode.
 - To sound professional, cinematic, and sleek (NEVER harsh, robotic, or cheap 8-bit beeps):
-  1. Cinematic Sub-Bass Impact (Bass Drop / Hit):
-     Use a clean sine wave starting at 90Hz dropping smoothly to 32Hz over 0.8s, passed through a lowpass filter (150Hz), with a soft 15ms attack and logarithmic decay (Gain 0.4 -> 0.001). Add a very subtle stereo detuned layer (e.g. +3 cents) for stereo warmth.
-  2. Elegant Glass / Kinetic Chime (Data / Metric reveal):
-     Harmonic chime chords: 2 or 3 layered sine oscillators tuned to musical intervals (e.g. Pentatonic / Fifth: E5 659Hz, B5 987Hz) with fast 5ms attack, sweet resonant bandpass filter, and 350ms gentle exponential decay.
-  3. Cinematic Ambient Whoosh / Air Riser (Scene wipes):
-     Filtered noise or multi-oscillator pitch sweep with soft low-pass filter (sweeping 200Hz -> 1400Hz -> 100Hz) and gentle stereo panning.
-  4. Subtle Kinetic Tick: Soft high-frequency muted click (0.015s, low volume 0.05).
-- Provide a sleek audio toggle button (Mute / Sound) in a corner. Resume AudioContext upon user gesture."#
+  1. Continuous Generative Ambient Soundtrack / Drone Pad:
+     A lush, warm polyphonic drone chord (e.g. D minor 9th / Pentatonic: 73.4Hz, 110Hz, 174.6Hz, 261.6Hz) using low-pass filtered sawtooth/sine oscillators (cutoff 280Hz–380Hz) with gentle LFO modulation and soft gain (0.05–0.08) playing continuously throughout the film so the film NEVER feels silent or empty.
+  2. Cinematic Sub-Bass Impact (Bass Drop / Scene Entry):
+     Clean sine wave starting at 90Hz dropping smoothly to 32Hz over 0.8s, passed through a lowpass filter (140Hz), with a soft 15ms attack and logarithmic decay (Gain 0.4 -> 0.001). Add a subtle stereo detuned layer (+3 cents) for stereo warmth.
+  3. Harmonic Glass Chimes (Data / Metric / Title reveals):
+     Layered sine oscillators tuned to musical intervals (Pentatonic: E5 659Hz, B5 987Hz) with fast 5ms attack, sweet resonant bandpass filter, and 350ms gentle exponential decay.
+  4. Cinematic Ambient Whoosh / Air Riser (Scene wipes):
+     Filtered noise or multi-oscillator pitch sweep with soft low-pass filter (sweeping 180Hz -> 1200Hz -> 100Hz) and gentle stereo panning.
+- Autoplay & User Gesture:
+  Provide a sleek, subtle floating audio button (e.g. "♪ صدا" / "✕ بی‌صدا") and automatically resume AudioContext on first click/key or show an unobtrusive start HUD."#
     } else {
         ""
     };
@@ -1108,13 +1110,14 @@ INTRICATE HERO GRAPHIC ARTIFACT IN EVERY BEAT:
   * Futuristic coordinate reticles, rotating degree dials, orbital satellite dots, or laser sweeps.
   * Morphing organic vectors or particle explosions.
 
-TIMELINE, DURATION & CHOREOGRAPHY:
-- Autoplay immediately, muted, with no click required. Total runtime: strictly {duration}s dynamic duration.
+TIMELINE, DURATION & CHOREOGRAPHY (STRICT PACING MANDATE):
+- Autoplay immediately, muted by default or with slick audio start overlay. Total runtime: strictly {duration}s dynamic duration.
 - Loop seamlessly, or hold the final cinematic mark and restart cleanly. The first frame must work as a film poster.
-- Multi-beat narrative pacing scaled to {duration}s:
-  * For short pieces (5–30s): 3–4 high-impact beats (Hook, Velocity/Data, Climax, Signature hold).
-  * For long-form pieces (1m–10m): A full narrative episodic sequence (6–15 distinct acts) pacing through the FULL {duration}s duration with evolving visual geometry, progressive kinetic typography, narrative voiceover sync, and layered timeline transitions so the film sustains motion throughout all {duration} seconds without finishing prematurely or freezing.
-- Cut between beats with cinematic transitions: camera scale-throughs (zooming 3x through a letter counter or geometric portal into the next scene), directional wipes, or 3D camera pan/tilt — NEVER just a lazy opacity cross-fade.
+- STRICT PACING MANDATE (NO DEAD TIME):
+  * NEVER leave a single visual graphic or camera angle static on screen for more than 3 to 4.5 seconds!
+  * Divide the {duration}s duration into a rich sequence of fast-paced rhythmic beats (each beat lasting 2.5s to 4.5s max).
+  * Within EVERY beat, there must be continuous sub-second momentum: oscillating waveforms, flowing particle vectors, rotating 3D wireframe geometries, orbiting electrons, laser scan lines, traveling light bursts, or camera perspective tilt.
+  * Transitions between beats MUST be visceral and cinematic: 3D scale-throughs (diving through a geometric portal or letter aperture), horizontal velocity wipes, glitch/displacement flashes, or camera roll — NEVER a sluggish 20-second static hold!
 {sfx_prompt}
 {tts_prompt}
 
@@ -1243,6 +1246,119 @@ pub fn build_user_prompt(prompt: &str, design_system: &str, mode: &str) -> Strin
     build_user_prompt_from_request(&dummy)
 }
 
+fn generate_motion_storyboard_plan(req: &PromptRequest) -> String {
+    let duration = req.duration_secs.unwrap_or(10).clamp(5, 600);
+    let prompt = req.prompt.trim();
+    let is_rtl = contains_rtl_script(prompt);
+
+    let beat_duration = if duration <= 15 {
+        3.0
+    } else if duration <= 30 {
+        3.5
+    } else if duration <= 60 {
+        4.0
+    } else {
+        4.5
+    };
+
+    let num_beats = ((duration as f64) / beat_duration).round() as usize;
+    let num_beats = num_beats.clamp(3, 16);
+    let actual_beat_len = (duration as f64) / (num_beats as f64);
+
+    let mut plan = String::new();
+    plan.push_str("\n\n════════════════════════════════════════════════════════════════\n");
+    plan.push_str("DIRECTOR'S STORYBOARD & TIMELINE IMPLEMENTATION PLAN\n");
+    plan.push_str("════════════════════════════════════════════════════════════════\n");
+    plan.push_str(&format!(
+        "Total Film Duration: {duration} seconds | Planned Rhythmic Beats: {num_beats} beats (~{:.1}s per beat)\n",
+        actual_beat_len
+    ));
+    plan.push_str("MANDATORY PACING MANDATE (NO DEAD TIME):\n- NEVER leave any single graphic or camera angle static on screen for more than 3 to 4.5 seconds!\n- Execute this concrete storyboard beat-by-beat with continuous momentum and visceral transitions:\n\n");
+
+    for i in 0..num_beats {
+        let t_start = (i as f64) * actual_beat_len;
+        let t_end = ((i + 1) as f64) * actual_beat_len;
+        let pct_start = ((i as f64) / (num_beats as f64) * 100.0).round() as u32;
+        let pct_end = (((i + 1) as f64) / (num_beats as f64) * 100.0).round() as u32;
+
+        let beat_role = if i == 0 {
+            "THE GENESIS & HOOK (Origins, cosmic/microscopic ignition, bold title statement)"
+        } else if i == 1 {
+            "THE ARCHITECTURE (Structural grid, isometric wireframe synthesis, blueprint vectors)"
+        } else if i == num_beats - 1 {
+            "THE FINALE & SIGNATURE (Culmination, iconic unified emblem, continuous kinetic horizon)"
+        } else if i == num_beats - 2 {
+            "THE SURGE & VELOCITY (High-frequency clock burst, maximum visual speed, data torrent)"
+        } else if i % 2 == 0 {
+            "THE DEEP PROCESS (Complex procedural SVG/Canvas centerpiece, metric evolution)"
+        } else {
+            "THE BREAKTHROUGH (Camera scale-through, kinetic typographic impact, frequency shift)"
+        };
+
+        plan.push_str(&format!(
+            "• Beat {:02} [{:.1}s – {:.1}s | {}%–{}%] — {}\n  - Camera & Motion: Active camera movement (zoom-through / 3D tilt / velocity wipe). Zero static stillness.\n  - Kinetic Typo: Massive masked reveal (2–4 words maximum in {}).\n  - Centerpiece Visual: Intricate animated SVG / Canvas procedural geometry synchronized with the beat.\n  - Audio Event: Sub-bass impact & synced harmonic riser/whoosh.\n\n",
+            i + 1,
+            t_start,
+            t_end,
+            pct_start,
+            pct_end,
+            beat_role,
+            if is_rtl { "natural Persian (فارسی)" } else { "concise English" }
+        ));
+    }
+
+    plan.push_str("TIMELINE CLOCK SPECIFICATION:
+- Driven by a unified `requestAnimationFrame(tick)` loop using `performance.now()`.
+- Calculates `elapsed = (now - startTime) / 1000`.
+- Continuously renders 60fps ambient background Canvas (micro-particles / light sweeps).
+- Evaluates beat triggers at the exact designated timestamps.
+- Hairline bottom progress bar smoothly interpolates `elapsed / TOTAL * 100%`.
+- Monospace counter displays `fmt(elapsed) + ' / ' + fmt(TOTAL)`.
+- At `elapsed >= TOTAL`, holds signature mark cleanly and seamlessly restarts after 2.5s.");
+
+    plan
+}
+
+fn generate_slides_implementation_plan(req: &PromptRequest) -> String {
+    let prompt = req.prompt.trim();
+    let is_rtl = contains_rtl_script(prompt);
+
+    let mut plan = String::new();
+    plan.push_str("\n\n════════════════════════════════════════════════════════════════\n");
+    plan.push_str("SLIDE DECK ARCHITECTURE & CONTENT IMPLEMENTATION PLAN\n");
+    plan.push_str("════════════════════════════════════════════════════════════════\n");
+    plan.push_str("Carefully structure the presentation with distinct, high-impact 16:9 slides:\n");
+    plan.push_str("1. Slide 1 (Cover): Bold title lockup, category badge, subtitle, and an authentic animated SVG/Canvas backdrop.\n");
+    plan.push_str("2. Slide 2 (Problem / Context): Core challenge, contextual metrics, and structured comparison cards.\n");
+    plan.push_str("3. Slide 3 (Core Architecture / Solution): Deep technical breakdown, procedural SVG node-diagram or schematic layout.\n");
+    plan.push_str("4. Slide 4 (Features / Capabilities): Bento grid matrix with distinct, non-repetitive feature specifications.\n");
+    plan.push_str("5. Slide 5 (Metrics & Impact): Key quantitative metrics, data visualization chart/bars, and growth indicators.\n");
+    plan.push_str("6. Slide 6 (Conclusion / Roadmap): Future vision, next steps, and unified signature contact/cta lockup.\n");
+    plan.push_str(&format!(
+        "Language & Direction: {}\n",
+        if is_rtl {
+            "Persian (فارسی) with `dir=\"rtl\"` and Vazirmatn font."
+        } else {
+            "English with Space Grotesk / Inter."
+        }
+    ));
+    plan.push_str("Each slide MUST be a fully fleshed out `<section class=\"slide\" id=\"sN\">` with unique content, clear hierarchy, and smooth slide navigation (`function go(n)`).");
+    plan
+}
+
+fn generate_prototype_implementation_plan(_req: &PromptRequest) -> String {
+    let mut plan = String::new();
+    plan.push_str("\n\n════════════════════════════════════════════════════════════════\n");
+    plan.push_str("PRODUCT PROTOTYPE SPECIFICATION & STATE MACHINE PLAN\n");
+    plan.push_str("════════════════════════════════════════════════════════════════\n");
+    plan.push_str("Implement a genuine, living software application shell with:\n");
+    plan.push_str("1. Application Shell: Persistent sidebar / top navigation, workspace toolbar, and responsive content canvas.\n");
+    plan.push_str("2. Living State Machine: Working tab switcher, live search/filtering input that filters list/grid items in real-time, interactive modal/drawer inspectors, and toggleable filters.\n");
+    plan.push_str("3. Authentic Domain Mock Data: Realistic names, timestamps, identifiers, and quantitative values — zero 'Lorem Ipsum'.\n");
+    plan.push_str("4. Bespoke Visual Centerpiece: Interactive SVG/Canvas data visualization or live metric sparklines.\n");
+    plan
+}
+
 pub fn build_user_prompt_from_request(req: &PromptRequest) -> String {
     let is_rtl = contains_rtl_script(&req.prompt);
     let lang_directive = if is_rtl {
@@ -1270,19 +1386,26 @@ Artifact type: INTERACTIVE PRODUCT / EDITORIAL ARTIFACT – include a working va
         }
     };
 
+    let implementation_plan = match req.mode.as_str() {
+        "motion" => generate_motion_storyboard_plan(req),
+        "slides" => generate_slides_implementation_plan(req),
+        _ => generate_prototype_implementation_plan(req),
+    };
+
     format!(
         "Brief:
 {}
 
 Design system id: {}
-Mode: {}{}{}
+Mode: {}{}{}{}
 
 Build the artifact now.",
         req.prompt.trim(),
         req.design_system,
         req.mode,
         artifact_type,
-        lang_directive
+        lang_directive,
+        implementation_plan
     )
 }
 
