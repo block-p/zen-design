@@ -3,7 +3,8 @@ use send_wrapper::SendWrapper;
 
 use crate::actions::{load_history, load_settings};
 use crate::components::{
-    AgentPanel, Header, HistoryModal, PreviewPanel, SettingsPanel, ThemeBuilderModal,
+    AgentPanel, Header, HistoryModal, PreviewPanel, SettingsPanel, SlidesEditorDrawer,
+    ThemeBuilderModal,
 };
 use crate::data::{
     ActivityEntry, ActivityKind, AspectRatio, ChatHistoryItem, ConnectionState, CustomThemeTokens,
@@ -72,6 +73,7 @@ pub fn App() -> impl IntoView {
 
     let preview_version = RwSignal::new(1_u64);
     let last_reload_at = RwSignal::new(None::<f64>);
+    let slides_drawer_open = RwSignal::new(false);
 
     let connection = RwSignal::new(ConnectionState::Connecting);
     let entries = RwSignal::new(Vec::<ActivityEntry>::new());
@@ -192,6 +194,7 @@ pub fn App() -> impl IntoView {
                         entries=entries
                         mode=mode
                         aspect_ratio=aspect_ratio
+                        slides_drawer_open=slides_drawer_open
                     />
                 </main>
 
@@ -221,6 +224,13 @@ pub fn App() -> impl IntoView {
                     open=theme_builder_open
                     custom_theme=custom_theme
                     design_system=design_system
+                    entries=entries
+                />
+
+                <SlidesEditorDrawer
+                    language=language
+                    open=slides_drawer_open
+                    preview_version=preview_version
                     entries=entries
                 />
             </div>

@@ -162,6 +162,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .route("/api/history/:id/activate", post(activate_history_item))
         .route("/api/history/new-project", post(new_project))
         .route("/api/themes/generate", post(generate_theme))
+        .route("/api/artifact", get(get_artifact).put(save_artifact))
         // Serve the agent's live output. ServeDir handles traversal protection
         // and content types; index.html is served for `/preview/`.
         .nest_service(
@@ -1067,6 +1068,49 @@ async fn new_project(State(state): State<AppState>) -> impl IntoResponse {
         Err(err) => (
             StatusCode::INTERNAL_SERVER_ERROR,
             Json(json!({ "status": "error", "message": err })),
+        )
+            .into_response(),
+    }
+}
+
+#[derive(Debug, Deserialize)]
+struct SaveArtifactPayload {
+    html: String,
+}
+
+async fn get_artifact(State(state): State<AppState>) -> impl IntoResponse {
+    let index_path = state.workspace.join("index.html");
+    match std::fs::read_to_string(&index_path) {
+        Ok(html) => (
+            StatusCode::OK,
+            Json(json!({ "status": "ok", "html": html })),
+        )
+            .into_response(),
+        Err(err) => (
+            StatusCode::NOT_FOUND,
+            Json(json!({ "status": "error", "message": err.to_string() })),
+        )
+            .into_response(),
+    }
+}
+
+async fn save_artifact(
+    State(state): State<AppState>,
+    Json(payload): Json<SaveArtifactPayload>,
+) -> impl IntoResponse {
+    let index_path = state.workspace.join("index.html");
+    match std::fs::write(&index_path, payload.html) {
+        Ok(()) => {
+            providers::emit_event(
+                &state.event_sender,
+                "reload",
+                "Artifact updated via manual slides editor.",
+            );
+            (StatusCode::OK, Json(json!({ "status": "ok" }))).into_response()
+        }
+        Err(err) => (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(json!({ "status": "error", "message": err.to_string() })),
         )
             .into_response(),
     }

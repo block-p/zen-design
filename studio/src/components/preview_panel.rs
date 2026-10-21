@@ -1,7 +1,8 @@
 use std::cell::Cell;
 
 use icondata_lu::{
-    LuDownload, LuExternalLink, LuGlobe, LuLoaderCircle, LuPresentation, LuRotateCw, LuTriangleAlert,
+    LuDownload, LuExternalLink, LuGlobe, LuLoaderCircle, LuPenLine, LuPresentation, LuRotateCw,
+    LuSave, LuTriangleAlert,
 };
 use leptos::prelude::*;
 
@@ -45,10 +46,79 @@ pub fn PreviewPanel(
     entries: RwSignal<Vec<ActivityEntry>>,
     mode: RwSignal<ModeId>,
     aspect_ratio: RwSignal<AspectRatio>,
+    slides_drawer_open: RwSignal<bool>,
 ) -> impl IntoView {
     let frame_status = RwSignal::new(FrameStatus::Loading);
     let has_loaded = RwSignal::new(false);
     let iframe_ref = NodeRef::<leptos::html::Iframe>::new();
+    let is_editing_inplace = RwSignal::new(false);
+    let is_saving_inplace = RwSignal::new(false);
+
+    // Toggle contenteditable on the iframe body
+    let toggle_inplace_edit = move || {
+        let next = !is_editing_inplace.get();
+        is_editing_inplace.set(next);
+
+        if let Some(frame) = iframe_ref.get_untracked() {
+            if let Some(doc) = frame.content_document() {
+                if let Some(body) = doc.body() {
+                    let _ = body.set_attribute("contenteditable", if next { "true" } else { "false" });
+                    if next {
+                        let _ = body.set_attribute("style", "outline: 2px dashed #6366f1; outline-offset: -2px; cursor: text;");
+                    } else {
+                        let _ = body.remove_attribute("style");
+                    }
+                }
+            }
+        }
+    };
+
+    // Save in-place edited HTML back to server
+    let save_inplace_content = move || {
+        if is_saving_inplace.get() {
+            return;
+        }
+        let Some(frame) = iframe_ref.get_untracked() else { return; };
+        let Some(doc) = frame.content_document() else { return; };
+        let Some(doc_elem) = doc.document_element() else { return; };
+
+        // Clean up editing attributes before saving
+        if let Some(body) = doc.body() {
+            let _ = body.remove_attribute("contenteditable");
+            let _ = body.remove_attribute("style");
+        }
+        is_editing_inplace.set(false);
+
+        let html = format!("<!DOCTYPE html>\n{}", doc_elem.outer_html());
+        is_saving_inplace.set(true);
+        let lang = language.get();
+
+        leptos::task::spawn_local(async move {
+            let body = serde_json::json!({ "html": html });
+            match gloo_net::http::Request::put("/api/artifact")
+                .header("Content-Type", "application/json")
+                .body(body.to_string())
+            {
+                Ok(req) => match req.send().await {
+                    Ok(resp) if resp.ok() => {
+                        is_saving_inplace.set(false);
+                        preview_version.update(|v| *v = v.saturating_add(1));
+                        crate::stream::push_activity(
+                            entries,
+                            crate::data::ActivityKind::Done,
+                            t(lang, "In-place slide edits saved.", "تغییرات درون‌متنی اسلاید ذخیره شد."),
+                        );
+                    }
+                    _ => {
+                        is_saving_inplace.set(false);
+                    }
+                },
+                Err(_) => {
+                    is_saving_inplace.set(false);
+                }
+            }
+        });
+    };
 
     // A fresh version begins a fresh watchdog. It must never overwrite a
     // successfully loaded frame: before this guard, an idle studio (no reload
@@ -247,6 +317,66 @@ pub fn PreviewPanel(
                                 })
                                 .collect_view()}
                         </div>
+                    </Show>
+
+                    <Show when=move || mode.get() == ModeId::Slides>
+                        <div class="zd-preview-divider"></div>
+
+                        <!-- In-place visual edit toggle -->
+                        <button
+                            type="button"
+                            class=move || {
+                                if is_editing_inplace.get() {
+                                    "zd-btn-soft zd-btn-slide-edit zd-btn-slide-edit--active"
+                                } else {
+                                    "zd-btn-soft zd-btn-slide-edit"
+                                }
+                            }
+                            on:click=move |_| toggle_inplace_edit()
+                            title=move || {
+                                if is_editing_inplace.get() {
+                                    t(language.get(), "Finish in-place editing", "پایان ویرایش درون‌متنی")
+                                } else {
+                                    t(language.get(), "Edit slide text directly on canvas", "ویرایش مستقیم متن اسلاید روی صفحه")
+                                }
+                            }
+                        >
+                            <Icon data=LuPenLine size=12 />
+                            <span>
+                                {move || {
+                                    if is_editing_inplace.get() {
+                                        t(language.get(), "Editing…", "در حال ویرایش…")
+                                    } else {
+                                        t(language.get(), "Edit In-Place", "ویرایش روی بوم")
+                                    }
+                                }}
+                            </span>
+                        </button>
+
+                        <!-- Save In-place changes button (shown when editing) -->
+                        <Show when=move || is_editing_inplace.get()>
+                            <button
+                                type="button"
+                                class="zd-btn-primary zd-btn-slide-save"
+                                disabled=move || is_saving_inplace.get()
+                                on:click=move |_| save_inplace_content()
+                                title=move || t(language.get(), "Save your in-place edits to disk", "ذخیره تغییرات روی دیسک")
+                            >
+                                <Icon data=LuSave size=12 />
+                                <span>{move || t(language.get(), "Save", "ذخیره")}</span>
+                            </button>
+                        </Show>
+
+                        <!-- Slides Drawer & Deck Inspector button -->
+                        <button
+                            type="button"
+                            class="zd-btn-soft zd-btn-slide-deck"
+                            on:click=move |_| slides_drawer_open.set(true)
+                            title=move || t(language.get(), "Open Slides Deck Inspector & Source Editor", "باز کردن پنل مدیریت اسلایدها و ویرایشگر کد")
+                        >
+                            <Icon data=LuPresentation size=12 />
+                            <span>{move || t(language.get(), "Deck Editor", "مدیریت اسلایدها")}</span>
+                        </button>
                     </Show>
 
                     <div class="zd-preview-divider"></div>
