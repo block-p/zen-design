@@ -253,21 +253,40 @@ impl AgentOrchestrator {
             let needs_expansion = is_short_brief || req.mode == "slides" || req.mode == "motion";
             
             if needs_expansion {
-                providers::emit_event(
-                    &self.event_sender,
-                    "status",
-                    "🧠 Autonomous Research Agent: Analyzing domain, extracting core concepts, metrics & narrative structure…",
-                );
+                if req.mode == "motion" {
+                    providers::emit_event(
+                        &self.event_sender,
+                        "status",
+                        "🎬 Motion Creative Director: Choreographing cinematic storyboard, visual beats & kinetic typography…",
+                    );
+                } else {
+                    providers::emit_event(
+                        &self.event_sender,
+                        "status",
+                        "🧠 Autonomous Research Agent: Analyzing domain, extracting core concepts, metrics & narrative structure…",
+                    );
+                }
                 if let Ok(expanded) = expand_brief_with_research(&self.http, &settings, &req.prompt, &req.mode, req.duration_secs.unwrap_or(10)).await {
                     providers::emit_event(
                         &self.event_sender,
                         "status",
-                        "✨ Deep outline & structural concepts generated. Composing final artifact…",
+                        if req.mode == "motion" {
+                            "✨ Cinematic storyboard & kinetic choreography ready. Composing motion film…"
+                        } else {
+                            "✨ Deep outline & structural concepts generated. Composing final artifact…"
+                        },
                     );
-                    req.prompt = format!(
-                        "User Request: {}\n\nDETAILED RESEARCH & STRUCTURED SPECIFICATION:\n{}",
-                        req.prompt, expanded
-                    );
+                    if req.mode == "motion" {
+                        req.prompt = format!(
+                            "User Creative Brief: {}\n\nCINEMATIC MOTION STORYBOARD & ART TREATMENT (STRICTLY NO SLIDES, NO CARDS - PURE KINETIC MOTION GRAPHICS):\n{}",
+                            req.prompt, expanded
+                        );
+                    } else {
+                        req.prompt = format!(
+                            "User Request: {}\n\nDETAILED RESEARCH & STRUCTURED SPECIFICATION:\n{}",
+                            req.prompt, expanded
+                        );
+                    }
                 }
             }
         }
@@ -1007,80 +1026,78 @@ TEXT-TO-SPEECH (TTS) NARRATION ENABLED:
     };
 
     format!(
-        r#"You are ZenDesign Motion: a motion designer and creative technologist. You turn a
-brief into one self-playing motion piece that runs in the browser. You are not building a
-website. You are building a short film made of HTML, CSS, SVG and JavaScript.
+        r#"You are ZenDesign Motion: an elite motion designer and creative technologist (calibre of Apple Keynote product films, Studio Freight, Buck, ManvsMachine, and Claude Opus 4.6 art direction).
+You turn the user's brief into a jaw-dropping, cinema-grade kinetic motion piece that runs in the browser.
+You are NOT building a website. You are NOT building a presentation slide deck.
+You are directing a high-production motion graphics film composed purely of HTML5, CSS3, dynamic SVG and JavaScript.
 
-Design tokens (derive tints with color-mix() or alpha; never invent new hues):
+Design tokens (palette — derive tints with color-mix() or alpha; never invent conflicting hues):
 - background: {bg}
 - text: {text}
 - accent: {accent}
 - font stack: {font}
-- card background: {card_bg}
-- border: {border}
 
-ARTIFACT — this overrides every website instinct:
+ABSOLUTE PROHIBITIONS (CATASTROPHIC FAILURE CRITERIA):
+- ZERO CARDS OR BOXES: Absolutely NO rectangular cards, NO rounded containers with borders, NO presentation slide cards, NO card grids, NO dashboard panels. If your output contains cards or boxes with titles and descriptions, IT IS AN IMMEDIATE FAILURE.
+- ZERO BULLET POINTS OR PARAGRAPHS: Do NOT display paragraphs of text or bulleted lists. A motion film communicates visually through bold kinetic typography (2 to 5 words max per beat) and synchronized graphic events.
+- ZERO WEBSITE CHROME: No headers with pill badges, no navbars, no buttons competing with the film.
+
+THE CANVAS & ATMOSPHERE:
 - {artboard_desc}
-- NO nav bar, header, footer, hero, feature grid, pricing, testimonials, FAQ, contact form,
-  CTA row or "sections". If the file contains these, it is the wrong artifact.
-- The only chrome allowed: a tiny replay button and pause toggle in one corner plus a
-  hairline progress bar. Understated, low contrast, no labels competing with the film.
-- Autoplay immediately, muted, with no click required. Total runtime: strictly {duration}s dynamic duration. Loop
-  seamlessly, or hold the end card and restart cleanly. The first frame must work as a
-  poster.
-- Multi-beat narrative structure scaled to runtime:
-  * For short pieces (5–30s): 3–5 high-impact beats, 8–15s each.
-  * For long-form pieces (1m–10m): A full narrative episodic sequence (e.g. 6–15 distinct scenes or chapters) pacing through the full {duration}s duration with varied visual events, continuous ambient motion, dynamic data updates, narrative voiceover sync, and layered timeline transitions so the content sustains the entire {duration} seconds without finishing prematurely or freezing.
-- Cut between beats with a mask, wipe, scale-through, camera pan, or a hard cut — not just opacity fades.
+- Deep cinematic atmosphere: the stage is boundless. Use subtle ambient radial lighting (e.g. radial-gradient(circle at 50% 50%, color-mix(in srgb, {accent} 16%, transparent), transparent 75%)), travelling light rays, or interactive HTML5 Canvas micro-particles drifting in deep space.
+- Spatial depth & parallax: structure the scene across 3 depth planes:
+  * Background: Ambient lighting or floating constellation/dust.
+  * Midground: Intricate animated SVG geometry and massive kinetic typography.
+  * Foreground: Floating optical coordinates, hairline crosshairs or parallax particles.
+
+KINETIC TYPOGRAPHY AS PROTAGONIST:
+- Kinetic typography is the hero visual art. Treat typography as physical, kinetic sculpture:
+  * Giant display scale: clamp(48px, 8vw, 130px) (or 96px–180px on 1440×900).
+  * Ultra-tight tracking: letter-spacing: -0.04em to -0.055em; line-height: 0.90 to 0.98; heavy font weights (800–900).
+  * Mandatory masked reveals: Wrap lines or words in overflow:hidden containers. Animate them with translateY(115%) -> translateY(0%) using snappy easing cubic-bezier(0.16, 1, 0.3, 1), or clip-path: polygon(0 0, 100% 0, 100% 100%, 0 100%).
+  * Stagger siblings: delay each word or letter by 40–80ms for rhythmic entry.
+  * Dynamic typographic behavior: tracking expansion/compression, chromatic text shadow, or filled-to-stroked outline shift.
+
+INTRICATE HERO GRAPHIC ARTIFACT IN EVERY BEAT:
+- Text is NEVER alone. Every single beat MUST feature an intricate inline SVG or HTML5 Canvas visual centerpiece:
+  * Concentric 3D isometric rings rotating on multiple axes (transform: rotateX(60deg) rotateZ(...)) with glowing gradient accents and dashed tick marks.
+  * Dynamic SVG spline curves drawing in real-time using stroke-dasharray and stroke-dashoffset (e.g. glowing metrics graph, biometric waveforms).
+  * Futuristic coordinate reticles, rotating degree dials, orbital satellite dots, or laser sweeps.
+  * Morphing organic vectors or particle explosions.
+
+TIMELINE, DURATION & CHOREOGRAPHY:
+- Autoplay immediately, muted, with no click required. Total runtime: strictly {duration}s dynamic duration.
+- Loop seamlessly, or hold the final cinematic mark and restart cleanly. The first frame must work as a film poster.
+- Multi-beat narrative pacing scaled to {duration}s:
+  * For short pieces (5–30s): 3–4 high-impact beats (Hook, Velocity/Data, Climax, Signature hold).
+  * For long-form pieces (1m–10m): A full narrative episodic sequence (6–15 distinct acts) pacing through the FULL {duration}s duration with evolving visual geometry, progressive kinetic typography, narrative voiceover sync, and layered timeline transitions so the film sustains motion throughout all {duration} seconds without finishing prematurely or freezing.
+- Cut between beats with cinematic transitions: camera scale-throughs (zooming 3x through a letter counter or geometric portal into the next scene), directional wipes, or 3D camera pan/tilt — NEVER just a lazy opacity cross-fade.
 {sfx_prompt}
 {tts_prompt}
 
-STORY AND TYPE:
-- Match the content volume to the duration:
-  * For short motion (under 30s): One crisp idea, 10–30 words of bold copy, a launch line, a stat, a final mark.
-  * For long motion (1–10 minutes): Rich multi-scene storytelling, progressive product or concept explanation, chapters, evolving statistics, diagrammatic breakdowns, and continuous narrative copy (synchronized with TTS narration if provided). Never stop animating before {duration}s.
-- Kinetic typography is required. Use at least three techniques: masked line or word
-  reveals, split-letter stagger, tracking that tightens or opens, outlined-to-filled type,
-  vertical counter-scroll, or type that scales through the camera.
-- Display type is the protagonist: 96–180px on the 1440×900 artboard, tight tracking,
-  line-height 0.9–1.05. Keep every word inside a 64px safe margin.
-- Include at least one non-type graphic event: an SVG path drawing itself, a counting
-  statistic, bars growing, a dot field, a shape morph, a wireframe horizon or particle drift.
+MOTION GRAMMAR & EASING:
+- Build the timeline with CSS @keyframes and animation-delay, or the Web Animations API / requestAnimationFrame. Everything shares one clock.
+- Easing:
+  * Entrances: 400–800ms with cubic-bezier(0.16, 1, 0.3, 1) [expo out].
+  * Exits: 250–450ms with cubic-bezier(0.7, 0, 0.84, 0) or scale-through zoom into camera.
+  * Holds: 800–1800ms.
+- Animate transform, opacity, clip-path and filter only. Never animate top/left/width/height. Hold 60fps.
+- Continuous ambient momentum: subtle micro-rotation or particle drift so the composition is NEVER static or frozen.
 
-MOTION GRAMMAR:
-- Build the timeline with CSS @keyframes and animation-delay, or the Web Animations API.
-  Everything shares one clock so the loop has no visible seam.
-- Entrances 400–800ms with cubic-bezier(0.16, 1, 0.3, 1); exits 250–450ms with
-  cubic-bezier(0.7, 0, 0.84, 0); holds 500–1200ms; stagger siblings 40–80ms.
-- Animate transform, opacity, clip-path and filter only. Never animate top/left/width/
-  height. No huge blur() surfaces. Hold 60fps.
-- Ambient motion (slow drift, a travelling hairline) may run underneath, but must not
-  fight the beats. No full-frame grain, animated noise or canvas texture: it lowers type
-  contrast and reads as a filter over the film. If a static texture is essential, keep it
-  at or below 3% opacity and never over type. No flashing above 3Hz; no random per-frame
-  jitter except a deliberate particle field.
-
-COLOUR, TYPE, TASTE:
-- One art direction, one accent moment. The background may invert once as a beat. Body
-  text clears 4.5:1, display text 3:1. Hairline rules, generous negative space, optical
-  centring.
-- No glassmorphism, gradient blobs, neon glow unless the tokens are neon, and no emoji.
-- Use only the token font stack. Inline SVG for marks and graphics. No external requests.
+MINIMALIST CONTROLS CHROME:
+- Ultra-understated: a single hairline 2px progress bar pinned to the bottom edge with a glowing accent tip.
+- Sleek elapsed counter (e.g. 00:04 / {duration}s) in monospace 11px font at low opacity.
+- Minimalist floating replay and sound toggle buttons in the corner with no card or box background.
 
 TECHNICAL:
-- One complete HTML5 document, one <style> and one <script>. No libraries, CDNs, web fonts
-  or remote images. Under ~100KB. No console errors.
-- Autoplay must survive the preview iframe: no user-gesture APIs, no audio.
-- prefers-reduced-motion: show the composed end frame as a static poster and keep replay
-  working. Keyboard: Space pauses/resumes, R replays.
+- One complete HTML5 document, one <style> and one <script>. No external libraries, CDNs, web fonts or remote images. Under ~100KB. No console errors.
+- prefers-reduced-motion: show the composed end frame as a static poster and keep replay working. Keyboard: Space pauses/resumes, R replays.
 
-SELF-CHECK — do this before replying. If any answer is wrong, rewrite the file:
-1. Does the HTML contain <nav>, <header>, <footer>, "pricing", "features", "FAQ" or a CTA
-   row? Then it is a website. Delete those and rebuild it as a film.
-2. Are there at least 3 distinct beats and 8+ animated elements on one timeline?
-3. Does it autoplay, run the full dynamic requested duration of {duration}s, and loop or hold cleanly?
-4. Would the first frame read as a poster for a motion piece, not a homepage?
-5. Is every word legible at 1280×720?
+SELF-CHECK — verify before replying:
+1. Does the HTML contain ANY cards, bordered boxes, slide containers, or presentation card grids? If yes, DELETE them immediately.
+2. Is the typography massive, masked, and kinetic, rather than small body copy in boxes?
+3. Is there an intricate animated SVG or Canvas graphic centerpiece in every beat?
+4. Does it autoplay, run the full dynamic requested duration of {duration}s, and loop or hold cleanly?
 
 Output contract:
 - Return ONE complete HTML document in a single ```html fenced code block. No commentary.
@@ -1089,8 +1106,6 @@ Output contract:
         text = tokens.text,
         accent = tokens.accent,
         font = tokens.font_family,
-        card_bg = tokens.card_bg,
-        border = tokens.border_color,
         artboard_desc = artboard_desc,
         duration = duration,
         sfx_prompt = sfx_prompt,
@@ -1728,7 +1743,7 @@ fn generate_motion_html(req: &PromptRequest, tokens: &DesignTokens) -> String {
     let tts_text = req.tts_text.as_deref().unwrap_or("").trim();
     let tts_lang = req.tts_lang.as_deref().unwrap_or("fa-IR");
 
-    let (artboard_style, artboard_dims) = match aspect_ratio {
+    let (artboard_style, _artboard_dims) = match aspect_ratio {
         "9:16" => (
             "width: 720px; height: 1280px; aspect-ratio: 9/16; transform: translate(-50%, -50%) scale(min(calc(100vw / 750), calc(100vh / 1320)));",
             "720 × 1280 (Mobile / Reels)",
@@ -1761,11 +1776,11 @@ fn generate_motion_html(req: &PromptRequest, tokens: &DesignTokens) -> String {
     <meta charset="UTF-8">
     {csp}
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>ZenDesign Motion Piece</title>
+    <title>ZenDesign Cinematic Motion Piece</title>
     <style>
         * {{ margin: 0; padding: 0; box-sizing: border-box; }}
         body {{
-            background: #000000;
+            background: #050608;
             color: {text};
             font-family: {font_family};
             width: 100vw;
@@ -1780,286 +1795,388 @@ fn generate_motion_html(req: &PromptRequest, tokens: &DesignTokens) -> String {
             top: 50%;
             left: 50%;
             transform-origin: center center;
-            background: {bg};
-            border-radius: 20px;
+            background: radial-gradient(circle at 50% 50%, color-mix(in srgb, {accent} 14%, {bg}) 0%, {bg} 85%);
             overflow: hidden;
-            border: 1px solid {border_color};
-            box-shadow: 0 25px 60px -15px rgba(0, 0, 0, 0.7);
+            box-shadow: 0 40px 100px -20px rgba(0, 0, 0, 0.85);
             {artboard_style}
             display: flex;
             flex-direction: column;
             justify-content: space-between;
-            padding: 48px;
+            perspective: 1200px;
         }}
-        .top-bar {{
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            z-index: 10;
+        #ambientCanvas {{
+            position: absolute;
+            inset: 0;
+            width: 100%;
+            height: 100%;
+            pointer-events: none;
+            opacity: 0.65;
+            z-index: 1;
         }}
-        .brand-pill {{
-            display: flex;
-            align-items: center;
-            gap: 10px;
-            padding: 8px 16px;
-            background: {card_bg};
-            border: 1px solid {border_color};
-            border-radius: 9999px;
-            font-size: 13px;
-            font-weight: 600;
-            letter-spacing: 0.05em;
-        }}
-        .brand-dot {{
-            width: 8px;
-            height: 8px;
-            border-radius: 50%;
-            background: {accent};
-            box-shadow: 0 0 12px {accent};
-            animation: pulse 2s infinite ease-in-out;
-        }}
-        .controls-pill {{
-            display: flex;
-            align-items: center;
-            gap: 8px;
-            background: {card_bg};
-            border: 1px solid {border_color};
-            border-radius: 9999px;
-            padding: 6px 12px;
-        }}
-        .ctrl-btn {{
-            background: transparent;
-            border: none;
-            color: {text};
-            cursor: pointer;
-            padding: 4px 8px;
-            font-size: 13px;
-            border-radius: 6px;
-            transition: all 0.2s;
-            opacity: 0.85;
-        }}
-        .ctrl-btn:hover {{ opacity: 1; transform: scale(1.08); }}
 
-        /* Timeline Beats */
+        /* Ambient Lighting Beam */
+        .light-beam {{
+            position: absolute;
+            width: 600px;
+            height: 600px;
+            border-radius: 50%;
+            background: radial-gradient(circle, {accent}35 0%, transparent 70%);
+            filter: blur(80px);
+            pointer-events: none;
+            z-index: 1;
+            animation: beamFloat {duration}s infinite alternate ease-in-out;
+        }}
+        @keyframes beamFloat {{
+            0% {{ transform: translate(-20%, -20%) scale(0.9); }}
+            100% {{ transform: translate(120%, 70%) scale(1.3); }}
+        }}
+
+        /* Stage & Kinetic Choreography */
         .stage {{
             position: relative;
             flex: 1;
             display: flex;
             align-items: center;
             justify-content: center;
-            text-align: center;
+            z-index: 2;
         }}
         .beat {{
             position: absolute;
-            width: 100%;
-            max-width: 90%;
+            inset: 0;
             display: flex;
             flex-direction: column;
             align-items: center;
             justify-content: center;
+            text-align: center;
+            padding: 0 64px;
             opacity: 0;
             pointer-events: none;
         }}
-        
+
         /* Dynamic keyframes synced to {duration}s */
-        .beat-1 {{ animation: beat1Animation {duration}s infinite cubic-bezier(0.16, 1, 0.3, 1); }}
-        .beat-2 {{ animation: beat2Animation {duration}s infinite cubic-bezier(0.16, 1, 0.3, 1); }}
-        .beat-3 {{ animation: beat3Animation {duration}s infinite cubic-bezier(0.16, 1, 0.3, 1); }}
+        .beat-1 {{ animation: beat1Motion {duration}s infinite cubic-bezier(0.16, 1, 0.3, 1); }}
+        .beat-2 {{ animation: beat2Motion {duration}s infinite cubic-bezier(0.16, 1, 0.3, 1); }}
+        .beat-3 {{ animation: beat3Motion {duration}s infinite cubic-bezier(0.16, 1, 0.3, 1); }}
 
-        @keyframes beat1Animation {{
-            0% {{ opacity: 0; transform: translateY(40px) scale(0.96); }}
-            6% {{ opacity: 1; transform: translateY(0) scale(1); }}
-            28% {{ opacity: 1; transform: translateY(0) scale(1.02); }}
-            34% {{ opacity: 0; transform: translateY(-30px) scale(1.04); }}
+        @keyframes beat1Motion {{
+            0% {{ opacity: 0; transform: scale(0.92) translateZ(-60px); }}
+            5% {{ opacity: 1; transform: scale(1) translateZ(0); }}
+            28% {{ opacity: 1; transform: scale(1.02) translateZ(10px); }}
+            34% {{ opacity: 0; transform: scale(1.15) translateZ(80px); filter: blur(8px); }}
             100% {{ opacity: 0; }}
         }}
 
-        @keyframes beat2Animation {{
-            0%, 32% {{ opacity: 0; transform: scale(0.9) rotate(-3deg); }}
-            38% {{ opacity: 1; transform: scale(1) rotate(0deg); }}
-            62% {{ opacity: 1; transform: scale(1.03) rotate(0deg); }}
-            68% {{ opacity: 0; transform: scale(1.08) rotate(2deg); }}
+        @keyframes beat2Motion {{
+            0%, 32% {{ opacity: 0; transform: scale(0.85) translateZ(-80px); filter: blur(6px); }}
+            37% {{ opacity: 1; transform: scale(1) translateZ(0); filter: blur(0); }}
+            62% {{ opacity: 1; transform: scale(1.02) translateZ(15px); }}
+            68% {{ opacity: 0; transform: scale(1.18) translateZ(90px); filter: blur(8px); }}
             100% {{ opacity: 0; }}
         }}
 
-        @keyframes beat3Animation {{
-            0%, 66% {{ opacity: 0; transform: translateY(50px) scale(0.92); }}
-            72% {{ opacity: 1; transform: translateY(0) scale(1); }}
-            94% {{ opacity: 1; transform: translateY(0) scale(1.01); }}
-            99% {{ opacity: 0; transform: translateY(-20px) scale(1.03); }}
+        @keyframes beat3Motion {{
+            0%, 66% {{ opacity: 0; transform: scale(0.88) translateZ(-60px); filter: blur(6px); }}
+            71% {{ opacity: 1; transform: scale(1) translateZ(0); filter: blur(0); }}
+            94% {{ opacity: 1; transform: scale(1.01) translateZ(5px); }}
+            99% {{ opacity: 0; transform: scale(1.08) translateZ(40px); }}
             100% {{ opacity: 0; }}
         }}
 
-        .display-title {{
-            font-size: clamp(32px, 5vw, 68px);
-            font-weight: 900;
-            letter-spacing: -0.03em;
-            line-height: 1.08;
+        /* Kinetic Typography Masking */
+        .mask-container {{
+            overflow: hidden;
+            display: block;
+            margin-bottom: 8px;
+        }}
+        .mask-child {{
+            display: inline-block;
+            transform: translateY(115%);
+            animation: textRise {duration}s infinite cubic-bezier(0.16, 1, 0.3, 1);
+        }}
+        .beat-1 .mask-child {{ animation-name: textRise1; }}
+        .beat-2 .mask-child {{ animation-name: textRise2; }}
+        .beat-3 .mask-child {{ animation-name: textRise3; }}
+
+        @keyframes textRise1 {{
+            0% {{ transform: translateY(115%); }}
+            6%, 28% {{ transform: translateY(0); }}
+            34%, 100% {{ transform: translateY(-115%); }}
+        }}
+        @keyframes textRise2 {{
+            0%, 33% {{ transform: translateY(115%); }}
+            38%, 62% {{ transform: translateY(0); }}
+            68%, 100% {{ transform: translateY(-115%); }}
+        }}
+        @keyframes textRise3 {{
+            0%, 67% {{ transform: translateY(115%); }}
+            72%, 95% {{ transform: translateY(0); }}
+            100% {{ transform: translateY(-115%); }}
+        }}
+
+        .mono-tag {{
+            font-size: 13px;
+            font-weight: 700;
+            letter-spacing: 0.35em;
+            text-transform: uppercase;
+            color: {accent};
             margin-bottom: 20px;
+            opacity: 0.9;
+        }}
+        .kinetic-headline {{
+            font-size: clamp(48px, 7.5vw, 108px);
+            font-weight: 900;
+            letter-spacing: -0.045em;
+            line-height: 0.95;
             text-wrap: balance;
+            max-width: 1100px;
+        }}
+        .kinetic-subtext {{
+            font-size: clamp(16px, 2.2vw, 24px);
+            font-weight: 400;
+            letter-spacing: -0.01em;
+            opacity: 0.75;
+            margin-top: 24px;
+            max-width: 680px;
+            line-height: 1.45;
         }}
         .accent-gradient {{
-            color: {accent};
-            text-shadow: 0 0 35px {accent}55;
-        }}
-        .kinetic-badge {{
-            display: inline-block;
-            padding: 8px 24px;
-            border-radius: 9999px;
-            font-size: 14px;
-            font-weight: 700;
-            text-transform: uppercase;
-            letter-spacing: 0.15em;
-            background: {accent}20;
-            color: {accent};
-            border: 1px solid {accent}50;
-            margin-bottom: 24px;
-        }}
-        .metrics-row {{
-            display: flex;
-            gap: 24px;
-            justify-content: center;
-            flex-wrap: wrap;
-            margin-top: 24px;
-        }}
-        .metric-card {{
-            background: {card_bg};
-            border: 1px solid {border_color};
-            padding: 24px 36px;
-            border-radius: 18px;
-            text-align: center;
-            min-width: 180px;
-        }}
-        .metric-val {{
-            font-size: clamp(28px, 4vw, 54px);
-            font-weight: 900;
-            color: {accent};
-        }}
-        .metric-lbl {{
-            font-size: 13px;
-            opacity: 0.7;
-            text-transform: uppercase;
-            letter-spacing: 0.08em;
-            margin-top: 4px;
+            background: linear-gradient(135deg, {text} 20%, {accent} 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
         }}
 
-        /* Subtitle Bar */
-        .subtitles-banner {{
-            z-index: 10;
-            background: rgba(0, 0, 0, 0.65);
-            backdrop-filter: blur(16px);
-            border: 1px solid {border_color};
-            border-radius: 14px;
-            padding: 12px 24px;
-            text-align: center;
-            font-size: 15px;
-            font-weight: 500;
-            max-width: 800px;
-            margin: 0 auto 12px auto;
-            color: #ffffff;
-            box-shadow: 0 8px 32px rgba(0,0,0,0.4);
-        }}
-
-        /* Progress Bar */
-        .timeline-bar {{
-            width: 100%;
-            height: 4px;
-            background: {border_color};
-            border-radius: 2px;
-            overflow: hidden;
+        /* Hero Animated SVG Centerpiece */
+        .gyro-container {{
+            width: 220px;
+            height: 220px;
             position: relative;
+            margin-bottom: 28px;
+            transform-style: preserve-3d;
         }}
-        .timeline-fill {{
+        .gyro-ring {{
+            position: absolute;
+            inset: 0;
+            border-radius: 50%;
+            border: 2px dashed {accent}66;
+            animation: gyroSpin 14s infinite linear;
+        }}
+        .gyro-ring-1 {{
+            border-style: solid;
+            border-color: {accent}99;
+            transform: rotateX(65deg) rotateY(15deg);
+            animation-duration: 9s;
+        }}
+        .gyro-ring-2 {{
+            transform: rotateX(-45deg) rotateY(55deg);
+            animation-direction: reverse;
+            animation-duration: 13s;
+        }}
+        .gyro-ring-3 {{
+            transform: rotateX(20deg) rotateZ(45deg);
+            animation-duration: 18s;
+            border-width: 1px;
+            border-color: {accent}44;
+        }}
+        .gyro-core {{
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            width: 32px;
+            height: 32px;
+            border-radius: 50%;
+            background: {accent};
+            box-shadow: 0 0 40px 10px {accent};
+            animation: corePulse 2s infinite ease-in-out;
+        }}
+        @keyframes gyroSpin {{
+            0% {{ transform: rotateX(65deg) rotateY(15deg) rotateZ(0deg); }}
+            100% {{ transform: rotateX(65deg) rotateY(15deg) rotateZ(360deg); }}
+        }}
+        @keyframes corePulse {{
+            0%, 100% {{ transform: translate(-50%, -50%) scale(1); opacity: 0.9; }}
+            50% {{ transform: translate(-50%, -50%) scale(1.35); opacity: 1; }}
+        }}
+
+        /* Beat 2 SVG Waveform */
+        .wave-svg {{
+            width: 580px;
+            height: 140px;
+            margin: 20px 0;
+            overflow: visible;
+        }}
+        .wave-path {{
+            stroke-dasharray: 800;
+            stroke-dashoffset: 800;
+            animation: drawWave {duration}s infinite cubic-bezier(0.16, 1, 0.3, 1);
+        }}
+        @keyframes drawWave {{
+            0%, 33% {{ stroke-dashoffset: 800; }}
+            42%, 62% {{ stroke-dashoffset: 0; }}
+            68%, 100% {{ stroke-dashoffset: -800; }}
+        }}
+        .stat-mega {{
+            font-size: clamp(64px, 10vw, 130px);
+            font-weight: 900;
+            letter-spacing: -0.05em;
+            line-height: 0.9;
+            color: {accent};
+            text-shadow: 0 0 50px {accent}66;
+        }}
+
+        /* Minimalist Controls & Timeline Chrome */
+        .bottom-hud {{
+            position: relative;
+            z-index: 10;
+            padding: 24px 36px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+        }}
+        .time-counter {{
+            font-family: monospace;
+            font-size: 12px;
+            letter-spacing: 0.1em;
+            opacity: 0.5;
+        }}
+        .hud-actions {{
+            display: flex;
+            align-items: center;
+            gap: 16px;
+        }}
+        .hud-btn {{
+            background: transparent;
+            border: none;
+            color: {text};
+            cursor: pointer;
+            font-size: 12px;
+            font-weight: 600;
+            letter-spacing: 0.05em;
+            opacity: 0.6;
+            transition: all 0.2s;
+        }}
+        .hud-btn:hover {{
+            opacity: 1;
+            color: {accent};
+        }}
+        .hairline-progress {{
+            position: absolute;
+            bottom: 0;
+            left: 0;
+            width: 100%;
+            height: 2px;
+            background: rgba(255, 255, 255, 0.08);
+            z-index: 20;
+        }}
+        .hairline-fill {{
             height: 100%;
             width: 100%;
             background: {accent};
-            box-shadow: 0 0 10px {accent};
+            box-shadow: 0 0 12px {accent};
             transform-origin: left center;
-            animation: progressAnimation {duration}s linear infinite;
+            animation: lineProgress {duration}s linear infinite;
         }}
-        @keyframes progressAnimation {{
+        @keyframes lineProgress {{
             0% {{ transform: scaleX(0); }}
             100% {{ transform: scaleX(1); }}
         }}
-        @keyframes pulse {{
-            0%, 100% {{ opacity: 1; transform: scale(1); }}
-            50% {{ opacity: 0.4; transform: scale(0.85); }}
+
+        .subtitles-banner {{
+            position: absolute;
+            bottom: 56px;
+            left: 50%;
+            transform: translateX(-50%);
+            z-index: 10;
+            font-size: 15px;
+            font-weight: 500;
+            color: {text};
+            opacity: 0.8;
+            letter-spacing: 0.02em;
+            text-align: center;
+            text-shadow: 0 2px 10px rgba(0,0,0,0.8);
+            max-width: 800px;
         }}
     </style>
 </head>
 <body>
     <div class="motion-artboard" id="artboard">
-        <div class="top-bar">
-            <div class="brand-pill">
-                <span class="brand-dot"></span>
-                <span>ZenDesign Motion &bull; {artboard_dims} &bull; {duration}s &bull; DS: {design_system} &bull; Mode: {mode}</span>
-            </div>
-            <div class="controls-pill">
-                <button class="ctrl-btn" id="voiceBtn" title="Play Voiceover & Audio">
-                    <span>🎙 Voiceover</span>
-                </button>
-                <button class="ctrl-btn" id="sfxBtn" title="Sound Effects">
-                    <span id="sfxIcon">🔊 SFX</span>
-                </button>
-                <button class="ctrl-btn" id="restartBtn" title="Replay">
-                    <span>⟳ Restart</span>
-                </button>
-            </div>
-        </div>
+        <canvas id="ambientCanvas"></canvas>
+        <div class="light-beam"></div>
 
         <div class="stage">
-            <!-- Beat 1: Launch Kinetic Title -->
+            <!-- Beat 1: The Kinetic Launch Hook -->
             <div class="beat beat-1">
-                <span class="kinetic-badge">ZEN MOTION SEQUENCE</span>
-                <h1 class="display-title">{headline}</h1>
-                <p style="font-size: 18px; opacity: 0.8; max-width: 600px; line-height: 1.6;">
-                    Crafted with synchronized dynamic timeline and native procedural synthesis.
+                <div class="gyro-container">
+                    <div class="gyro-ring gyro-ring-1"></div>
+                    <div class="gyro-ring gyro-ring-2"></div>
+                    <div class="gyro-ring gyro-ring-3"></div>
+                    <div class="gyro-core"></div>
+                </div>
+                <div class="mono-tag">KINETIC SEQUENCE &bull; {duration}S RUNTIME</div>
+                <div class="mask-container">
+                    <h1 class="kinetic-headline mask-child">
+                        {headline}
+                    </h1>
+                </div>
+                <p class="kinetic-subtext">
+                    Engineered with native procedural audio synthesis and 60 FPS choreography.
                 </p>
             </div>
 
-            <!-- Beat 2: Core Numbers & Radar -->
+            <!-- Beat 2: Kinetic Data & Dynamic Spline -->
             <div class="beat beat-2">
-                <div style="font-size: 14px; text-transform: uppercase; letter-spacing: 0.2em; color: {accent}; font-weight: 700; margin-bottom: 12px;">
-                    Velocity &bull; Precision &bull; Art Direction
+                <div class="mono-tag">DYNAMIC COMPUTATIONAL VELOCITY</div>
+                <div class="mask-container">
+                    <div class="stat-mega mask-child">99.9%</div>
                 </div>
-                <div class="display-title">
-                    <span class="accent-gradient">60 FPS</span> Dynamic Real-time Flow
-                </div>
-                <div class="metrics-row">
-                    <div class="metric-card">
-                        <div class="metric-val">{duration}s</div>
-                        <div class="metric-lbl">Timeline Span</div>
-                    </div>
-                    <div class="metric-card">
-                        <div class="metric-val">100%</div>
-                        <div class="metric-lbl">Local / Zero-CDN</div>
-                    </div>
-                    <div class="metric-card">
-                        <div class="metric-val">0ms</div>
-                        <div class="metric-lbl">Audio Latency</div>
+                <svg class="wave-svg" viewBox="0 0 580 140" fill="none">
+                    <defs>
+                        <linearGradient id="waveGrad" x1="0" y1="0" x2="580" y2="0" gradientUnits="userSpaceOnUse">
+                            <stop offset="0%" stop-color="{accent}" stop-opacity="0.2"/>
+                            <stop offset="50%" stop-color="{accent}" stop-opacity="1"/>
+                            <stop offset="100%" stop-color="{text}" stop-opacity="0.8"/>
+                        </linearGradient>
+                    </defs>
+                    <path class="wave-path" d="M 10 70 Q 150 10, 290 70 T 570 70" stroke="url(#waveGrad)" stroke-width="4" stroke-linecap="round"/>
+                </svg>
+                <div class="mask-container">
+                    <div class="kinetic-subtext mask-child" style="margin-top: 0;">
+                        Zero Overhead &bull; Pure Native Web Technology &bull; Unbounded Execution
                     </div>
                 </div>
             </div>
 
-            <!-- Beat 3: Grand Finale & Mark -->
+            <!-- Beat 3: Grand Finale & Hero Signature -->
             <div class="beat beat-3">
-                <div style="width: 72px; height: 72px; border-radius: 20px; background: {accent}; color: white; display: flex; align-items: center; justify-content: center; font-size: 36px; font-weight: 900; box-shadow: 0 0 50px {accent}88; margin-bottom: 24px;">
-                    Z
+                <div style="width: 80px; height: 80px; border-radius: 50%; border: 2px solid {accent}; display: flex; align-items: center; justify-content: center; margin-bottom: 24px; box-shadow: 0 0 60px {accent}88; background: {accent}18;">
+                    <span style="font-size: 38px; font-weight: 900; color: {accent};">Z</span>
                 </div>
-                <h2 class="display-title">Designed for Distinction</h2>
-                <p style="font-size: 16px; opacity: 0.75; letter-spacing: 0.05em;">
-                    Engineered by ZenDesign AI &bull; Seamless Continuous Loop
+                <div class="mask-container">
+                    <h2 class="kinetic-headline mask-child accent-gradient">
+                        DESIGNED FOR DISTINCTION
+                    </h2>
+                </div>
+                <p class="kinetic-subtext">
+                    Continuous Autonomous Intelligence &bull; ZenDesign Motion
                 </p>
             </div>
         </div>
 
-        <div>
-            <!-- Subtitle box if TTS active -->
-            <div class="subtitles-banner" id="subtitleBox" style="{subtitle_display}">
-                "{tts_clean}"
+        <div class="subtitles-banner" id="subtitleBox" style="{subtitle_display}">
+            "{tts_clean}"
+        </div>
+
+        <div class="bottom-hud">
+            <div class="time-counter" id="timeCounter">00:00 / 00:{duration}</div>
+            <div class="hud-actions">
+                <button class="hud-btn" id="voiceBtn" title="Play Voiceover">🎙 Voiceover</button>
+                <button class="hud-btn" id="sfxBtn" title="Toggle SFX"><span id="sfxIcon">🔊 SFX</span></button>
+                <button class="hud-btn" id="restartBtn" title="Replay">⟳ Replay</button>
             </div>
-            <div class="timeline-bar">
-                <div class="timeline-fill" id="timelineProgress"></div>
-            </div>
+        </div>
+
+        <div class="hairline-progress">
+            <div class="hairline-fill" id="timelineProgress"></div>
         </div>
     </div>
 
@@ -2068,6 +2185,65 @@ fn generate_motion_html(req: &PromptRequest, tokens: &DesignTokens) -> String {
         const HAS_SFX = {sfx_enabled};
         const TTS_TEXT = "{tts_clean_js}";
         const TTS_LANG = "{tts_lang}";
+
+        // Canvas ambient starfield
+        (function initCanvas() {{
+            const canvas = document.getElementById('ambientCanvas');
+            const ctx = canvas.getContext('2d');
+            let w, h, particles = [];
+
+            function resize() {{
+                w = canvas.width = canvas.offsetWidth;
+                h = canvas.height = canvas.offsetHeight;
+                particles = [];
+                for (let i = 0; i < 45; i++) {{
+                    particles.push({{
+                        x: Math.random() * w,
+                        y: Math.random() * h,
+                        r: Math.random() * 1.5 + 0.5,
+                        dx: (Math.random() - 0.5) * 0.4,
+                        dy: (Math.random() - 0.5) * 0.4,
+                        alpha: Math.random() * 0.5 + 0.2
+                    }});
+                }}
+            }}
+            window.addEventListener('resize', resize);
+            resize();
+
+            function draw() {{
+                ctx.clearRect(0, 0, w, h);
+                particles.forEach(p => {{
+                    p.x += p.dx;
+                    p.y += p.dy;
+                    if (p.x < 0) p.x = w;
+                    if (p.x > w) p.x = 0;
+                    if (p.y < 0) p.y = h;
+                    if (p.y > h) p.y = 0;
+
+                    ctx.beginPath();
+                    ctx.arc(p.x, p.y, p.r, 0, Math.PI * 2);
+                    ctx.fillStyle = `rgba(255, 255, 255, ${{p.alpha}})`;
+                    ctx.fill();
+                }});
+                requestAnimationFrame(draw);
+            }}
+            draw();
+        }})();
+
+        // Elapsed time counter
+        (function initTimer() {{
+            const el = document.getElementById('timeCounter');
+            const start = performance.now();
+            function pad(n) {{ return n < 10 ? '0' + n : n; }}
+            function tick(now) {{
+                const elapsed = ((now - start) / 1000) % DURATION;
+                const secs = Math.floor(elapsed);
+                const totalSecs = DURATION;
+                el.textContent = `00:${{pad(secs)}} / ${{pad(Math.floor(totalSecs / 60))}}:${{pad(totalSecs % 60)}}`;
+                requestAnimationFrame(tick);
+            }}
+            requestAnimationFrame(tick);
+        }})();
 
         let audioCtx = null;
         let sfxMuted = !HAS_SFX;
@@ -2087,7 +2263,6 @@ fn generate_motion_html(req: &PromptRequest, tokens: &DesignTokens) -> String {
             try {{
                 const ctx = getAudioContext();
                 const now = ctx.currentTime;
-                // Deep warm sub-bass drop with lowpass filter (no harsh buzz)
                 const osc = ctx.createOscillator();
                 const filter = ctx.createBiquadFilter();
                 const gain = ctx.createGain();
@@ -2117,7 +2292,6 @@ fn generate_motion_html(req: &PromptRequest, tokens: &DesignTokens) -> String {
             try {{
                 const ctx = getAudioContext();
                 const now = ctx.currentTime;
-                // Elegant dual harmonic glass chime (musical E5 + B5)
                 [659.25, 987.77].forEach((freq, idx) => {{
                     const osc = ctx.createOscillator();
                     const gain = ctx.createGain();
@@ -2148,7 +2322,6 @@ fn generate_motion_html(req: &PromptRequest, tokens: &DesignTokens) -> String {
             try {{
                 const ctx = getAudioContext();
                 const now = ctx.currentTime;
-                // Soft cinematic air riser & swoosh with lowpass filter
                 const osc = ctx.createOscillator();
                 const filter = ctx.createBiquadFilter();
                 const gain = ctx.createGain();
@@ -2186,7 +2359,6 @@ fn generate_motion_html(req: &PromptRequest, tokens: &DesignTokens) -> String {
             }} catch(e) {{}}
         }}
 
-        // Schedule SFX beats
         function scheduleAudioBeats() {{
             if (sfxMuted) return;
             playPunch();
@@ -2228,7 +2400,6 @@ fn generate_motion_html(req: &PromptRequest, tokens: &DesignTokens) -> String {
             scheduleAudioBeats();
         }});
 
-        // Auto audio beat loop
         if (HAS_SFX) {{
             setInterval(() => {{
                 scheduleAudioBeats();
@@ -2242,10 +2413,7 @@ fn generate_motion_html(req: &PromptRequest, tokens: &DesignTokens) -> String {
         text = tokens.text,
         accent = tokens.accent,
         font_family = tokens.font_family,
-        card_bg = tokens.card_bg,
-        border_color = tokens.border_color,
         artboard_style = artboard_style,
-        artboard_dims = artboard_dims,
         duration = duration,
         headline = headline,
         tts_clean = tts_clean,
@@ -2253,8 +2421,6 @@ fn generate_motion_html(req: &PromptRequest, tokens: &DesignTokens) -> String {
         tts_lang = tts_lang,
         subtitle_display = if tts_text.is_empty() { "display: none;" } else { "display: block;" },
         sfx_enabled = if sfx { "true" } else { "false" },
-        design_system = escape_html(&req.design_system),
-        mode = escape_html(&req.mode),
     )
 }
 
@@ -2458,28 +2624,62 @@ pub async fn expand_brief_with_research(
         "Respond in concise, professional English."
     };
 
-    let duration_note = match mode {
-        "motion" => {
-            if duration_secs >= 60 {
-                let minutes = duration_secs / 60;
-                format!(
-                    "For LONG-FORM MOTION ({minutes} minutes / {duration_secs}s TOTAL RUNTIME):\n\
-                    - Break down into a complete multi-chapter episodic narrative (e.g. 6 to 10 distinct scenes/acts) spanning the FULL {duration_secs} SECONDS.\n\
-                    - For each chapter, specify: Timestamp range (e.g. 00:00-00:45), Chapter Title, Kinetic Typographic Message, Graphic/Data Visual Event (charts, metrics, node networks), and Camera transition.\n\
-                    - Crucial: The animation timeline must NOT finish early. Sustained pacing across the entire {duration_secs} seconds is strictly required."
-                )
-            } else {
-                format!(
-                    "For motion mode ({duration_secs}s runtime): Construct a 4-beat sequential narrative (Hook, Friction, Resolution, Climax) pacing across the entire {duration_secs}s with kinetic typography and SVG events."
-                )
-            }
-        }
-        "slides" => "For slides mode, construct an exact slide-by-slide deck (Cover, Problem, Architecture, Key Metrics, Deep Dive, Case Study, Conclusion) with specific content, titles, and stat callouts for every slide.".to_string(),
-        _ => "For prototype mode, construct a full Product Requirements Document (PRD) with user journey, dashboard cards, table columns, interactive controls, and realistic dataset.".to_string(),
-    };
+    let (system_role, research_prompt) = if mode == "motion" {
+        let structure_guide = if duration_secs >= 60 {
+            let minutes = duration_secs / 60;
+            format!(
+                "LONG-FORM EPISODIC MOTION FILM ({minutes} min / {duration_secs}s TOTAL RUNTIME):\n\
+                - Design 6 to 10 sequential cinematic acts spanning exactly {duration_secs} seconds.\n\
+                - For each act: specify Exact Timestamp range (e.g. 00:00-00:30), Hero Visual Graphic / Particle / SVG metaphor, Punchy Kinetic Typography (MAX 2-4 words per beat, NO paragraphs), and Camera transition.\n\
+                - The motion timeline must sustain dynamic energy continuously throughout all {duration_secs} seconds."
+            )
+        } else {
+            format!(
+                "SHORT-FORM MOTION PIECE ({duration_secs}s runtime):\n\
+                - 4 cinematic beats (Hook, Friction/Velocity, Breakthrough, Climax/Signature mark).\n\
+                - In each beat: specify the visual centerpiece (e.g., 3D SVG isometric rings, glowing spline curve drawing, particle constellation), the massive kinetic headline (2-4 words max), and dynamic camera move (scale-through, directional wipe)."
+            )
+        };
 
-    let research_prompt = format!(
-        r#"You are ZenDesign's Lead Autonomous Product Architect & Creative Director.
+        (
+            "You are an elite Motion Film Creative Director (Apple Keynote, Buck, Studio Freight). You choreograph cinematic visual storyboards with kinetic typography and vector geometry. You strictly forbid slides, cards, or paragraphs.",
+            format!(
+                r#"You are ZenDesign's World-Class Motion Film Director (calibre of Apple Keynote product reveals, Buck, Studio Freight, ManvsMachine).
+The user wants a cinema-grade kinetic motion piece for:
+"{prompt}"
+
+Your mission is to construct a CHOREOGRAPHED VISUAL STORYBOARD & MOTION TREATMENT for the frontend animation engine.
+
+STRICT MOTION DIRECTIVES (OVERRIDE ALL PRESENTATION/SLIDE INSTINCTS):
+1. THIS IS A FILM, NOT A SLIDE PRESENTATION.
+   - Absolutely NO slides, NO UI cards, NO rectangular bordered boxes, NO bulleted lists, NO paragraphs of body text.
+   - Every single beat is high-impact visual art: massive kinetic typography, animated vector geometry, optical depth, camera scale-throughs, and particle drift.
+
+2. STORYBOARD & SHOT CHOREOGRAPHY:
+{structure_guide}
+
+3. VISUAL ARTIFACTS & HERO GRAPHICS:
+   - Detail the intricate inline SVG geometry, 3D rotating rings, procedural waveforms, or particle effects rendered in each scene.
+   - Detail the kinetic typography behavior (masked line reveals, split-word stagger, tracking compression, scale-through).
+
+4. COLOR, MOOD & ATMOSPHERE:
+   - Deep cinematic backdrop, lighting halos, accent energy pulses.
+
+{lang_instruction}
+Deliver a crisp, director-level motion storyboard ready for instantaneous animation."#
+            )
+        )
+    } else {
+        let duration_note = if mode == "slides" {
+            "For slides mode, construct an exact slide-by-slide deck (Cover, Problem, Architecture, Key Metrics, Deep Dive, Case Study, Conclusion) with specific content, titles, and stat callouts for every slide.".to_string()
+        } else {
+            "For prototype mode, construct a full Product Requirements Document (PRD) with user journey, dashboard cards, table columns, interactive controls, and realistic dataset.".to_string()
+        };
+
+        (
+            "You are an elite Research & Product Architect. You turn brief inputs into deep, comprehensive domain breakdowns.",
+            format!(
+                r#"You are ZenDesign's Lead Autonomous Product Architect & Creative Director.
 The user gave this brief for a {mode}:
 "{prompt}"
 
@@ -2503,7 +2703,9 @@ Create a high-impact, professional architectural plan:
 
 {lang_instruction}
 Make it deeply comprehensive, structured, and immediately actionable for production."#
-    );
+            )
+        )
+    };
 
     match settings.provider.as_str() {
         PROVIDER_OPENAI => {
@@ -2517,7 +2719,7 @@ Make it deeply comprehensive, structured, and immediately actionable for product
                 "model": model,
                 "temperature": 0.6,
                 "messages": [
-                    { "role": "system", "content": "You are an elite Research & Product Architect. You turn brief inputs into deep, comprehensive domain breakdowns." },
+                    { "role": "system", "content": system_role },
                     { "role": "user", "content": research_prompt }
                 ]
             });
@@ -2552,6 +2754,7 @@ Make it deeply comprehensive, structured, and immediately actionable for product
             }
             let body = serde_json::json!({
                 "model": model,
+                "system": system_role,
                 "max_tokens": 2048,
                 "messages": [
                     { "role": "user", "content": research_prompt }
