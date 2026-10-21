@@ -1221,7 +1221,12 @@ CORE PRESENTATION ARCHITECTURE:
      * Fullscreen toggle on key "f" or clicking a small fullscreen button.
    - Slide transitions: Fluid 250–350ms transitions (clean fade + subtle 12px translateX/Y slide).
 
-6. TECHNICAL & OUTPUT CONTRACT:
+6. VISUAL LAYOUTS & PRINT EXPORT:
+   - Provide CSS for `.bento-grid`, `.stats-grid`, `.split-grid`, `.timeline-steps`, `.comparison-grid`.
+   - Provide `@media print` rules: each `.slide` is `position: relative !important; display: block !important; opacity: 1 !important; page-break-after: always;` and controls have `display: none !important;`.
+   - Provide slide speaker notes via `data-speaker-notes="..."`.
+
+7. TECHNICAL & OUTPUT CONTRACT:
    - Exactly ONE complete self-contained HTML5 file with all CSS in `<style>` and JavaScript in `<script>`.
    - NO external dependencies, no CDNs, no web fonts, no external image links. Use inline SVG icons where needed.
    - Return ONLY the ```html fenced code block with zero preambles or chat commentary."#,

@@ -24,7 +24,7 @@ use axum::{
     Json, Router,
 };
 use futures_util::stream::{self, Stream, StreamExt};
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 use serde_json::json;
 use tokio::sync::{broadcast, Mutex, RwLock};
 use tokio_stream::wrappers::{BroadcastStream, IntervalStream};
@@ -162,6 +162,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .route("/api/history/:id/activate", post(activate_history_item))
         .route("/api/history/new-project", post(new_project))
         .route("/api/themes/generate", post(generate_theme))
+        .route("/api/slides/ai-action", post(slide_ai_action))
         .route("/api/artifact", get(get_artifact).put(save_artifact))
         // Serve the agent's live output. ServeDir handles traversal protection
         // and content types; index.html is served for `/preview/`.
@@ -1235,6 +1236,735 @@ fn generate_algorithmic_theme(prompt: &str) -> CustomThemeTokens {
             swatch,
         }
     }
+}
+
+#[derive(Deserialize)]
+struct SlideAiPayload {
+    action: String, // "rewrite_slide", "summarize", "kpi_stats", "add_slide", "speaker_notes", "transform_layout"
+    #[serde(default)]
+    instruction: Option<String>,
+    #[serde(default)]
+    title: Option<String>,
+    #[serde(default)]
+    badge: Option<String>,
+    #[serde(default)]
+    subtitle: Option<String>,
+    #[serde(default)]
+    items: Option<Vec<String>>,
+    #[serde(default)]
+    target_layout: Option<String>,
+}
+
+#[derive(Serialize, Deserialize, Clone)]
+struct SlideAiResult {
+    badge: String,
+    title: String,
+    subtitle: String,
+    items: Vec<String>,
+    speaker_notes: String,
+    layout: String,
+    html_snippet: String,
+    source: String,
+}
+
+fn html_escape(s: &str) -> String {
+    s.replace('&', "&amp;")
+        .replace('<', "&lt;")
+        .replace('>', "&gt;")
+        .replace('"', "&quot;")
+        .replace('\'', "&#39;")
+}
+
+fn render_slide_html(
+    badge: &str,
+    title: &str,
+    subtitle: &str,
+    items: &[String],
+    speaker_notes: &str,
+    layout: &str,
+) -> String {
+    let notes_attr = if !speaker_notes.is_empty() {
+        format!(" data-speaker-notes=\"{}\"", html_escape(speaker_notes))
+    } else {
+        String::new()
+    };
+
+    match layout {
+        "bento" => {
+            let mut cards_html = String::new();
+            for (i, item) in items.iter().enumerate() {
+                let extra_cls = if i == 0 { " bento-hero" } else { "" };
+                cards_html.push_str(&format!(
+                    "        <div class=\"card{}\"><p>{}</p></div>\n",
+                    extra_cls,
+                    html_escape(item)
+                ));
+            }
+            format!(
+                r#"    <section class="slide" data-layout="bento"{notes_attr}>
+        <div class="slide-content">
+            <span class="category-badge">{badge}</span>
+            <h2 class="display-title">{title}</h2>
+            <p class="body-text">{subtitle}</p>
+            <div class="cards-grid bento-grid">
+{cards_html}            </div>
+        </div>
+    </section>"#,
+                badge = html_escape(badge),
+                title = html_escape(title),
+                subtitle = html_escape(subtitle),
+                notes_attr = notes_attr,
+                cards_html = cards_html
+            )
+        }
+        "stats" => {
+            let mut stats_html = String::new();
+            for (i, item) in items.iter().enumerate() {
+                let (val, label) = if let Some(pos) = item.find(':') {
+                    (&item[..pos], &item[pos + 1..])
+                } else if let Some(pos) = item.find(" - ") {
+                    (&item[..pos], &item[pos + 3..])
+                } else {
+                    let parts: Vec<&str> = item.split_whitespace().collect();
+                    if parts.len() >= 2
+                        && (parts[0].starts_with('+')
+                            || parts[0].ends_with('%')
+                            || parts[0].chars().any(|c| c.is_ascii_digit()))
+                    {
+                        (parts[0], item[parts[0].len()..].trim())
+                    } else {
+                        (item.as_str(), "")
+                    }
+                };
+                let display_val = if val.trim().is_empty() {
+                    format!("0{}", i + 1)
+                } else {
+                    val.trim().to_string()
+                };
+                let display_lbl = if label.trim().is_empty() {
+                    item.trim().to_string()
+                } else {
+                    label.trim().to_string()
+                };
+                stats_html.push_str(&format!(
+                    r#"        <div class="card stat-card">
+            <div class="stat-val">{}</div>
+            <div class="stat-label">{}</div>
+        </div>
+"#,
+                    html_escape(&display_val),
+                    html_escape(&display_lbl)
+                ));
+            }
+            format!(
+                r#"    <section class="slide" data-layout="stats"{notes_attr}>
+        <div class="slide-content">
+            <span class="category-badge">{badge}</span>
+            <h2 class="display-title">{title}</h2>
+            <p class="body-text">{subtitle}</p>
+            <div class="stats-grid">
+{stats_html}            </div>
+        </div>
+    </section>"#,
+                badge = html_escape(badge),
+                title = html_escape(title),
+                subtitle = html_escape(subtitle),
+                notes_attr = notes_attr,
+                stats_html = stats_html
+            )
+        }
+        "split" => {
+            let mut cards_html = String::new();
+            for item in items {
+                cards_html.push_str(&format!(
+                    "            <div class=\"card\"><p>{}</p></div>\n",
+                    html_escape(item)
+                ));
+            }
+            format!(
+                r#"    <section class="slide" data-layout="split"{notes_attr}>
+        <div class="slide-content split-grid">
+            <div class="split-col-text">
+                <span class="category-badge">{badge}</span>
+                <h2 class="display-title">{title}</h2>
+                <p class="body-text">{subtitle}</p>
+            </div>
+            <div class="split-col-cards">
+{cards_html}            </div>
+        </div>
+    </section>"#,
+                badge = html_escape(badge),
+                title = html_escape(title),
+                subtitle = html_escape(subtitle),
+                notes_attr = notes_attr,
+                cards_html = cards_html
+            )
+        }
+        "timeline" => {
+            let mut steps_html = String::new();
+            for (i, item) in items.iter().enumerate() {
+                steps_html.push_str(&format!(
+                    r#"        <div class="timeline-step">
+            <div class="step-num">{:02}</div>
+            <div class="step-body"><p>{}</p></div>
+        </div>
+"#,
+                    i + 1,
+                    html_escape(item)
+                ));
+            }
+            format!(
+                r#"    <section class="slide" data-layout="timeline"{notes_attr}>
+        <div class="slide-content">
+            <span class="category-badge">{badge}</span>
+            <h2 class="display-title">{title}</h2>
+            <p class="body-text">{subtitle}</p>
+            <div class="timeline-steps">
+{steps_html}            </div>
+        </div>
+    </section>"#,
+                badge = html_escape(badge),
+                title = html_escape(title),
+                subtitle = html_escape(subtitle),
+                notes_attr = notes_attr,
+                steps_html = steps_html
+            )
+        }
+        "comparison" => {
+            let mut cards_html = String::new();
+            for (i, item) in items.iter().enumerate() {
+                let tag = if i % 2 == 0 {
+                    "گزینه اول / Before"
+                } else {
+                    "گزینه دوم / After"
+                };
+                cards_html.push_str(&format!(
+                    r#"        <div class="card comparison-col">
+            <div class="comparison-tag">{}</div>
+            <p>{}</p>
+        </div>
+"#,
+                    tag,
+                    html_escape(item)
+                ));
+            }
+            format!(
+                r#"    <section class="slide" data-layout="comparison"{notes_attr}>
+        <div class="slide-content">
+            <span class="category-badge">{badge}</span>
+            <h2 class="display-title">{title}</h2>
+            <p class="body-text">{subtitle}</p>
+            <div class="comparison-grid">
+{cards_html}            </div>
+        </div>
+    </section>"#,
+                badge = html_escape(badge),
+                title = html_escape(title),
+                subtitle = html_escape(subtitle),
+                notes_attr = notes_attr,
+                cards_html = cards_html
+            )
+        }
+        _ => {
+            let mut cards_html = String::new();
+            for item in items {
+                cards_html.push_str(&format!(
+                    "            <div class=\"card\"><p>{}</p></div>\n",
+                    html_escape(item)
+                ));
+            }
+            format!(
+                r#"    <section class="slide" data-layout="grid"{notes_attr}>
+        <div class="slide-content">
+            <span class="category-badge">{badge}</span>
+            <h2 class="display-title">{title}</h2>
+            <p class="body-text">{subtitle}</p>
+            <div class="cards-grid">
+{cards_html}            </div>
+        </div>
+    </section>"#,
+                badge = html_escape(badge),
+                title = html_escape(title),
+                subtitle = html_escape(subtitle),
+                notes_attr = notes_attr,
+                cards_html = cards_html
+            )
+        }
+    }
+}
+
+fn generate_algorithmic_slide_action(
+    action: &str,
+    instruction: &str,
+    curr_title: &str,
+    curr_badge: &str,
+    curr_subtitle: &str,
+    curr_items: &[String],
+    target_layout: &str,
+) -> SlideAiResult {
+    let is_persian = format!("{action} {instruction} {curr_title} {curr_subtitle}")
+        .chars()
+        .any(|c| ('\u{0600}'..='\u{06FF}').contains(&c));
+
+    let layout = if !target_layout.is_empty() {
+        target_layout.to_string()
+    } else if action == "kpi_stats" {
+        "stats".to_string()
+    } else {
+        "bento".to_string()
+    };
+
+    let (badge, title, subtitle, items, speaker_notes) = match action {
+        "summarize" => {
+            let b = if !curr_badge.is_empty() {
+                curr_badge.to_string()
+            } else if is_persian {
+                "خلاصه کلیدی".to_string()
+            } else {
+                "EXECUTIVE SUMMARY".to_string()
+            };
+            let t = if !curr_title.is_empty() {
+                curr_title.to_string()
+            } else if is_persian {
+                "نکات برجسته و دستاوردها".to_string()
+            } else {
+                "Key Takeaways".to_string()
+            };
+            let sub = if !curr_subtitle.is_empty() {
+                curr_subtitle
+                    .split(['.', '،', '؛'])
+                    .next()
+                    .unwrap_or(curr_subtitle)
+                    .trim()
+                    .to_string()
+            } else if is_persian {
+                "فشرده‌ترین تصویر از نتایج و اهداف محوری این بخش.".to_string()
+            } else {
+                "Core highlights and distilled insights at a glance.".to_string()
+            };
+            let mut list = Vec::new();
+            if curr_items.is_empty() {
+                if is_persian {
+                    list.push("دستیابی به هدف نهایی با بالاترین دقت".to_string());
+                    list.push("بهینه‌سازی زمان اجرا و کاهش پیچیدگی‌ها".to_string());
+                } else {
+                    list.push("Streamlined execution with zero friction".to_string());
+                    list.push("Accelerated delivery across all milestones".to_string());
+                }
+            } else {
+                for item in curr_items.iter().take(3) {
+                    let short = item.split(['.', ':', '،']).next().unwrap_or(item).trim();
+                    list.push(short.to_string());
+                }
+            }
+            let notes = if is_persian {
+                format!(
+                    "در این اسلاید تمرکز را روی ۳ پیام اصلی قرار می‌دهیم: {} و به مخاطب نشان می‌دهیم که این فاز با موفقیت جمع‌بندی شده است.",
+                    list.join("، ")
+                )
+            } else {
+                format!(
+                    "Focus presenter delivery on the top takeaways: {}. Keep remarks punchy and highlight outcomes.",
+                    list.join("; ")
+                )
+            };
+            (b, t, sub, list, notes)
+        }
+        "kpi_stats" => {
+            let b = if !curr_badge.is_empty() {
+                curr_badge.to_string()
+            } else if is_persian {
+                "شاخص‌های کلیدی".to_string()
+            } else {
+                "KEY PERFORMANCE METRICS".to_string()
+            };
+            let t = if !curr_title.is_empty() {
+                curr_title.to_string()
+            } else if is_persian {
+                "رشد و عملکرد در یک نگاه".to_string()
+            } else {
+                "Impact & Performance Metrics".to_string()
+            };
+            let sub = if is_persian {
+                "داده‌های مستند از پیشرفت و شتاب فزاینده شاخص‌های کلیدی عملکرد.".to_string()
+            } else {
+                "Validated performance indicators demonstrating compounding scale.".to_string()
+            };
+            let mut list = Vec::new();
+            if curr_items.is_empty() {
+                if is_persian {
+                    list.push("+85%: رشد سالانه کاربران".to_string());
+                    list.push("10x: سرعت بارگذاری سریع‌تر".to_string());
+                    list.push("99.9%: پایداری و تاب‌آوری سیستم".to_string());
+                } else {
+                    list.push("+85%: Year-over-year user growth".to_string());
+                    list.push("10x: Latency and throughput optimization".to_string());
+                    list.push("99.9%: Continuous platform uptime".to_string());
+                }
+            } else {
+                let prefixes = ["+140%", "10x", "99.9%", "< 12ms", "4.9/5"];
+                for (i, item) in curr_items.iter().enumerate() {
+                    let p = prefixes[i % prefixes.len()];
+                    list.push(format!("{}: {}", p, item));
+                }
+            }
+            let notes = if is_persian {
+                "هنگام ارائه این اسلاید، روی اعداد بزرگ مکث کنید تا بزرگی دستاورد در ذهن مخاطب نقش ببندد.".to_string()
+            } else {
+                "Pause on the big metrics to let the scale sink in before moving to the next topic.".to_string()
+            };
+            (b, t, sub, list, notes)
+        }
+        "speaker_notes" => {
+            let b = curr_badge.to_string();
+            let t = curr_title.to_string();
+            let sub = curr_subtitle.to_string();
+            let list = curr_items.to_vec();
+            let items_joined_fa = list.join("، ");
+            let items_joined_en = list.join(", ");
+            let notes = if is_persian {
+                format!(
+                    "«سلام به همگی. در این اسلاید به {} می‌پردازیم. همان‌طور که می‌دانید، {} است. توجه شما را به این نکات جلب می‌کنم: {}. در صورت نیاز به توضیح بیشتر، در پایان در خدمت خواهم بود.»",
+                    t,
+                    if sub.is_empty() {
+                        "این مبحث از اهمیت فوق‌العاده‌ای برخوردار است"
+                    } else {
+                        &sub
+                    },
+                    if list.is_empty() {
+                        "تمرکز بر پایداری و کیفیت"
+                    } else {
+                        &items_joined_fa
+                    }
+                )
+            } else {
+                format!(
+                    "\"Hello everyone. Turning now to {}. As you can see, {}. I want to draw your attention to: {}. Let's discuss any questions on this in Q&A.\"",
+                    t,
+                    if sub.is_empty() {
+                        "this represents a foundational shift"
+                    } else {
+                        &sub
+                    },
+                    if list.is_empty() {
+                        "core execution and stability"
+                    } else {
+                        &items_joined_en
+                    }
+                )
+            };
+            (b, t, sub, list, notes)
+        }
+        "add_slide" => {
+            let user_topic = if !instruction.is_empty() {
+                instruction
+            } else {
+                "گام‌های بعدی و نقشه راه"
+            };
+            let b = if is_persian {
+                "فاز اجرایی"
+            } else {
+                "NEXT PHASE"
+            };
+            let t = user_topic.to_string();
+            let sub = if is_persian {
+                "برنامه‌ریزی اولویت‌بندی شده برای دستیابی به بالاترین ارزش در زمان تعیین‌شده."
+            } else {
+                "Prioritized strategic roadmap designed for compounding execution velocity."
+            };
+            let mut list = Vec::new();
+            if is_persian {
+                list.push("طراحی و بازبینی نهایی معماران محصول".to_string());
+                list.push("پیاده‌سازی ماژول‌های هوش مصنوعی و اتوماسیون".to_string());
+                list.push("عرضه عمومی، سنجش بازخورد و بهبود مستمر".to_string());
+            } else {
+                list.push("Architecture alignment & rapid prototyping".to_string());
+                list.push("AI workflow automation & copilot rollout".to_string());
+                list.push("Global rollout, feedback telemetry & iteration".to_string());
+            }
+            let notes = if is_persian {
+                format!(
+                    "«در این اسلاید نقشه راه {} را تشریح می‌کنیم و اقدامات مرحله به مرحله را برمی‌شماریم.»",
+                    t
+                )
+            } else {
+                format!(
+                    "\"Here we walk through the roadmap for {}. Highlight the phased milestones.\"",
+                    t
+                )
+            };
+            (b.to_string(), t, sub.to_string(), list, notes)
+        }
+        _ => {
+            let b = if !curr_badge.is_empty() {
+                curr_badge.to_string()
+            } else if is_persian {
+                "معماری و نوآوری".to_string()
+            } else {
+                "CORE ARCHITECTURE".to_string()
+            };
+            let t = if !instruction.is_empty() {
+                instruction.to_string()
+            } else if !curr_title.is_empty() {
+                format!("{} ✨", curr_title.trim_end_matches('✨').trim())
+            } else if is_persian {
+                "تحول و پایداری در مقیاس وسیع".to_string()
+            } else {
+                "Scalable Excellence & Transformation".to_string()
+            };
+            let sub = if !curr_subtitle.is_empty() {
+                curr_subtitle.to_string()
+            } else if is_persian {
+                "رویکردی ساختاریافته به منظور ایجاد بیشترین بازدهی با کمترین پیچیدگی.".to_string()
+            } else {
+                "A structured paradigm to maximize leverage while eliminating unnecessary overhead.".to_string()
+            };
+            let list = if curr_items.is_empty() {
+                if is_persian {
+                    vec![
+                        "انعطاف‌پذیری بی‌نظیر و انطباق سریع".to_string(),
+                        "سازگاری کامل با استانداردهای نوین طراحی".to_string(),
+                        "تجربه کاربری بی‌نقص با بالاترین سرعت".to_string(),
+                    ]
+                } else {
+                    vec![
+                        "Uncompromising flexibility and rapid adaptation".to_string(),
+                        "Seamless alignment with modern presentation standards".to_string(),
+                        "Flawless user experience engineered for velocity".to_string(),
+                    ]
+                }
+            } else {
+                curr_items.to_vec()
+            };
+            let notes = if is_persian {
+                format!(
+                    "«توضیح دهید که چگونه {} به حل مسئله اصلی کمک می‌کند و چه مزایایی دارد.»",
+                    t
+                )
+            } else {
+                format!(
+                    "\"Explain how {} directly addresses the core challenge and delivers value.\"",
+                    t
+                )
+            };
+            (b, t, sub, list, notes)
+        }
+    };
+
+    let html_snippet = render_slide_html(
+        &badge,
+        &title,
+        &subtitle,
+        &items,
+        &speaker_notes,
+        &layout,
+    );
+
+    SlideAiResult {
+        badge,
+        title,
+        subtitle,
+        items,
+        speaker_notes,
+        layout,
+        html_snippet,
+        source: "algorithmic".to_string(),
+    }
+}
+
+async fn generate_llm_slide_action(
+    client: &reqwest::Client,
+    settings: &Settings,
+    payload: &SlideAiPayload,
+) -> Result<SlideAiResult, String> {
+    let action = &payload.action;
+    let instruction = payload.instruction.as_deref().unwrap_or_default();
+    let title = payload.title.as_deref().unwrap_or_default();
+    let badge = payload.badge.as_deref().unwrap_or_default();
+    let subtitle = payload.subtitle.as_deref().unwrap_or_default();
+    let items = payload.items.clone().unwrap_or_default();
+    let target_layout = payload.target_layout.as_deref().unwrap_or("bento");
+
+    let is_persian = format!("{action} {instruction} {title} {subtitle} {}", items.join(" "))
+        .chars()
+        .any(|c| ('\u{0600}'..='\u{06FF}').contains(&c));
+
+    let lang_guide = if is_persian {
+        "All generated output (badge, title, subtitle, items, speaker_notes) MUST be in natural, elegant Persian (فارسی)."
+    } else {
+        "Write in concise, professional, keynote-ready English."
+    };
+
+    let system_instructions = format!(
+        "You are ZenSlides AI, an elite executive presentation designer and speech coach.\n\
+        {lang_guide}\n\
+        You transform or generate slide content based on user instructions and actions.\n\
+        You MUST respond with valid JSON ONLY (no markdown formatting, no code fences, no chat text).\n\
+        The JSON schema MUST be:\n\
+        {{\n\
+          \"badge\": \"short uppercase category or tag (2-4 words)\",\n\
+          \"title\": \"punchy, memorable slide title\",\n\
+          \"subtitle\": \"crisp 1-2 sentence explanatory text\",\n\
+          \"items\": [\"Key card or bullet point 1\", \"Key card or bullet point 2\", ...],\n\
+          \"speaker_notes\": \"Conversational, natural talking points for the presenter to say out loud while showing this slide\"\n\
+        }}"
+    );
+
+    let user_msg = format!(
+        "Action: {action}\n\
+        User Instruction: {instruction}\n\
+        Current Badge: {badge}\n\
+        Current Title: {title}\n\
+        Current Subtitle: {subtitle}\n\
+        Current Items: {items:?}\n\
+        Target Layout: {target_layout}"
+    );
+
+    let raw_text = match settings.provider.as_str() {
+        PROVIDER_OPENAI => {
+            let base = settings.openai.base_url.trim().trim_end_matches('/');
+            let model = settings.openai.model.trim();
+            if base.is_empty() || model.is_empty() {
+                return Err("OpenAI provider unconfigured".to_string());
+            }
+            let key = settings.openai_key();
+            let body = json!({
+                "model": model,
+                "temperature": 0.6,
+                "messages": [
+                    { "role": "system", "content": system_instructions },
+                    { "role": "user", "content": user_msg }
+                ]
+            });
+            let mut req = client.post(format!("{base}/chat/completions")).json(&body);
+            if !key.is_empty() {
+                req = req.bearer_auth(key);
+            }
+            let resp = req.send().await.map_err(|e| e.to_string())?;
+            if !resp.status().is_success() {
+                return Err(format!("OpenAI returned status {}", resp.status()));
+            }
+            let res_json: serde_json::Value = resp.json().await.map_err(|e| e.to_string())?;
+            res_json["choices"][0]["message"]["content"]
+                .as_str()
+                .unwrap_or_default()
+                .to_string()
+        }
+        PROVIDER_ANTHROPIC => {
+            let base = settings.anthropic.base_url.trim().trim_end_matches('/');
+            let model = if settings.anthropic.model.trim().is_empty() {
+                "claude-opus-4-6"
+            } else {
+                settings.anthropic.model.trim()
+            };
+            let key = settings.anthropic_key();
+            if key.is_empty() {
+                return Err("Anthropic API key missing".to_string());
+            }
+            let body = json!({
+                "model": model,
+                "max_tokens": 1500,
+                "system": system_instructions,
+                "messages": [
+                    { "role": "user", "content": user_msg }
+                ]
+            });
+            let resp = client
+                .post(format!("{base}/v1/messages"))
+                .header("x-api-key", key.trim())
+                .header("anthropic-version", "2023-06-01")
+                .json(&body)
+                .send()
+                .await
+                .map_err(|e| e.to_string())?;
+            if !resp.status().is_success() {
+                return Err(format!("Anthropic returned status {}", resp.status()));
+            }
+            let res_json: serde_json::Value = resp.json().await.map_err(|e| e.to_string())?;
+            res_json["content"][0]["text"]
+                .as_str()
+                .unwrap_or_default()
+                .to_string()
+        }
+        _ => return Err("Unsupported provider for slide AI".to_string()),
+    };
+
+    let clean_json = raw_text
+        .trim()
+        .trim_start_matches("```json")
+        .trim_start_matches("```")
+        .trim_end_matches("```")
+        .trim();
+
+    #[derive(Deserialize)]
+    struct LlmSlideOut {
+        #[serde(default)]
+        badge: String,
+        #[serde(default)]
+        title: String,
+        #[serde(default)]
+        subtitle: String,
+        #[serde(default)]
+        items: Vec<String>,
+        #[serde(default)]
+        speaker_notes: String,
+    }
+
+    let parsed: LlmSlideOut = serde_json::from_str(clean_json).map_err(|e| e.to_string())?;
+    let layout = if !target_layout.is_empty() {
+        target_layout.to_string()
+    } else {
+        "bento".to_string()
+    };
+    let html_snippet = render_slide_html(
+        &parsed.badge,
+        &parsed.title,
+        &parsed.subtitle,
+        &parsed.items,
+        &parsed.speaker_notes,
+        &layout,
+    );
+
+    Ok(SlideAiResult {
+        badge: parsed.badge,
+        title: parsed.title,
+        subtitle: parsed.subtitle,
+        items: parsed.items,
+        speaker_notes: parsed.speaker_notes,
+        layout,
+        html_snippet,
+        source: "llm".to_string(),
+    })
+}
+
+async fn slide_ai_action(
+    State(state): State<AppState>,
+    Json(payload): Json<SlideAiPayload>,
+) -> impl IntoResponse {
+    let settings = state.settings.read().await.clone();
+
+    // If an LLM provider is configured, try calling it
+    if settings.provider == PROVIDER_OPENAI || settings.provider == PROVIDER_ANTHROPIC {
+        if let Ok(result) = generate_llm_slide_action(&state.http, &settings, &payload).await {
+            info!(
+                "Processed slide AI action '{}' via LLM ({})",
+                payload.action, settings.provider
+            );
+            return Json(result).into_response();
+        }
+    }
+
+    // High quality algorithmic fallback
+    let result = generate_algorithmic_slide_action(
+        &payload.action,
+        payload.instruction.as_deref().unwrap_or_default(),
+        payload.title.as_deref().unwrap_or_default(),
+        payload.badge.as_deref().unwrap_or_default(),
+        payload.subtitle.as_deref().unwrap_or_default(),
+        payload.items.as_deref().unwrap_or(&[]),
+        payload.target_layout.as_deref().unwrap_or_default(),
+    );
+    Json(result).into_response()
 }
 
 async fn get_history(State(state): State<AppState>) -> impl IntoResponse {

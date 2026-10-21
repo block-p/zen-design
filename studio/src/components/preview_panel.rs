@@ -1,8 +1,8 @@
 use std::cell::Cell;
 
 use icondata_lu::{
-    LuChevronLeft, LuChevronRight, LuDownload, LuExternalLink, LuGlobe, LuLoaderCircle, LuPenLine,
-    LuPresentation, LuRotateCw, LuSave, LuTriangleAlert,
+    LuChevronLeft, LuChevronRight, LuClock, LuDownload, LuExternalLink, LuGlobe, LuLoaderCircle,
+    LuMaximize, LuPenLine, LuPresentation, LuPrinter, LuRotateCw, LuSave, LuTriangleAlert, LuX,
 };
 use leptos::prelude::*;
 
@@ -55,6 +55,108 @@ pub fn PreviewPanel(
     let is_saving_inplace = RwSignal::new(false);
     let trigger_save = RwSignal::new(false);
 
+    // Presenter mode state
+    let is_presenting = RwSignal::new(false);
+    let presenter_seconds = RwSignal::new(0_u32);
+    let current_slide_num = RwSignal::new(1_usize);
+    let total_slides_count = RwSignal::new(1_usize);
+    let current_slide_notes = RwSignal::new(String::new());
+    let show_presenter_notes = RwSignal::new(false);
+
+    // Sync presenter slide index and notes from iframe
+    let sync_presenter = move || {
+        if let Some(frame) = iframe_ref.get_untracked() {
+            if let Some(doc) = frame.content_document() {
+                let code = r#"
+                    (function() {
+                        const slides = document.querySelectorAll('.slide, section[id^="s"], [data-slide-id]');
+                        let cur = 0;
+                        slides.forEach((el, idx) => {
+                            if (el.classList.contains('active')) cur = idx;
+                        });
+                        let notes = '';
+                        if (slides[cur]) {
+                            notes = slides[cur].getAttribute('data-speaker-notes') || '';
+                        }
+                        window.parent.postMessage({
+                            type: 'zd-presenter-sync',
+                            current: cur + 1,
+                            total: Math.max(slides.length, 1),
+                            notes: notes
+                        }, '*');
+                    })();
+                "#;
+                if let Ok(script) = doc.create_element("script") {
+                    script.set_text_content(Some(code));
+                    if let Some(body) = doc.body() {
+                        let _ = body.append_child(&script);
+                        let _ = script.remove();
+                    }
+                }
+            }
+        }
+    };
+
+    let start_presenting = move || {
+        is_presenting.set(true);
+        sync_presenter();
+    };
+
+    let stop_presenting = move || {
+        is_presenting.set(false);
+        show_presenter_notes.set(false);
+    };
+
+    let export_slides_pdf = move || {
+        if let Some(frame) = iframe_ref.get_untracked() {
+            if let Some(doc) = frame.content_document() {
+                let style_id = "zd-print-export-styles";
+                if doc.get_element_by_id(style_id).is_none() {
+                    if let Ok(st) = doc.create_element("style") {
+                        let _ = st.set_id(style_id);
+                        st.set_text_content(Some(r#"
+                            @media print {
+                                @page {
+                                    size: 16in 9in landscape;
+                                    margin: 0;
+                                }
+                                html, body {
+                                    background: #000 !important;
+                                    color: #fff !important;
+                                    margin: 0 !important;
+                                    padding: 0 !important;
+                                    -webkit-print-color-adjust: exact !important;
+                                    print-color-adjust: exact !important;
+                                }
+                                .slide, section[id^='s'], [data-slide-id] {
+                                    position: relative !important;
+                                    display: flex !important;
+                                    opacity: 1 !important;
+                                    visibility: visible !important;
+                                    transform: none !important;
+                                    page-break-after: always !important;
+                                    break-after: page !important;
+                                    width: 100vw !important;
+                                    height: 100vh !important;
+                                    min-height: 100vh !important;
+                                }
+                                nav, #navbar, .nav-bar, .bottom-bar, .controls, .zd-presenter-hud {
+                                    display: none !important;
+                                }
+                            }
+                        "#));
+                        if let Some(head) = doc.head() {
+                            let _ = head.append_child(&st);
+                        }
+                    }
+                }
+            }
+            if let Some(win) = frame.content_window() {
+                let _ = win.print();
+            }
+        }
+    };
+
     // Slide step helper for live iframe
     let step_slide = move |dir: i32| {
         if let Some(frame) = iframe_ref.get_untracked() {
@@ -72,6 +174,7 @@ pub fn PreviewPanel(
                 }
             }
         }
+        sync_presenter();
     };
 
     // Toggle direct in-place text editing on canvas
@@ -301,11 +404,66 @@ pub fn PreviewPanel(
                     if let Some(t_str) = type_val.and_then(|v| v.as_string()) {
                         if t_str == "zd-save-inplace" {
                             trigger_save.set(true);
+                        } else if t_str == "zd-presenter-sync" {
+                            if let Ok(c_val) = js_sys::Reflect::get(&val, &wasm_bindgen::JsValue::from_str("current")) {
+                                if let Some(c) = c_val.as_f64() { current_slide_num.set(c as usize); }
+                            }
+                            if let Ok(tot_val) = js_sys::Reflect::get(&val, &wasm_bindgen::JsValue::from_str("total")) {
+                                if let Some(tot) = tot_val.as_f64() { total_slides_count.set(tot as usize); }
+                            }
+                            if let Ok(notes_val) = js_sys::Reflect::get(&val, &wasm_bindgen::JsValue::from_str("notes")) {
+                                if let Some(notes) = notes_val.as_string() { current_slide_notes.set(notes); }
+                            }
                         }
                     }
                 }
             }) as Box<dyn FnMut(web_sys::MessageEvent)>);
             let _ = win.add_event_listener_with_callback("message", cb.as_ref().unchecked_ref());
+            cb.forget();
+        }
+    });
+
+    // Presenter mode timer interval
+    Effect::new(move |_| {
+        if is_presenting.get() {
+            let handle = gloo_timers::callback::Interval::new(1000, move || {
+                presenter_seconds.update(|s| *s = s.saturating_add(1));
+            });
+            handle.forget();
+        } else {
+            presenter_seconds.set(0);
+        }
+    });
+
+    // Presenter mode keyboard clicker shortcuts (F, Escape, N)
+    Effect::new(move |_| {
+        use wasm_bindgen::closure::Closure;
+        use wasm_bindgen::JsCast;
+        if let Some(win) = web_sys::window() {
+            let cb = Closure::wrap(Box::new(move |event: web_sys::KeyboardEvent| {
+                let key = event.key();
+                if key == "Escape" && is_presenting.get() {
+                    stop_presenting();
+                } else if (key == "f" || key == "F") && mode.get() == ModeId::Slides {
+                    if let Some(doc) = web_sys::window().and_then(|w| w.document()) {
+                        if let Some(active) = doc.active_element() {
+                            let tag = active.tag_name().to_lowercase();
+                            if tag == "input" || tag == "textarea" {
+                                return;
+                            }
+                        }
+                    }
+                    if is_presenting.get() {
+                        stop_presenting();
+                    } else {
+                        start_presenting();
+                    }
+                } else if (key == "n" || key == "N") && is_presenting.get() {
+                    show_presenter_notes.update(|v| *v = !*v);
+                    sync_presenter();
+                }
+            }) as Box<dyn FnMut(web_sys::KeyboardEvent)>);
+            let _ = win.add_event_listener_with_callback("keydown", cb.as_ref().unchecked_ref());
             cb.forget();
         }
     });
@@ -590,6 +748,26 @@ pub fn PreviewPanel(
                                 <Icon data=LuPresentation size=12 />
                                 <span>{move || t(language.get(), "Deck Editor", "مدیریت اسلایدها")}</span>
                             </button>
+
+                            <button
+                                type="button"
+                                class="zd-btn-soft zd-btn-present"
+                                on:click=move |_| start_presenting()
+                                title=move || t(language.get(), "Start Fullscreen Presentation Mode (F)", "شروع ارائه تمام‌صفحه (کلید F)")
+                            >
+                                <Icon data=LuMaximize size=12 />
+                                <span>{move || t(language.get(), "Present", "ارائه")}</span>
+                            </button>
+
+                            <button
+                                type="button"
+                                class="zd-btn-soft zd-btn-export-pdf"
+                                on:click=move |_| export_slides_pdf()
+                                title=move || t(language.get(), "Export Deck to PDF / Print", "چاپ یا خروجی PDF اسلایدها")
+                            >
+                                <Icon data=LuPrinter size=12 />
+                                <span>{move || t(language.get(), "PDF", "PDF")}</span>
+                            </button>
                         </Show>
 
                     <div class="zd-preview-divider"></div>
@@ -654,7 +832,7 @@ pub fn PreviewPanel(
                 </div>
             </div>
 
-            <div class="zd-preview-canvas">
+            <div class=move || if is_presenting.get() { "zd-preview-canvas zd-preview-canvas--presenting" } else { "zd-preview-canvas" }>
                 <div class=move || {
                     if mode.get() == ModeId::Motion {
                         let ratio_class = match aspect_ratio.get() {
@@ -739,6 +917,120 @@ pub fn PreviewPanel(
                         </Show>
                     </div>
                 </div>
+
+                <!-- Presenter Mode Floating HUD & Notes -->
+                <Show when=move || is_presenting.get()>
+                    <div class="zd-presenter-hud">
+                        <div class="zd-hud-pill">
+                            <Icon data=LuClock size=12 />
+                            <span>
+                                {move || {
+                                    let s = presenter_seconds.get();
+                                    format!("{:02}:{:02}", s / 60, s % 60)
+                                }}
+                            </span>
+                        </div>
+                        <div class="zd-hud-pill">
+                            <span>
+                                {move || format!(
+                                    "{} {:02} / {:02}",
+                                    t(language.get(), "Slide", "اسلاید"),
+                                    current_slide_num.get(),
+                                    total_slides_count.get()
+                                )}
+                            </span>
+                        </div>
+                        <div class="zd-hud-divider"></div>
+                        <button
+                            type="button"
+                            class="zd-btn-icon zd-hud-btn"
+                            on:click=move |_| step_slide(-1)
+                            title=move || t(language.get(), "Previous slide (Arrow Left)", "اسلاید قبلی")
+                        >
+                            <Icon data=LuChevronRight size=14 />
+                        </button>
+                        <button
+                            type="button"
+                            class="zd-btn-icon zd-hud-btn"
+                            on:click=move |_| step_slide(1)
+                            title=move || t(language.get(), "Next slide (Arrow Right / Space)", "اسلاید بعدی")
+                        >
+                            <Icon data=LuChevronLeft size=14 />
+                        </button>
+                        <div class="zd-hud-divider"></div>
+                        <button
+                            type="button"
+                            class=move || {
+                                if show_presenter_notes.get() {
+                                    "zd-btn-soft zd-hud-btn zd-hud-btn--active"
+                                } else {
+                                    "zd-btn-soft zd-hud-btn"
+                                }
+                            }
+                            on:click=move |_| {
+                                show_presenter_notes.update(|v| *v = !*v);
+                                sync_presenter();
+                            }
+                            title=move || t(language.get(), "Toggle Speaker Notes (N)", "نمایش یادداشت‌های ارائه (کلید N)")
+                        >
+                            <Icon data=LuPresentation size=13 />
+                            <span>{move || t(language.get(), "Notes", "یادداشت‌ها")}</span>
+                        </button>
+                        <button
+                            type="button"
+                            class="zd-btn-icon zd-hud-btn-exit"
+                            on:click=move |_| stop_presenting()
+                            title=move || t(language.get(), "Exit Presenter Mode (Esc)", "خروج از حالت ارائه (Esc)")
+                        >
+                            <Icon data=LuX size=14 />
+                        </button>
+                    </div>
+
+                    <!-- Floating Speaker Notes Popover -->
+                    <Show when=move || show_presenter_notes.get()>
+                        <div class="zd-presenter-notes-popover">
+                            <div class="zd-presenter-notes-head">
+                                <div class="zd-presenter-notes-title">
+                                    <Icon data=LuPresentation size=13 />
+                                    <span>
+                                        {move || format!(
+                                            "{} {:02}",
+                                            t(
+                                                language.get(),
+                                                "Speaker Notes — Slide",
+                                                "یادداشت‌های ارائه‌دهنده — اسلاید",
+                                            ),
+                                            current_slide_num.get()
+                                        )}
+                                    </span>
+                                </div>
+                                <button
+                                    type="button"
+                                    class="zd-btn-icon-mini"
+                                    on:click=move |_| show_presenter_notes.set(false)
+                                    title="Close notes"
+                                >
+                                    <Icon data=LuX size=11 />
+                                </button>
+                            </div>
+                            <div class="zd-presenter-notes-body">
+                                {move || {
+                                    let notes = current_slide_notes.get();
+                                    if notes.trim().is_empty() {
+                                        t(
+                                            language.get(),
+                                            "No speaker notes recorded for this slide. Use 'Deck Editor' to add or AI-generate notes.",
+                                            "یادداشتی برای این اسلاید ثبت نشده است. از دکمه 'مدیریت اسلایدها' برای نوشتن یا تولید هوشمند یادداشت استفاده کنید.",
+                                        )
+                                        .to_string()
+                                    } else {
+                                        notes
+                                    }
+                                }}
+                            </div>
+                        </div>
+                    </Show>
+                </Show>
             </div>
         </section>
     }

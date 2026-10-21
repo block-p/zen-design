@@ -1,7 +1,7 @@
 use gloo_net::http::Request;
 use icondata_lu::{
-    LuArrowDown, LuArrowUp, LuCheck, LuCode, LuColumns2, LuCopy, LuEye, LuPenLine, LuPlus,
-    LuSave, LuTrash2, LuX,
+    LuArrowDown, LuArrowUp, LuCheck, LuCode, LuColumns2, LuCopy, LuEye, LuLayoutGrid,
+    LuLoaderCircle, LuMic, LuPenLine, LuPlus, LuSave, LuSparkles, LuTrash2, LuWand, LuX,
 };
 use leptos::prelude::*;
 use leptos::task::spawn_local;
@@ -26,6 +26,8 @@ pub struct SlideItem {
     pub badge: String,
     pub title: String,
     pub subtitle: String,
+    pub layout: String,
+    pub speaker_notes: String,
     pub items: Vec<SlideCardItem>,
 }
 
@@ -58,6 +60,21 @@ fn extract_slides(html: &str) -> Vec<SlideItem> {
         } else {
             id
         };
+
+        let layout = el
+            .get_attribute("data-layout")
+            .unwrap_or_else(|| "bento".to_string());
+
+        let speaker_notes = el
+            .get_attribute("data-speaker-notes")
+            .or_else(|| {
+                el.query_selector(".speaker-notes, aside[class*='notes']")
+                    .ok()
+                    .flatten()
+                    .and_then(|e| e.text_content())
+            })
+            .map(|s| s.trim().to_string())
+            .unwrap_or_default();
 
         let badge = el
             .query_selector(".badge, .category-badge, [class*='badge']")
@@ -107,6 +124,8 @@ fn extract_slides(html: &str) -> Vec<SlideItem> {
             badge,
             title,
             subtitle,
+            layout,
+            speaker_notes,
             items,
         });
     }
@@ -125,6 +144,8 @@ pub fn SlidesEditorDrawer(
     let is_saving = RwSignal::new(false);
     let active_tab = RwSignal::new("cards"); // "cards" or "code"
     let selected_slide_idx = RwSignal::new(0_usize);
+    let ai_instruction = RwSignal::new(String::new());
+    let is_ai_loading = RwSignal::new(false);
 
     // Derived signal: parsed slides
     let slides = Memo::new(move |_| extract_slides(&raw_html.get()));
@@ -216,6 +237,261 @@ pub fn SlidesEditorDrawer(
                 Err(err) => {
                     is_saving.set(false);
                     push_activity(entries, ActivityKind::Error, format!("Save error: {err}"));
+                }
+            }
+        });
+    };
+
+    let update_speaker_notes = move |idx: usize, val: String| {
+        let current = raw_html.get();
+        if let Some(doc) = parse_doc(&current) {
+            if let Ok(nodes) = doc.query_selector_all(".slide, section[id^='s'], [data-slide-id]") {
+                if let Some(node) = nodes.item(idx as u32) {
+                    if let Ok(el) = node.dyn_into::<web_sys::Element>() {
+                        let _ = el.set_attribute("data-speaker-notes", &val);
+                        raw_html.set(serialize_doc(&doc));
+                    }
+                }
+            }
+        }
+    };
+
+    let run_ai_action = move |action_type: &'static str| {
+        if is_ai_loading.get() {
+            return;
+        }
+        is_ai_loading.set(true);
+        let cur_idx = selected_slide_idx.get();
+        let current_slides = slides.get();
+        let maybe_slide = current_slides.get(cur_idx).cloned();
+
+        let (title, badge, subtitle, items_str, layout_str) = if let Some(s) = maybe_slide {
+            (
+                s.title,
+                s.badge,
+                s.subtitle,
+                s.items.into_iter().map(|it| it.text).collect::<Vec<_>>(),
+                s.layout,
+            )
+        } else {
+            (
+                String::new(),
+                String::new(),
+                String::new(),
+                Vec::new(),
+                "bento".to_string(),
+            )
+        };
+
+        let user_instruction = ai_instruction.get();
+        let lang = language.get();
+
+        spawn_local(async move {
+            let body = json!({
+                "action": action_type,
+                "instruction": user_instruction,
+                "title": title,
+                "badge": badge,
+                "subtitle": subtitle,
+                "items": items_str,
+                "target_layout": layout_str,
+            });
+
+            match Request::post("/api/slides/ai-action")
+                .header("Content-Type", "application/json")
+                .body(body.to_string())
+            {
+                Ok(req) => match req.send().await {
+                    Ok(resp) if resp.ok() => {
+                        if let Ok(data) = resp.json::<serde_json::Value>().await {
+                            let html_snippet = data
+                                .get("html_snippet")
+                                .and_then(|v| v.as_str())
+                                .unwrap_or_default();
+                            let notes_out = data
+                                .get("speaker_notes")
+                                .and_then(|v| v.as_str())
+                                .unwrap_or_default();
+
+                            if action_type == "add_slide" {
+                                let current_html = raw_html.get();
+                                let updated = if let Some(pos) = current_html.find("</main>") {
+                                    let mut s = current_html.clone();
+                                    s.insert_str(pos, &format!("\n{html_snippet}\n"));
+                                    s
+                                } else if let Some(pos) = current_html.find("</body>") {
+                                    let mut s = current_html.clone();
+                                    s.insert_str(pos, &format!("\n{html_snippet}\n"));
+                                    s
+                                } else {
+                                    format!("{}\n{}", current_html, html_snippet)
+                                };
+                                raw_html.set(updated);
+                                let new_total = slides.get().len();
+                                selected_slide_idx.set(new_total.saturating_sub(1));
+                                jump_preview(new_total.saturating_sub(1));
+                                push_activity(
+                                    entries,
+                                    ActivityKind::Done,
+                                    t(
+                                        lang,
+                                        "New AI slide generated and added to deck",
+                                        "اسلاید جدید با هوش مصنوعی ایجاد و اضافه شد",
+                                    ),
+                                );
+                            } else {
+                                let current_html = raw_html.get();
+                                if let Some(doc) = parse_doc(&current_html) {
+                                    if let Ok(nodes) = doc.query_selector_all(
+                                        ".slide, section[id^='s'], [data-slide-id]",
+                                    ) {
+                                        if let Some(node) = nodes.item(cur_idx as u32) {
+                                            if let Ok(el) = node.dyn_into::<web_sys::Element>() {
+                                                if !html_snippet.is_empty() {
+                                                    if let Some(temp_doc) = parse_doc(&format!(
+                                                        "<div>{html_snippet}</div>"
+                                                    )) {
+                                                        if let Ok(Some(new_el)) =
+                                                            temp_doc.query_selector(".slide, section")
+                                                        {
+                                                            if let Some(parent) = el.parent_node() {
+                                                                if let Ok(imported) =
+                                                                    doc.import_node_with_deep(&new_el, true)
+                                                                {
+                                                                    let _ = parent
+                                                                        .replace_child(&imported, &el);
+                                                                    raw_html.set(serialize_doc(&doc));
+                                                                }
+                                                            }
+                                                        }
+                                                    }
+                                                } else {
+                                                    let _ = el.set_attribute(
+                                                        "data-speaker-notes",
+                                                        notes_out,
+                                                    );
+                                                    raw_html.set(serialize_doc(&doc));
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                                jump_preview(cur_idx);
+                                push_activity(
+                                    entries,
+                                    ActivityKind::Done,
+                                    t(
+                                        lang,
+                                        "AI slide modification completed",
+                                        "تغییرات هوشمند اسلاید با موفقیت اعمال شد",
+                                    ),
+                                );
+                            }
+                        }
+                        is_ai_loading.set(false);
+                        ai_instruction.set(String::new());
+                    }
+                    _ => {
+                        is_ai_loading.set(false);
+                        push_activity(
+                            entries,
+                            ActivityKind::Error,
+                            t(
+                                lang,
+                                "AI action request failed",
+                                "خطا در برقراری ارتباط با هوش مصنوعی",
+                            ),
+                        );
+                    }
+                },
+                Err(_) => {
+                    is_ai_loading.set(false);
+                }
+            }
+        });
+    };
+
+    let apply_layout_to_slide = move |cur_idx: usize, target_layout: &'static str| {
+        if is_ai_loading.get() {
+            return;
+        }
+        is_ai_loading.set(true);
+        let current_slides = slides.get();
+        let Some(slide) = current_slides.get(cur_idx).cloned() else {
+            is_ai_loading.set(false);
+            return;
+        };
+        let items_vec: Vec<String> = slide.items.into_iter().map(|it| it.text).collect();
+        let lang = language.get();
+
+        spawn_local(async move {
+            let body = json!({
+                "action": "transform_layout",
+                "title": slide.title,
+                "badge": slide.badge,
+                "subtitle": slide.subtitle,
+                "items": items_vec,
+                "target_layout": target_layout,
+            });
+
+            match Request::post("/api/slides/ai-action")
+                .header("Content-Type", "application/json")
+                .body(body.to_string())
+            {
+                Ok(req) => match req.send().await {
+                    Ok(resp) if resp.ok() => {
+                        if let Ok(data) = resp.json::<serde_json::Value>().await {
+                            if let Some(html_snippet) =
+                                data.get("html_snippet").and_then(|v| v.as_str())
+                            {
+                                let current_html = raw_html.get();
+                                if let Some(doc) = parse_doc(&current_html) {
+                                    if let Ok(nodes) = doc.query_selector_all(
+                                        ".slide, section[id^='s'], [data-slide-id]",
+                                    ) {
+                                        if let Some(node) = nodes.item(cur_idx as u32) {
+                                            if let Ok(el) = node.dyn_into::<web_sys::Element>() {
+                                                if let Some(temp_doc) = parse_doc(&format!(
+                                                    "<div>{html_snippet}</div>"
+                                                )) {
+                                                    if let Ok(Some(new_el)) =
+                                                        temp_doc.query_selector(".slide, section")
+                                                    {
+                                                        if let Some(parent) = el.parent_node() {
+                                                            if let Ok(imported) =
+                                                                doc.import_node_with_deep(&new_el, true)
+                                                            {
+                                                                let _ = parent
+                                                                    .replace_child(&imported, &el);
+                                                                raw_html.set(serialize_doc(&doc));
+                                                            }
+                                                        }
+                                                    }
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                                jump_preview(cur_idx);
+                                push_activity(
+                                    entries,
+                                    ActivityKind::Done,
+                                    t(
+                                        lang,
+                                        "Layout applied to slide",
+                                        "طرح‌بندی جدید روی اسلاید اعمال گردید",
+                                    ),
+                                );
+                            }
+                        }
+                        is_ai_loading.set(false);
+                    }
+                    _ => {
+                        is_ai_loading.set(false);
+                    }
+                },
+                Err(_) => {
+                    is_ai_loading.set(false);
                 }
             }
         });
@@ -651,6 +927,153 @@ pub fn SlidesEditorDrawer(
                                                     </div>
                                                 </div>
 
+                                                <!-- AI Slide Copilot -->
+                                                <div class="zd-slide-ai-card">
+                                                    <div class="zd-slide-ai-header">
+                                                        <div class="zd-slide-ai-title-row">
+                                                            <Icon data=LuSparkles size=14 />
+                                                            <span class="zd-slide-ai-title">
+                                                                {move || t(language.get(), "ZenSlides AI Copilot", "دستیار هوش مصنوعی اسلاید")}
+                                                            </span>
+                                                        </div>
+                                                        <Show when=move || is_ai_loading.get()>
+                                                            <div class="zd-slide-ai-spin">
+                                                                <Icon data=LuLoaderCircle size=12 />
+                                                                <span>{move || t(language.get(), "Processing…", "در حال پردازش…")}</span>
+                                                            </div>
+                                                        </Show>
+                                                    </div>
+                                                    <div class="zd-slide-ai-prompt-row">
+                                                        <input
+                                                            type="text"
+                                                            class="zd-input zd-slide-ai-input"
+                                                            placeholder=move || t(
+                                                                language.get(),
+                                                                "Ask AI: rewrite, summarize, turn into KPIs, or create next slide...",
+                                                                "دستور به هوش مصنوعی: بازنویسی، خلاصه‌سازی، تبدیل به شاخص عددی...",
+                                                            )
+                                                            prop:value=move || ai_instruction.get()
+                                                            on:input=move |ev| ai_instruction.set(event_target_value(&ev))
+                                                            on:keydown=move |ev: web_sys::KeyboardEvent| {
+                                                                if ev.key() == "Enter" {
+                                                                    run_ai_action("rewrite_slide");
+                                                                }
+                                                            }
+                                                        />
+                                                        <button
+                                                            type="button"
+                                                            class="zd-btn-primary zd-btn-ai-run"
+                                                            disabled=move || is_ai_loading.get()
+                                                            on:click=move |_| run_ai_action("rewrite_slide")
+                                                        >
+                                                            <Icon data=LuWand size=12 />
+                                                            <span>{move || t(language.get(), "Generate", "اجرا")}</span>
+                                                        </button>
+                                                    </div>
+                                                    <div class="zd-slide-ai-chips">
+                                                        <button
+                                                            type="button"
+                                                            class="zd-slide-chip"
+                                                            disabled=move || is_ai_loading.get()
+                                                            on:click=move |_| run_ai_action("rewrite_slide")
+                                                            title="Rewrite and polish slide text"
+                                                        >
+                                                            <span>{"✍️ "}{move || t(language.get(), "Rewrite & Polish", "بازنویسی حرفه‌ای")}</span>
+                                                        </button>
+                                                        <button
+                                                            type="button"
+                                                            class="zd-slide-chip"
+                                                            disabled=move || is_ai_loading.get()
+                                                            on:click=move |_| run_ai_action("summarize")
+                                                            title="Summarize into concise key points"
+                                                        >
+                                                            <span>{"⚡ "}{move || t(language.get(), "Summarize", "خلاصه‌سازی نکات")}</span>
+                                                        </button>
+                                                        <button
+                                                            type="button"
+                                                            class="zd-slide-chip"
+                                                            disabled=move || is_ai_loading.get()
+                                                            on:click=move |_| run_ai_action("kpi_stats")
+                                                            title="Convert bullet points into bold KPI numbers"
+                                                        >
+                                                            <span>{"📊 "}{move || t(language.get(), "Turn to KPIs", "تبدیل به آمار و ارقام")}</span>
+                                                        </button>
+                                                        <button
+                                                            type="button"
+                                                            class="zd-slide-chip"
+                                                            disabled=move || is_ai_loading.get()
+                                                            on:click=move |_| run_ai_action("speaker_notes")
+                                                            title="Generate speech talking points"
+                                                        >
+                                                            <span>{"🎤 "}{move || t(language.get(), "Speaker Notes", "تولید یادداشت ارائه")}</span>
+                                                        </button>
+                                                        <button
+                                                            type="button"
+                                                            class="zd-slide-chip zd-slide-chip--accent"
+                                                            disabled=move || is_ai_loading.get()
+                                                            on:click=move |_| run_ai_action("add_slide")
+                                                            title="Generate brand new slide on current topic"
+                                                        >
+                                                            <span>{"➕ "}{move || t(language.get(), "New AI Slide", "اسلاید جدید با AI")}</span>
+                                                        </button>
+                                                    </div>
+                                                </div>
+
+                                                <!-- Visual Layout Switcher -->
+                                                <div class="zd-slide-layout-bar">
+                                                    <div class="zd-slide-layout-label">
+                                                        <Icon data=LuLayoutGrid size=13 />
+                                                        <span>{move || t(language.get(), "Slide Layout Template", "طرح‌بندی و ساختار بصری اسلاید")}</span>
+                                                    </div>
+                                                    <div class="zd-slide-layout-options">
+                                                        <button
+                                                            type="button"
+                                                            class="zd-layout-btn"
+                                                            disabled=move || is_ai_loading.get()
+                                                            on:click=move |_| apply_layout_to_slide(cur_idx, "bento")
+                                                            title="Bento Grid Layout"
+                                                        >
+                                                            <span>{"🍱 "}{move || t(language.get(), "Bento Grid", "بنتو گرید")}</span>
+                                                        </button>
+                                                        <button
+                                                            type="button"
+                                                            class="zd-layout-btn"
+                                                            disabled=move || is_ai_loading.get()
+                                                            on:click=move |_| apply_layout_to_slide(cur_idx, "stats")
+                                                            title="KPI Big Numbers"
+                                                        >
+                                                            <span>{"📊 "}{move || t(language.get(), "KPI Stats", "شاخص‌های کلیدی")}</span>
+                                                        </button>
+                                                        <button
+                                                            type="button"
+                                                            class="zd-layout-btn"
+                                                            disabled=move || is_ai_loading.get()
+                                                            on:click=move |_| apply_layout_to_slide(cur_idx, "split")
+                                                            title="2-Column Split"
+                                                        >
+                                                            <span>{"🌓 "}{move || t(language.get(), "Split 2-Col", "دو ستونه")}</span>
+                                                        </button>
+                                                        <button
+                                                            type="button"
+                                                            class="zd-layout-btn"
+                                                            disabled=move || is_ai_loading.get()
+                                                            on:click=move |_| apply_layout_to_slide(cur_idx, "timeline")
+                                                            title="Timeline Steps"
+                                                        >
+                                                            <span>{"⏳ "}{move || t(language.get(), "Timeline Steps", "گام‌های زمانی")}</span>
+                                                        </button>
+                                                        <button
+                                                            type="button"
+                                                            class="zd-layout-btn"
+                                                            disabled=move || is_ai_loading.get()
+                                                            on:click=move |_| apply_layout_to_slide(cur_idx, "comparison")
+                                                            title="Comparison Matrix"
+                                                        >
+                                                            <span>{"⚖️ "}{move || t(language.get(), "Comparison", "مقایسه")}</span>
+                                                        </button>
+                                                    </div>
+                                                </div>
+
                                                 <!-- Slide Meta Inputs -->
                                                 <div class="zd-slide-form-grid">
                                                     <div class="zd-form-field">
@@ -688,6 +1111,46 @@ pub fn SlidesEditorDrawer(
                                                             rows=2
                                                         ></textarea>
                                                     </div>
+                                                </div>
+
+                                                <!-- Speaker Notes / Presentation Script -->
+                                                <div class="zd-slide-speaker-notes-box">
+                                                    <div class="zd-slide-notes-header">
+                                                        <div class="zd-slide-notes-title-row">
+                                                            <Icon data=LuMic size=13 />
+                                                            <span class="zd-slide-notes-title">
+                                                                {move || t(language.get(), "Speaker Notes & Script", "یادداشت‌های ارائه‌دهنده و متن سخنرانی")}
+                                                            </span>
+                                                        </div>
+                                                        <button
+                                                            type="button"
+                                                            class="zd-btn-soft zd-btn-gen-notes-mini"
+                                                            disabled=move || is_ai_loading.get()
+                                                            on:click=move |_| run_ai_action("speaker_notes")
+                                                            title=move || t(language.get(), "Auto-generate talking points with AI", "تولید خودکار متن سخنرانی با هوش مصنوعی")
+                                                        >
+                                                            <Icon data=LuSparkles size=11 />
+                                                            <span>{move || t(language.get(), "AI Script", "متن هوشمند")}</span>
+                                                        </button>
+                                                    </div>
+                                                    <p class="zd-slide-notes-desc">
+                                                        {move || t(
+                                                            language.get(),
+                                                            "Private cues displayed only on presenter view during presentation",
+                                                            "یادداشت‌های اختصاصی که فقط در حالت ارائه (Presenter Mode) برای شما نمایش داده می‌شود",
+                                                        )}
+                                                    </p>
+                                                    <textarea
+                                                        class="zd-textarea zd-slide-notes-textarea"
+                                                        placeholder=move || t(
+                                                            language.get(),
+                                                            "Type speaker notes or click 'AI Script' to draft talking points...",
+                                                            "متن یا نکات سخنرانی این اسلاید را اینجا یادداشت کنید...",
+                                                        )
+                                                        prop:value=current_slide.speaker_notes.clone()
+                                                        on:change=move |ev| update_speaker_notes(cur_idx, event_target_value(&ev))
+                                                        rows=3
+                                                    ></textarea>
                                                 </div>
 
                                                 <!-- Slide Content Items / Cards -->
