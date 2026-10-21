@@ -1,6 +1,6 @@
 use icondata_lu::{
     LuArrowUp, LuClock, LuCommand, LuCornerDownLeft, LuExternalLink, LuGripHorizontal, LuHistory, LuMic, LuPalette,
-    LuPlus, LuSlidersHorizontal, LuSparkles, LuVolume2, LuVolumeX, LuX, LuZap,
+    LuPlus, LuSlidersHorizontal, LuVolume2, LuVolumeX, LuX, LuZap,
 };
 use leptos::prelude::*;
 use web_sys::{KeyboardEvent, MouseEvent, SubmitEvent};
@@ -96,7 +96,7 @@ pub fn AgentPanel(
                 <div class="zd-agent-top">
                     <div class="zd-agent-profile">
                         <div class="zd-agent-icon">
-                            <Icon data=LuSparkles size=15 stroke_width=2.1 />
+                            <Icon data=LuZap size=15 stroke_width=2.1 />
                             <Show when=move || running.get()>
                                 <span class="zd-agent-pulse">
                                     <span class="zd-agent-pulse-ping"></span>
@@ -469,7 +469,7 @@ pub fn AgentPanel(
 
                 <div class="zd-deep-review-card">
                     <div class="zd-deep-review-info">
-                        <Icon data=LuSparkles size=12 class="zd-deep-review-sparkle" />
+                        <Icon data=LuZap size=12 class="zd-deep-review-sparkle" />
                         <div class="zd-deep-review-copy">
                             <p class="zd-deep-review-title">
                                 {move || t(language.get(), "Deep review", "بررسی عمیق")}

@@ -854,10 +854,39 @@ fn is_inline_reference(value: &str) -> bool {
 /// The craft section exists because "make it beautiful" produces generic
 /// output. Concrete constraints — a spacing scale, a type scale, contrast
 /// floors, anti-patterns — are what separate a designed page from a template.
+/// Checks whether the user prompt contains Persian or Arabic characters.
+pub fn contains_rtl_script(text: &str) -> bool {
+    text.chars().any(|c| {
+        let code = c as u32;
+        (0x0600..=0x06FF).contains(&code)
+            || (0x0750..=0x077F).contains(&code)
+            || (0x08A0..=0x08FF).contains(&code)
+            || (0xFB50..=0xFDFF).contains(&code)
+            || (0xFE70..=0xFEFF).contains(&code)
+    })
+}
+
+fn is_marketing_or_editorial_brief(prompt: &str) -> bool {
+    let lower = prompt.to_lowercase();
+    let landing_keywords = [
+        "landing", "marketing", "portfolio", "agency", "editorial", "magazine",
+        "blog", "article", "hero", "pricing page", "waitlist", "launch page",
+        "لندینگ", "صفحه فرود", "معرفی محصول", "پورتفولیو", "وبلاگ", "مجله", "سایت شرکتی",
+    ];
+    let app_keywords = [
+        "dashboard", "app", "studio", "editor", "kanban", "crm", "analytics",
+        "terminal", "ide", "player", "synth", "calculator", "tracker", "panel",
+        "داشبورد", "اپلیکیشن", "پنل", "مدیریت", "ابزار", "ادیتور", "پلیر", "سیستم",
+    ];
+    let has_landing = landing_keywords.iter().any(|k| lower.contains(k));
+    let has_app = app_keywords.iter().any(|k| lower.contains(k));
+    has_landing && !has_app
+}
+
 pub fn build_system_prompt(tokens: &DesignTokens, mode: &str) -> String {
-    let dummy = PromptRequest {
+    let req = PromptRequest {
         prompt: String::new(),
-        design_system: "stripe".to_string(),
+        design_system: String::from("linear"),
         mode: mode.to_string(),
         deep: false,
         session_id: None,
@@ -868,7 +897,7 @@ pub fn build_system_prompt(tokens: &DesignTokens, mode: &str) -> String {
         tts_text: None,
         tts_lang: None,
     };
-    build_system_prompt_with_request(tokens, &dummy)
+    build_system_prompt_with_request(tokens, &req)
 }
 
 pub fn build_system_prompt_with_request(tokens: &DesignTokens, req: &PromptRequest) -> String {
@@ -879,21 +908,39 @@ pub fn build_system_prompt_with_request(tokens: &DesignTokens, req: &PromptReque
         return build_slides_prompt(tokens);
     }
 
-    let mode_rules = match req.mode.as_str() {
-        _ => {
-            "- Prototype mode: build an interactive product screen, not a marketing page. \
-Use realistic data (names, numbers, statuses), working hover/click states, and tabs, \
-filters or toggles where they help tell the story. Every control the design implies \
-should do something visible."
-        }
+    let is_rtl = contains_rtl_script(&req.prompt);
+    let is_editorial = is_marketing_or_editorial_brief(&req.prompt);
+
+    let layout_architecture = if is_editorial {
+        "- Layout Architecture (Editorial / Brand Surface):
+  * Build an asymmetrical editorial grid (12 columns, max-width 1200px, 24px gap) with crisp 1px structural hairlines (like Stripe Press, Linear, or Read.cv).
+  * Vary visual cadence across sections: pair a high-impact split hero (interactive live component preview or multi-layer schematic SVG on one side, tight typographic lockup on the other) with a bento/matrix specification grid, an interactive live demo/calculator section, and a structured technical spec table.
+  * Never stack three identical icon-title-paragraph cards in a row."
+    } else {
+        "- Layout Architecture (Interactive Product Screen / App Shell):
+  * Build a functional, high-density software workspace (like Linear, Figma, Raycast, or Vercel Dashboard), NOT a marketing landing page. Do NOT include marketing hero banners, testimonials, pricing tiers, or giant footers unless explicitly asked.
+  * Use a full-viewport application shell (`min-height: 100dvh; display: grid`) with a persistent navigation rail or command header, a primary workspace canvas/table/board, and a contextual inspector or detail drawer.
+  * Use tight, utilitarian spacing inside panels (4px, 8px, 12px, 16px, 24px) with `1px solid` structural borders separating panes."
+    };
+
+    let rtl_and_i18n_rules = if is_rtl {
+        "- Persian / RTL Typography & Layout Rules (CRITICAL - Brief is in Persian):
+  * Set `<html lang=\"fa\" dir=\"rtl\">` on the root element.
+  * Prepend `'Vazirmatn', 'IRANSansX', 'Tahoma'` to the `--font-sans` stack so Persian glyphs render natively.
+  * NEVER apply negative `letter-spacing` (`tracking`) to Persian text or headings! Keep `letter-spacing: 0` on all Persian elements.
+  * Set body `line-height: 1.75` and heading `line-height: 1.35` to accommodate Persian ascenders/descenders.
+  * Use CSS logical properties everywhere (`margin-inline-start`, `padding-inline`, `border-inline-start`, `inset-inline-end`, `text-align: start`).
+  * Use `font-variant-numeric: tabular-nums` on aligned data columns."
+    } else {
+        "- Bidirectional & Typography Readiness:
+  * If the brief requests Persian/Arabic content, set `<html lang=\"fa\" dir=\"rtl\">`, include `'Vazirmatn'` first in the font stack, and set `letter-spacing: 0` on all RTL text.
+  * For Latin text, tighten display heading tracking (`-0.025em` to `-0.035em`) and use `font-variant-numeric: tabular-nums` on all numeric columns, counters, and timers."
     };
 
     format!(
-        r#"You are ZenDesign, a senior product designer and front-end engineer with an
-editorial eye. You turn a design brief into one production-quality HTML artifact.
+        r#"You are ZenDesign, a principal product designer and staff design-systems engineer. You turn a brief into one self-contained, production-grade HTML artifact (`<!DOCTYPE html>`).
 
-Design tokens for this brief (they are the palette — derive tints with color-mix() or
-alpha, never invent new hues):
+Design tokens for this brief (define these in `:root` and derive semantic surface/text tiers using `color-mix(in srgb, ...)`):
 - background: {bg}
 - text: {text}
 - accent: {accent}
@@ -901,58 +948,54 @@ alpha, never invent new hues):
 - card background: {card_bg}
 - border color: {border}
 
-Craft standards — apply all of them:
-- Direction: choose one clear art direction (editorial, soft-tech, brutalist, warm
-  minimal, etc.) that fits the brand, and carry it through type, spacing, color and
-  motion. When the brief is silent, default to restrained editorial minimalism.
-- Composition: one idea per section and an obvious focal point. Use a 12-column grid
-  inside a max-width container (1120–1240px) with 24px gutters. Generous whitespace;
-  align edges; do not center every section. Vary density instead of repeating cards.
-  (Slides mode: compose each 16:9 slide instead of a page.)
-- Spacing: use one scale only — 4, 8, 12, 16, 24, 32, 48, 64, 96px. Section padding
-  64–96px desktop / 40–56px mobile. No arbitrary values.
-- Typography: at most two families from the token stack. Use a modular scale with
-  clear jumps (e.g. 13/15/18/24/32/48/72). Display line-height 1.02–1.15, body
-  1.5–1.65, measure 60–72ch. Tighten tracking on large headings (-0.02em to -0.04em).
-  Create hierarchy with weight and space, not by using many sizes.
-- Color and depth: the accent covers under 10% of the surface. Body text must clear
-  4.5:1 contrast, large text 3:1. Build depth with hairline borders, one surface tint
-  and at most one soft shadow level. No neon glow, rainbow gradients or glassmorphism
-  unless the tokens themselves are neon.
-- Content: write specific, confident copy — real product names, numbers, prices,
-  dates, testimonial names, useful labels. No lorem ipsum, no "Your headline here",
-  no emoji used as icons. Avoid clichés: revolutionize, seamless, unlock, elevate,
-  next-generation.
-- Interaction: every link, button, tab and input needs hover, focus-visible and active
-  states. Use 150–250ms ease-out transitions. Controls must be keyboard reachable and
-  use the correct element. Nothing may autoplay aggressively or trap focus.
-- Responsive: no horizontal scrolling at 360px. Use clamp() for display type, collapse
-  multi-column grids to one column, keep tap targets at least 44px. Check 390, 768,
-  1280 and 1440 widths mentally before finishing.
-- Code: valid semantic HTML5 with <title>, meta viewport and lang. One <style> and one
-  <script>. Inline SVG icons with ~1.5px strokes. No libraries, no external requests,
-  no console errors, keep the file under ~120KB.
-- Avoid: a whole page of three identical feature cards; gradient blobs behind
-  everything; shadows on every card; emoji as product icons; stock-photo placeholders;
-  fixed heights that clip content; text over busy imagery.
-- Finish: include only the sections the brief needs, but each must earn its place.
-  A considered footer, one working interaction, and a coherent whole beat extra sections.
+Required Derived Semantic CSS Variables in `:root`:
+- `--bg-canvas`: {bg}
+- `--bg-surface`: {card_bg}
+- `--bg-elevated`: `color-mix(in srgb, {card_bg} 88%, {text} 12%)`
+- `--bg-subtle`: `color-mix(in srgb, {bg} 92%, {text} 8%)`
+- `--text-primary`: {text}
+- `--text-secondary`: `color-mix(in srgb, {text} 72%, {bg} 28%)`
+- `--text-muted`: `color-mix(in srgb, {text} 48%, {bg} 52%)`
+- `--border-subtle`: {border}
+- `--border-strong`: `color-mix(in srgb, {border} 65%, {text} 35%)`
+- `--accent`: {accent}
+- `--accent-soft`: `color-mix(in srgb, {accent} 14%, transparent)`
+- `--font-sans`: 'Vazirmatn', {font}, system-ui, -apple-system, sans-serif
+
+Craft standards – apply all of them:
+- Direction: commit to a cohesive, unmistakable art direction (high-craft industrial utility, Swiss editorial grid, dark precision studio, or tactile brutalism) that matches the tokens.
+{layout_architecture}
+- Offline Font & Visual Asset Strategy (CSP-Safe):
+  * External network requests, CDNs, and remote images are strictly blocked by Content-Security-Policy (`{csp}`).
+  * NEVER leave empty colored boxes where illustrations or media belong. Instead, build rich, self-contained procedural visuals:
+    1. Multi-layered technical/schematic inline `<svg>` illustrations with precise `1px–1.5px` strokes, `stroke-dasharray` grid lines, `<linearGradient>` fills, and subtle SVG `<filter>` grain (`<feTurbulence>`).
+    2. Live, interactive `<canvas>` or `<svg>` data visualizations (sparklines, node graphs, waveforms, heatmaps, or real-time gauges) driven by JavaScript.
+    3. Authentic, interactive UI micro-components (command palettes, live code/json inspectors, timeline scrubbers, sortable data tables).
+- Spacing & Density: use a strict geometric scale (4, 8, 12, 16, 24, 32, 48, 64, 96px). Align edges along shared vertical axes; avoid centering every block.
+- Color & Depth: keep `--accent` under 10% of total screen area. If `--text-primary` is a high-saturation neon hue (e.g. in cyberpunk/terminal themes), reserve the full-saturation hue for headings/accents and mix body text with neutral white (`color-mix(in srgb, var(--text-primary) 35%, #f4f4f5)`) so body copy clears 4.5:1 contrast.
+{rtl_and_i18n_rules}
+- Content Authenticity: write domain-specific, realistic data — real metric figures, realistic timestamps, technical identifiers, and believable Persian or English copy. Never use "Lorem ipsum", "Headline here", emoji icons, or generic AI buzzwords ("revolutionize", "seamless", "elevate", "unleash", "next-gen").
+- Genuine Interactive State Machine (`<script>`):
+  * Prototype mode: build an interactive product screen, not a marketing page. Use realistic data (names, numbers, statuses), working hover/click states, and tabs, filters or toggles where they help tell the story. Every control the design implies should do something visible.
+  * Implement a clean vanilla JS state object driving real user interactions: working view/tab switchers, live search/filter input that filters rendered rows/cards in real time, interactive drawers/modals, or live sliders/calculators that dynamically recompute metrics.
+  * Every interactive element (`<button>`, `<input>`, `[role="tab"]`) must have visible `:hover`, `:focus-visible`, and `:active` states with `150ms cubic-bezier(0.22, 1, 0.36, 1)` transitions.
+- Responsive & Overflow Discipline: no horizontal scrolling at 360px. Check 390, 768, 1280 and 1440 widths mentally before finishing.
+- Anti-Slop Ban List: NO glowing purple/pink floating gradient blobs; NO emoji used as UI icons; NO three-identical-card feature rows; NO heavy drop shadows on every card; NO broken external `<img>` tags.
 
 Output contract:
-- Return ONE complete HTML document in a single ```html fenced code block. No commentary
-  before or after the block.
-- Everything inline: CSS in <style>, JS in <script>. No external requests whatsoever —
-  no CDNs, no web fonts, no remote images. Inline SVG or data URIs only.
-- If the brief cannot be satisfied, reply with a single line beginning with "ERROR:".
-
-{mode_rules}"#,
+- Before the HTML block, you MAY write a brief `<design_spec>` block (under 120 words) planning layout topology, interactive state, and custom SVG/Canvas visuals.
+- Return ONE complete HTML document in a single ```html fenced code block starting with `<!DOCTYPE html>`.
+- Everything inline: CSS in `<style>`, JS in `<script>`. No external requests whatsoever – no CDNs, no web fonts, no remote images. Inline SVG or data URIs only.
+- If the brief cannot be satisfied, reply with a single line beginning with "ERROR:"."#,
         bg = tokens.bg,
         text = tokens.text,
         accent = tokens.accent,
         font = tokens.font_family,
         card_bg = tokens.card_bg,
         border = tokens.border_color,
-        mode_rules = mode_rules,
+        layout_architecture = layout_architecture,
+        rtl_and_i18n_rules = rtl_and_i18n_rules,
+        csp = CSP_META,
     )
 }
 
@@ -1201,28 +1244,45 @@ pub fn build_user_prompt(prompt: &str, design_system: &str, mode: &str) -> Strin
 }
 
 pub fn build_user_prompt_from_request(req: &PromptRequest) -> String {
+    let is_rtl = contains_rtl_script(&req.prompt);
+    let lang_directive = if is_rtl {
+        "
+Language & Direction: Persian (فارسی) — MUST use `<html lang=\"fa\" dir=\"rtl\">`, `'Vazirmatn'` font priority, `letter-spacing: 0`, and natural Persian UI terminology."
+    } else {
+        ""
+    };
+
     let duration = req.duration_secs.unwrap_or(10).clamp(5, 600);
     let artifact_type = match req.mode.as_str() {
         "motion" => {
             format!(
-                "\nArtifact type: MOTION PIECE — a self-playing browser animation running for EXACTLY {duration}s. \
-Timeline animation and beats MUST span the entire {duration} seconds. NOT a static website."
+                "
+Artifact type: MOTION PIECE – a self-playing browser animation running for EXACTLY {duration}s. NOT a website: no nav, sections, cards, pricing, FAQ, CTA or footer."
             )
         }
         "slides" => {
-            "\nArtifact type: SLIDE DECK (PRECISE SLIDE DECOMPOSITION) — full-viewport 16:9 presentation deck. \
-Carefully respect any explicit slide separations, slide titles, numbered steps, or sections provided in the brief. \
-Every designated slide must be faithfully represented as a separate, beautifully composed 16:9 slide.".to_string()
+            "
+Artifact type: SLIDE DECK (PRECISE SLIDE DECOMPOSITION) – full-viewport 16:9 presentation deck. Carefully respect any explicit slide separations, slide titles, numbered steps, or sections provided in the brief. Every designated slide must be faithfully represented as a separate, beautifully composed 16:9 slide.".to_string()
         }
-        _ => String::new(),
+        _ => {
+            "
+Artifact type: INTERACTIVE PRODUCT / EDITORIAL ARTIFACT – include a working vanilla JS state machine (live filtering, tab switching, interactive charts/calculators, or stateful inspection) and bespoke inline SVG/Canvas graphics.".to_string()
+        }
     };
 
     format!(
-        "Brief:\n{}\n\nDesign system id: {}\nMode: {}{}\n\nBuild the artifact now.",
+        "Brief:
+{}
+
+Design system id: {}
+Mode: {}{}{}
+
+Build the artifact now.",
         req.prompt.trim(),
         req.design_system,
         req.mode,
-        artifact_type
+        artifact_type,
+        lang_directive
     )
 }
 

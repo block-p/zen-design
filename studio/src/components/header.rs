@@ -1,4 +1,4 @@
-use icondata_lu::{LuCheck, LuChevronDown, LuGlobe, LuMoon, LuPalette, LuSettings, LuSparkles, LuSun};
+use icondata_lu::{LuCheck, LuChevronDown, LuGlobe, LuMoon, LuPalette, LuSettings, LuCommand, LuSun};
 use leptos::portal::Portal;
 use leptos::prelude::*;
 use web_sys::KeyboardEvent;
@@ -28,7 +28,7 @@ pub fn Header(
         <header class="zd-header">
             <div class="zd-header-brand">
                 <div class="zd-header-logo-icon">
-                    <Icon data=LuSparkles size=15 stroke_width=2.2 />
+                    <Icon data=LuCommand size=15 stroke_width=2.2 />
                 </div>
                 <div class="zd-header-brand-info">
                     <div class="zd-header-title-row">

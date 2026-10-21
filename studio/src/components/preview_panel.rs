@@ -1,8 +1,8 @@
 use std::cell::Cell;
 
 use icondata_lu::{
-    LuDownload, LuExternalLink, LuGlobe, LuLoaderCircle, LuPenLine, LuPresentation, LuRotateCw,
-    LuSave, LuTriangleAlert,
+    LuChevronLeft, LuChevronRight, LuDownload, LuExternalLink, LuGlobe, LuLoaderCircle, LuPenLine,
+    LuPresentation, LuRotateCw, LuSave, LuTriangleAlert,
 };
 use leptos::prelude::*;
 
@@ -53,8 +53,28 @@ pub fn PreviewPanel(
     let iframe_ref = NodeRef::<leptos::html::Iframe>::new();
     let is_editing_inplace = RwSignal::new(false);
     let is_saving_inplace = RwSignal::new(false);
+    let trigger_save = RwSignal::new(false);
 
-    // Toggle visual drag-and-drop & in-place editing inside the iframe
+    // Slide step helper for live iframe
+    let step_slide = move |dir: i32| {
+        if let Some(frame) = iframe_ref.get_untracked() {
+            if let Some(doc) = frame.content_document() {
+                let code = format!(
+                    "(function() {{ if (typeof window.__zd_slide_step === 'function') {{ window.__zd_slide_step({}); }} else if (typeof go === 'function') {{ const s = document.querySelectorAll('.slide'); let c = 0; s.forEach((el, i) => {{ if (el.classList.contains('active')) c = i; }}); go(c + ({})); }} }})();",
+                    dir, dir
+                );
+                if let Ok(script) = doc.create_element("script") {
+                    script.set_text_content(Some(&code));
+                    if let Some(body) = doc.body() {
+                        let _ = body.append_child(&script);
+                        let _ = script.remove();
+                    }
+                }
+            }
+        }
+    };
+
+    // Toggle direct in-place text editing on canvas
     let toggle_inplace_edit = move || {
         let next = !is_editing_inplace.get();
         is_editing_inplace.set(next);
@@ -71,94 +91,98 @@ pub fn PreviewPanel(
 (function() {
     window.__zd_editor_active = true;
     
-    // 1. Force enable user selection everywhere
-    const style = document.createElement('style');
-    style.id = 'zd-editor-styles';
-    style.textContent = `
-        *, *::before, *::after {
-            user-select: text !important;
-            -webkit-user-select: text !important;
-        }
-        .zd-editable-highlight {
-            outline: 2px dashed rgba(99, 102, 241, 0.7) !important;
-            outline-offset: 2px !important;
-            cursor: move !important;
-            position: relative;
-        }
-        .zd-editable-highlight:hover {
-            outline: 2px solid #6366f1 !important;
-            background-color: rgba(99, 102, 241, 0.05) !important;
-        }
-        .zd-editing-text {
-            cursor: text !important;
-            outline: 2px solid #10b981 !important;
-            background-color: rgba(16, 185, 129, 0.08) !important;
-        }
-    `;
-    document.head.appendChild(style);
-
-    // 2. Make visual blocks (cards, titles, shapes, columns) draggable & text editable
-    function initVisualEditor() {
-        // Find candidate blocks to drag (cards, sections, titles, paragraphs, images, svg)
-        const selectors = '.card, .slide-content > *, section > *, div[class*="card"], div[class*="box"], div[class*="col"], h1, h2, h3, p, img, svg, button';
-        const elements = document.querySelectorAll(selectors);
-
-        elements.forEach(el => {
-            el.classList.add('zd-editable-highlight');
-            
-            // Allow double-click to edit text directly
-            el.addEventListener('dblclick', function(e) {
-                e.stopPropagation();
-                el.contentEditable = "true";
-                el.classList.add('zd-editing-text');
-                el.focus();
-            });
-
-            el.addEventListener('blur', function() {
-                el.contentEditable = "false";
-                el.classList.remove('zd-editing-text');
-            });
-
-            // Drag to reposition
-            el.addEventListener('mousedown', function(e) {
-                if (el.isContentEditable || e.button !== 0) return;
-                e.preventDefault();
-                e.stopPropagation();
-
-                const rect = el.getBoundingClientRect();
-                const parentRect = el.offsetParent ? el.offsetParent.getBoundingClientRect() : { left: 0, top: 0 };
-                
-                let startX = e.clientX;
-                let startY = e.clientY;
-                
-                // Switch to relative or absolute positioning for free dragging
-                const computed = window.getComputedStyle(el);
-                if (computed.position === 'static') {
-                    el.style.position = 'relative';
-                }
-
-                const initialLeft = parseFloat(el.style.left) || 0;
-                const initialTop = parseFloat(el.style.top) || 0;
-
-                function onMouseMove(ev) {
-                    const dx = ev.clientX - startX;
-                    const dy = ev.clientY - startY;
-                    el.style.left = (initialLeft + dx) + 'px';
-                    el.style.top = (initialTop + dy) + 'px';
-                }
-
-                function onMouseUp() {
-                    document.removeEventListener('mousemove', onMouseMove);
-                    document.removeEventListener('mouseup', onMouseUp);
-                }
-
-                document.addEventListener('mousemove', onMouseMove);
-                document.addEventListener('mouseup', onMouseUp);
-            });
-        });
+    // 1. Force enable user selection & edit styles
+    let style = document.getElementById('zd-editor-styles');
+    if (!style) {
+        style = document.createElement('style');
+        style.id = 'zd-editor-styles';
+        style.textContent = `
+            *, *::before, *::after {
+                user-select: text !important;
+                -webkit-user-select: text !important;
+            }
+            .zd-text-editable {
+                outline: 1.5px dashed rgba(99, 102, 241, 0.45) !important;
+                outline-offset: 3px !important;
+                border-radius: 4px !important;
+                cursor: text !important;
+                transition: outline 0.15s ease, background-color 0.15s ease !important;
+            }
+            .zd-text-editable:hover {
+                outline: 2px solid #6366f1 !important;
+                background-color: rgba(99, 102, 241, 0.08) !important;
+            }
+            .zd-text-editable:focus, [contenteditable="true"]:focus {
+                outline: 2px solid #10b981 !important;
+                outline-offset: 2px !important;
+                background-color: rgba(16, 185, 129, 0.10) !important;
+                box-shadow: 0 0 10px rgba(16, 185, 129, 0.3) !important;
+                cursor: text !important;
+            }
+        `;
+        document.head.appendChild(style);
     }
 
-    initVisualEditor();
+    // 2. Mark all text elements as directly editable
+    const sel = 'h1, h2, h3, h4, h5, h6, p, span, li, td, th, a, button, blockquote, [class*="title"], [class*="sub"], [class*="badge"], [class*="desc"], [class*="item"], [class*="val"], [class*="label"], [class*="num"], [class*="stat"], [class*="card"], em, strong, b, code';
+    const elements = document.querySelectorAll(sel);
+    elements.forEach(el => {
+        el.setAttribute('contenteditable', 'true');
+        el.setAttribute('spellcheck', 'false');
+        el.classList.add('zd-text-editable');
+    });
+
+    // 3. Listen for Ctrl+S / Cmd+S inside iframe
+    if (!window.__zd_key_listener) {
+        window.__zd_key_listener = function(e) {
+            if ((e.ctrlKey || e.metaKey) && (e.key === 's' || e.key === 'S')) {
+                e.preventDefault();
+                window.parent.postMessage({ type: 'zd-save-inplace' }, '*');
+            }
+        };
+        document.addEventListener('keydown', window.__zd_key_listener);
+    }
+
+    // 4. Slide navigation helpers
+    window.__zd_slide_step = function(dir) {
+        if (dir > 0) {
+            const nextBtn = document.getElementById('nextBtn') || document.querySelector('.next-btn, [data-action="next"]');
+            if (nextBtn) { nextBtn.click(); return; }
+        } else {
+            const prevBtn = document.getElementById('prevBtn') || document.querySelector('.prev-btn, [data-action="prev"]');
+            if (prevBtn) { prevBtn.click(); return; }
+        }
+        if (typeof window.go === 'function') {
+            const slides = document.querySelectorAll('.slide');
+            let cur = 0;
+            slides.forEach((s, idx) => { if (s.classList.contains('active')) cur = idx; });
+            let target = cur + dir;
+            if (target >= 0 && target < slides.length) {
+                window.go(target);
+                return;
+            }
+        }
+        const key = dir > 0 ? (document.dir === 'rtl' ? 'ArrowLeft' : 'ArrowRight') : (document.dir === 'rtl' ? 'ArrowRight' : 'ArrowLeft');
+        document.dispatchEvent(new KeyboardEvent('keydown', { key: key, bubbles: true }));
+    };
+
+    window.__zd_go = function(targetIdx) {
+        if (typeof window.go === 'function') {
+            window.go(targetIdx);
+            return;
+        }
+        const slides = document.querySelectorAll('.slide');
+        if (slides.length > targetIdx && targetIdx >= 0) {
+            slides.forEach((s, idx) => {
+                if (idx === targetIdx) {
+                    s.classList.add('active');
+                    s.classList.remove('exit');
+                } else {
+                    s.classList.remove('active');
+                }
+            });
+        }
+    };
 })();
 "#;
                             script_elem.set_text_content(Some(script_code));
@@ -172,13 +196,15 @@ pub fn PreviewPanel(
                     if let Ok(clean_script) = doc.create_element("script") {
                         clean_script.set_text_content(Some(r#"
 (function() {
+    window.__zd_editor_active = false;
     const style = document.getElementById('zd-editor-styles');
     if (style) style.remove();
     const script = document.getElementById('zd-visual-editor-runtime');
     if (script) script.remove();
-    document.querySelectorAll('.zd-editable-highlight, .zd-editing-text').forEach(el => {
-        el.classList.remove('zd-editable-highlight', 'zd-editing-text');
+    document.querySelectorAll('.zd-text-editable, [contenteditable="true"]').forEach(el => {
+        el.classList.remove('zd-text-editable', 'zd-editable-highlight', 'zd-editing-text');
         el.removeAttribute('contenteditable');
+        el.removeAttribute('spellcheck');
     });
 })();
 "#));
@@ -209,9 +235,10 @@ pub fn PreviewPanel(
     if (style) style.remove();
     const script = document.getElementById('zd-visual-editor-runtime');
     if (script) script.remove();
-    document.querySelectorAll('.zd-editable-highlight, .zd-editing-text').forEach(el => {
-        el.classList.remove('zd-editable-highlight', 'zd-editing-text');
+    document.querySelectorAll('.zd-editable-highlight, .zd-editing-text, .zd-text-editable, [contenteditable="true"]').forEach(el => {
+        el.classList.remove('zd-editable-highlight', 'zd-editing-text', 'zd-text-editable');
         el.removeAttribute('contenteditable');
+        el.removeAttribute('spellcheck');
     });
 })();
 "#));
@@ -254,6 +281,34 @@ pub fn PreviewPanel(
             }
         });
     };
+
+    // Watch for shortcut triggers from iframe message
+    Effect::new(move |_| {
+        if trigger_save.get() {
+            trigger_save.set(false);
+            save_inplace_content();
+        }
+    });
+
+    // Listen for Ctrl+S message event from inside iframe
+    Effect::new(move |_| {
+        use wasm_bindgen::closure::Closure;
+        use wasm_bindgen::JsCast;
+        if let Some(win) = web_sys::window() {
+            let cb = Closure::wrap(Box::new(move |event: web_sys::MessageEvent| {
+                if let Ok(val) = event.data().dyn_into::<js_sys::Object>() {
+                    let type_val = js_sys::Reflect::get(&val, &wasm_bindgen::JsValue::from_str("type")).ok();
+                    if let Some(t_str) = type_val.and_then(|v| v.as_string()) {
+                        if t_str == "zd-save-inplace" {
+                            trigger_save.set(true);
+                        }
+                    }
+                }
+            }) as Box<dyn FnMut(web_sys::MessageEvent)>);
+            let _ = win.add_event_listener_with_callback("message", cb.as_ref().unchecked_ref());
+            cb.forget();
+        }
+    });
 
     // A fresh version begins a fresh watchdog. It must never overwrite a
     // successfully loaded frame: before this guard, an idle studio (no reload
@@ -502,8 +557,30 @@ pub fn PreviewPanel(
                             </button>
                         </Show>
 
-                        <!-- Slides Drawer & Deck Inspector button (for Slides mode) -->
+                        <!-- Slide Navigation (for Slides mode) -->
                         <Show when=move || mode.get() == ModeId::Slides>
+                            <div class="zd-slide-nav-group">
+                                <button
+                                    type="button"
+                                    class="zd-btn-icon zd-btn-slide-nav"
+                                    on:click=move |_| step_slide(-1)
+                                    title=move || t(language.get(), "Previous slide", "اسلاید قبلی")
+                                >
+                                    <Icon data=LuChevronRight size=13 />
+                                </button>
+                                <span class="zd-slide-nav-badge">
+                                    {move || t(language.get(), "Slide", "اسلاید")}
+                                </span>
+                                <button
+                                    type="button"
+                                    class="zd-btn-icon zd-btn-slide-nav"
+                                    on:click=move |_| step_slide(1)
+                                    title=move || t(language.get(), "Next slide", "اسلاید بعدی")
+                                >
+                                    <Icon data=LuChevronLeft size=13 />
+                                </button>
+                            </div>
+
                             <button
                                 type="button"
                                 class="zd-btn-soft zd-btn-slide-deck"
