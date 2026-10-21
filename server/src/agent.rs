@@ -908,7 +908,7 @@ pub fn build_motion_prompt(tokens: &DesignTokens) -> String {
 
 fn build_motion_prompt_from_request(tokens: &DesignTokens, req: &PromptRequest) -> String {
     let aspect_ratio = req.aspect_ratio.as_deref().unwrap_or("16:9");
-    let duration = req.duration_secs.unwrap_or(10).clamp(5, 60);
+    let duration = req.duration_secs.unwrap_or(10).clamp(5, 600);
     let sfx = req.sound_effects.unwrap_or(false);
     let tts = req.tts_text.as_deref();
     let tts_lang = req.tts_lang.as_deref().unwrap_or("fa-IR");
@@ -1649,7 +1649,7 @@ pub fn generate_prototype_html_from_request(req: &PromptRequest) -> String {
 
 fn generate_motion_html(req: &PromptRequest, tokens: &DesignTokens) -> String {
     let aspect_ratio = req.aspect_ratio.as_deref().unwrap_or("16:9");
-    let duration = req.duration_secs.unwrap_or(10).clamp(5, 60);
+    let duration = req.duration_secs.unwrap_or(10).clamp(5, 600);
     let sfx = req.sound_effects.unwrap_or(false);
     let tts_text = req.tts_text.as_deref().unwrap_or("").trim();
     let tts_lang = req.tts_lang.as_deref().unwrap_or("fa-IR");

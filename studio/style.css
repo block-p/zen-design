@@ -3185,3 +3185,36 @@ html[data-theme="dark"] .zd-select--compact option {
   cursor: pointer;
 }
 
+
+.zd-motion-duration-presets {
+  display: flex;
+  gap: 4px;
+  margin-top: 4px;
+}
+
+.zd-motion-dur-pill {
+  flex: 1;
+  padding: 3px 0;
+  font-size: 10px;
+  font-weight: 500;
+  text-align: center;
+  background: var(--zd-surface);
+  border: 1px solid var(--zd-border);
+  border-radius: var(--zd-radius-sm);
+  color: var(--zd-text-muted);
+  cursor: pointer;
+  transition: all 0.15s ease;
+  font-family: var(--zd-font-mono, monospace);
+}
+
+.zd-motion-dur-pill:hover {
+  background: var(--zd-surface-hover);
+  color: var(--zd-text);
+}
+
+.zd-motion-dur-pill--active {
+  background: var(--zd-accent-subtle, rgba(56, 189, 248, 0.15));
+  border-color: var(--zd-accent);
+  color: var(--zd-accent);
+  font-weight: 700;
+}

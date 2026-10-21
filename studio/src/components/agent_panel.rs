@@ -293,7 +293,7 @@ pub fn AgentPanel(
                             </div>
                         </div>
 
-                        <!-- Dynamic Duration Slider -->
+                        <!-- Dynamic Duration Slider (up to 10 minutes) -->
                         <div class="zd-motion-field">
                             <div class="zd-motion-field-label-row">
                                 <span class="zd-motion-field-label">
@@ -302,7 +302,18 @@ pub fn AgentPanel(
                                 </span>
                                 <span class="zd-motion-field-tag">
                                     {move || {
-                                        let text = format!("{}s", duration_secs.get());
+                                        let secs = duration_secs.get();
+                                        let text = if secs >= 60 {
+                                            let mins = secs / 60;
+                                            let rem = secs % 60;
+                                            if rem == 0 {
+                                                format!("{}m", mins)
+                                            } else {
+                                                format!("{}m {}s", mins, rem)
+                                            }
+                                        } else {
+                                            format!("{}s", secs)
+                                        };
                                         localize_digits(&text, language.get())
                                     }}
                                 </span>
@@ -310,8 +321,8 @@ pub fn AgentPanel(
                             <input
                                 type="range"
                                 min="5"
-                                max="60"
-                                step="1"
+                                max="600"
+                                step="5"
                                 class="zd-range-slider"
                                 prop:value=move || duration_secs.get().to_string()
                                 on:input=move |ev| {
@@ -320,6 +331,50 @@ pub fn AgentPanel(
                                     }
                                 }
                             />
+                            <div class="zd-motion-duration-presets">
+                                <button
+                                    type="button"
+                                    class=move || if duration_secs.get() == 10 { "zd-motion-dur-pill zd-motion-dur-pill--active" } else { "zd-motion-dur-pill" }
+                                    on:click=move |_| duration_secs.set(10)
+                                >
+                                    {move || localize_digits("10s", language.get())}
+                                </button>
+                                <button
+                                    type="button"
+                                    class=move || if duration_secs.get() == 30 { "zd-motion-dur-pill zd-motion-dur-pill--active" } else { "zd-motion-dur-pill" }
+                                    on:click=move |_| duration_secs.set(30)
+                                >
+                                    {move || localize_digits("30s", language.get())}
+                                </button>
+                                <button
+                                    type="button"
+                                    class=move || if duration_secs.get() == 60 { "zd-motion-dur-pill zd-motion-dur-pill--active" } else { "zd-motion-dur-pill" }
+                                    on:click=move |_| duration_secs.set(60)
+                                >
+                                    {move || localize_digits("1m", language.get())}
+                                </button>
+                                <button
+                                    type="button"
+                                    class=move || if duration_secs.get() == 180 { "zd-motion-dur-pill zd-motion-dur-pill--active" } else { "zd-motion-dur-pill" }
+                                    on:click=move |_| duration_secs.set(180)
+                                >
+                                    {move || localize_digits("3m", language.get())}
+                                </button>
+                                <button
+                                    type="button"
+                                    class=move || if duration_secs.get() == 300 { "zd-motion-dur-pill zd-motion-dur-pill--active" } else { "zd-motion-dur-pill" }
+                                    on:click=move |_| duration_secs.set(300)
+                                >
+                                    {move || localize_digits("5m", language.get())}
+                                </button>
+                                <button
+                                    type="button"
+                                    class=move || if duration_secs.get() == 600 { "zd-motion-dur-pill zd-motion-dur-pill--active" } else { "zd-motion-dur-pill" }
+                                    on:click=move |_| duration_secs.set(600)
+                                >
+                                    {move || localize_digits("10m", language.get())}
+                                </button>
+                            </div>
                         </div>
 
                         <!-- Sound Effects Toggle -->
