@@ -38,7 +38,12 @@ pub fn ThemeBuilderModal(
     let accent_color = RwSignal::new("#38bdf8".to_string());
     let card_bg = RwSignal::new("#161b22".to_string());
     let border_color = RwSignal::new("#30363d".to_string());
-    let font_family = RwSignal::new("'Plus Jakarta Sans', system-ui, sans-serif".to_string());
+    let initial_font = if language.get_untracked() == Language::Fa {
+        "'Vazirmatn', system-ui, sans-serif".to_string()
+    } else {
+        "'Plus Jakarta Sans', system-ui, sans-serif".to_string()
+    };
+    let font_family = RwSignal::new(initial_font);
 
     // When modal opens or custom_theme changes, populate fields
     Effect::new(move |_| {
@@ -51,6 +56,8 @@ pub fn ThemeBuilderModal(
                 card_bg.set(existing.card_bg);
                 border_color.set(existing.border_color);
                 font_family.set(existing.font_family);
+            } else if language.get() == Language::Fa && font_family.get_untracked().contains("Jakarta") {
+                font_family.set("'Vazirmatn', system-ui, sans-serif".to_string());
             }
         }
     });
@@ -361,6 +368,7 @@ pub fn ThemeBuilderModal(
                                         prop:value=move || font_family.get()
                                         on:change=move |ev| font_family.set(event_target_value(&ev))
                                     >
+                                        <option value="'Vazirmatn', system-ui, sans-serif">"Vazirmatn (وزیرمتن - Modern Persian / Arabic)"</option>
                                         <option value="'Plus Jakarta Sans', system-ui, sans-serif">"Plus Jakarta Sans (Modern Editorial)"</option>
                                         <option value="'Inter', system-ui, sans-serif">"Inter (Clean Tech)"</option>
                                         <option value="'Outfit', system-ui, sans-serif">"Outfit (Warm Geometric)"</option>

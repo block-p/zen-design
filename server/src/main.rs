@@ -969,12 +969,19 @@ fn generate_algorithmic_theme(prompt: &str) -> CustomThemeTokens {
         let dot = format!("hsl({hue}, 85%, 60%)");
         let swatch = format!("linear-gradient(135deg, hsl({hue}, 85%, 60%) 0%, #0a0d14 100%)");
 
+        let is_persian = prompt.chars().any(|c| ('\u{0600}'..='\u{06FF}').contains(&c));
+        let default_font = if is_persian {
+            "'Vazirmatn', system-ui, sans-serif".to_string()
+        } else {
+            "'Inter', system-ui, sans-serif".to_string()
+        };
+
         CustomThemeTokens {
             name: format!("Custom ({})", truncate_words(prompt, 18).trim_end_matches('…')),
             bg: "#0a0d14".to_string(),
             text: "#f1f5f9".to_string(),
             accent,
-            font_family: "'Inter', system-ui, sans-serif".to_string(),
+            font_family: default_font,
             card_bg: "#131824".to_string(),
             border_color: "#1e293b".to_string(),
             dot,
