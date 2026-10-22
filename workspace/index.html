@@ -1,6 +1,6 @@
 <!DOCTYPE html>
 <html lang="fa" dir="rtl">
-<head><meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'; script-src 'unsafe-inline'; img-src data: blob:; font-src data:; media-src data: blob:; connect-src 'none'; base-uri 'none'; form-action 'none'; frame-src 'none'">
+<head><meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'; script-src 'unsafe-inline'; img-src data: blob:; font-src data:; media-src 'self' data: blob:; connect-src 'self' data: blob:; base-uri 'none'; form-action 'none'; frame-src 'none'">
 
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -370,12 +370,30 @@ function playWhoosh(){
   }
 }
 
-// ─── WEB SPEECH TTS ───────────────────────────────────────────
+// ─── NEURAL TTS & WEB SPEECH ───────────────────────────────────────────
 let ttsUtterance = null;
-function startTTS(){
+let ttsAudio = null;
+async function startTTS(){
+  const scriptText = "در سال ۲۰۲۶، علوم سیاسی دیگر تنها به تحلیل متون کهن یا ساختار سنتی دولت‌ها محدود نمی‌شود. جهان امروز، صحنه پیوند عمیق قدرت، داده و فناوری است. جایی که هوش مصنوعی مولد، دیپلماسی الگوریتمی و جریان‌های پیچیده اطلاعات، سرنوشت ژئوپلیتیک را رقم می‌زنند. یک پژوهشگر سیاسی در سال ۲۰۲۶، همان‌قدر که نیازمند درک نظریه‌های موازنه قدرت است، باید سازوکار جنگ شناختی، حکمرانی سایبری و تأثیر هوش مصنوعی بر اراده رأی‌دهندگان را بشناسد. در این دوران پرشتاب، دموکراسی بیش از هر زمان دیگری با چالش شفافیت الگوریتم‌ها و حفظ هویت انسانی روبه‌روست. علوم سیاسی در سال ۲۰۲۶، قطب‌نمایی است برای عبور از آشفتگی داده‌ها؛ دانشی که به ما یادآوری می‌کند در میان نبردهای نامرئی سایبری، هدف نهایی قدرت همچنان باید عدالت، صلح و انسان باشد.";
+  try {
+    const res = await fetch('/api/tts', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ text: scriptText })
+    });
+    if (res.ok) {
+      const blob = await res.blob();
+      if (ttsAudio) { ttsAudio.pause(); }
+      ttsAudio = new Audio(URL.createObjectURL(blob));
+      await ttsAudio.play();
+      return;
+    }
+  } catch(e) {
+    console.warn('TTS fetch failed, falling back to Web Speech:', e);
+  }
   if(!window.speechSynthesis) return;
   window.speechSynthesis.cancel();
-  ttsUtterance = new SpeechSynthesisUtterance("در سال ۲۰۲۶، علوم سیاسی دیگر تنها به تحلیل متون کهن یا ساختار سنتی دولت‌ها محدود نمی‌شود. جهان امروز، صحنه پیوند عمیق قدرت، داده و فناوری است. جایی که هوش مصنوعی مولد، دیپلماسی الگوریتمی و جریان‌های پیچیده اطلاعات، سرنوشت ژئوپلیتیک را رقم می‌زنند. یک پژوهشگر سیاسی در سال ۲۰۲۶، همان‌قدر که نیازمند درک نظریه‌های موازنه قدرت است، باید سازوکار جنگ شناختی، حکمرانی سایبری و تأثیر هوش مصنوعی بر اراده رأی‌دهندگان را بشناسد. در این دوران پرشتاب، دموکراسی بیش از هر زمان دیگری با چالش شفافیت الگوریتم‌ها و حفظ هویت انسانی روبه‌روست. علوم سیاسی در سال ۲۰۲۶، قطب‌نمایی است برای عبور از آشفتگی داده‌ها؛ دانشی که به ما یادآوری می‌کند در میان نبردهای نامرئی سایبری، هدف نهایی قدرت همچنان باید عدالت، صلح و انسان باشد.");
+  ttsUtterance = new SpeechSynthesisUtterance(scriptText);
   ttsUtterance.lang = "fa-IR";
   ttsUtterance.rate = 0.9;
   ttsUtterance.pitch = 1.0;
@@ -1324,6 +1342,7 @@ function replay(){
   boidsActive = false;
   clearSVG();
   clearTypo();
+  if(ttsAudio) { ttsAudio.pause(); ttsAudio = null; }
   if(window.speechSynthesis) window.speechSynthesis.cancel();
   startTTS();
   if(animId) cancelAnimationFrame(animId);
@@ -1351,6 +1370,9 @@ document.addEventListener('keydown', e=>{
     paused=!paused;
     if(paused) pauseAt=elapsed;
     else startTime = performance.now() - elapsed*1000;
+    if(ttsAudio){
+      paused ? ttsAudio.pause() : ttsAudio.play();
+    }
     if(window.speechSynthesis){
       paused ? window.speechSynthesis.pause() : window.speechSynthesis.resume();
     }

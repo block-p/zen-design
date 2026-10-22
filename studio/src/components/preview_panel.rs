@@ -2,7 +2,8 @@ use std::cell::Cell;
 
 use icondata_lu::{
     LuChevronLeft, LuChevronRight, LuClock, LuDownload, LuExternalLink, LuGlobe, LuLoaderCircle,
-    LuMaximize, LuPenLine, LuPresentation, LuPrinter, LuRotateCw, LuSave, LuTriangleAlert, LuX,
+    LuMaximize, LuPenLine, LuPresentation, LuPrinter, LuRotateCw, LuSave, LuTriangleAlert,
+    LuVolume2, LuVolumeX, LuX,
 };
 use leptos::prelude::*;
 
@@ -62,9 +63,14 @@ pub fn PreviewPanel(
     let total_slides_count = RwSignal::new(1_usize);
     let current_slide_notes = RwSignal::new(String::new());
     let show_presenter_notes = RwSignal::new(false);
+    let is_speaking = RwSignal::new(false);
 
     // Sync presenter slide index and notes from iframe
     let sync_presenter = move || {
+        if is_speaking.get_untracked() {
+            let _ = js_sys::eval("try { document.querySelector('.zd-device-iframe')?.contentWindow?.postMessage({ type: 'zd-stop-speech' }, '*'); } catch(e){}");
+            is_speaking.set(false);
+        }
         if let Some(frame) = iframe_ref.get_untracked() {
             if let Some(doc) = frame.content_document() {
                 let code = r#"
@@ -103,6 +109,10 @@ pub fn PreviewPanel(
     };
 
     let stop_presenting = move || {
+        if is_speaking.get_untracked() {
+            let _ = js_sys::eval("try { document.querySelector('.zd-device-iframe')?.contentWindow?.postMessage({ type: 'zd-stop-speech' }, '*'); } catch(e){}");
+            is_speaking.set(false);
+        }
         is_presenting.set(false);
         show_presenter_notes.set(false);
     };
@@ -895,6 +905,7 @@ pub fn PreviewPanel(
                             on:load=move |_| handle_frame_load()
                             on:error=move |_| retry_or_stall()
                             sandbox="allow-scripts allow-same-origin allow-forms allow-modals allow-popups allow-downloads"
+                            allow="autoplay; speaker"
                             class="zd-device-iframe"
                         ></iframe>
 
@@ -1044,14 +1055,49 @@ pub fn PreviewPanel(
                                         )}
                                     </span>
                                 </div>
-                                <button
-                                    type="button"
-                                    class="zd-btn-icon-mini"
-                                    on:click=move |_| show_presenter_notes.set(false)
-                                    title="Close notes"
-                                >
-                                    <Icon data=LuX size=11 />
-                                </button>
+                                <div class="zd-presenter-notes-actions" style="display:flex;align-items:center;gap:4px;">
+                                    <button
+                                        type="button"
+                                        class="zd-btn-icon-mini"
+                                        on:click=move |_| {
+                                            let notes = current_slide_notes.get();
+                                            if notes.trim().is_empty() { return; }
+                                            if is_speaking.get() {
+                                                let _ = js_sys::eval("try { document.querySelector('.zd-device-iframe')?.contentWindow?.postMessage({ type: 'zd-stop-speech' }, '*'); } catch(e){}");
+                                                is_speaking.set(false);
+                                            } else {
+                                                let escaped = notes.replace('\\', "\\\\").replace('\'', "\\'").replace('\n', " ");
+                                                let _ = js_sys::eval(&format!(
+                                                    "try {{ document.querySelector('.zd-device-iframe')?.contentWindow?.postMessage({{ type: 'zd-speak', text: '{escaped}' }}, '*'); }} catch(e){{}}"
+                                                ));
+                                                is_speaking.set(true);
+                                            }
+                                        }
+                                        title=move || if is_speaking.get() {
+                                            t(language.get(), "Stop narration", "توقف پخش صدا")
+                                        } else {
+                                            t(language.get(), "Play neural voice narration", "پخش نریشن صوتی با صدای طبیعی")
+                                        }
+                                    >
+                                        <Show when=move || is_speaking.get() fallback=move || view! { <Icon data=LuVolume2 size=12 /> }>
+                                            <Icon data=LuVolumeX size=12 />
+                                        </Show>
+                                    </button>
+                                    <button
+                                        type="button"
+                                        class="zd-btn-icon-mini"
+                                        on:click=move |_| {
+                                            if is_speaking.get() {
+                                                let _ = js_sys::eval("try { document.querySelector('.zd-device-iframe')?.contentWindow?.postMessage({ type: 'zd-stop-speech' }, '*'); } catch(e){}");
+                                                is_speaking.set(false);
+                                            }
+                                            show_presenter_notes.set(false);
+                                        }
+                                        title="Close notes"
+                                    >
+                                        <Icon data=LuX size=11 />
+                                    </button>
+                                </div>
                             </div>
                             <div class="zd-presenter-notes-body">
                                 {move || {

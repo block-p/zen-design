@@ -5,6 +5,7 @@ mod frames;
 mod history;
 mod providers;
 mod settings;
+mod tts;
 mod watcher;
 
 use std::convert::Infallible;
@@ -163,6 +164,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .route("/api/history/new-project", post(new_project))
         .route("/api/themes/generate", post(generate_theme))
         .route("/api/slides/ai-action", post(slide_ai_action))
+        .route("/api/tts", get(tts_synthesize_get).post(tts_synthesize_post))
         .route("/api/artifact", get(get_artifact).put(save_artifact))
         // Serve the agent's live output. ServeDir handles traversal protection
         // and content types; index.html is served for `/preview/`.
@@ -2144,6 +2146,45 @@ async fn slide_ai_action(
         payload.target_layout.as_deref().unwrap_or_default(),
     );
     Json(result).into_response()
+}
+
+#[derive(Deserialize)]
+struct TtsPayload {
+    text: String,
+    #[serde(default)]
+    voice: Option<String>,
+    #[serde(default)]
+    rate: Option<String>,
+}
+
+async fn tts_synthesize_internal(payload: TtsPayload) -> impl IntoResponse {
+    match tts::synthesize(&payload.text, payload.voice.as_deref(), payload.rate.as_deref()).await {
+        Ok(bytes) => (
+            StatusCode::OK,
+            [
+                (axum::http::header::CONTENT_TYPE, "audio/mpeg"),
+                (axum::http::header::CACHE_CONTROL, "public, max-age=86400"),
+            ],
+            bytes,
+        ).into_response(),
+        Err(err) => (
+            StatusCode::BAD_REQUEST,
+            [(axum::http::header::CONTENT_TYPE, "application/json")],
+            serde_json::to_string(&json!({ "error": err })).unwrap_or_default(),
+        ).into_response(),
+    }
+}
+
+async fn tts_synthesize_post(
+    Json(payload): Json<TtsPayload>,
+) -> impl IntoResponse {
+    tts_synthesize_internal(payload).await
+}
+
+async fn tts_synthesize_get(
+    Query(payload): Query<TtsPayload>,
+) -> impl IntoResponse {
+    tts_synthesize_internal(payload).await
 }
 
 

@@ -63,23 +63,24 @@ pub fn generate(
             map.insert("custom_theme".to_string(), json!(ct));
         }
 
+        if let Some(sfx) = sound_effects_val {
+            map.insert("sound_effects".to_string(), json!(sfx));
+        }
+        if let Some(tts) = tts_text_val {
+            if !tts.is_empty() {
+                map.insert("tts_text".to_string(), json!(tts));
+                if let Some(lang) = tts_lang_val {
+                    map.insert("tts_lang".to_string(), json!(lang));
+                }
+            }
+        }
+
         if selected_mode == ModeId::Motion {
             if let Some(ar) = aspect_ratio_val {
                 map.insert("aspect_ratio".to_string(), json!(ar.as_str()));
             }
             if let Some(d) = duration_secs_val {
                 map.insert("duration_secs".to_string(), json!(d));
-            }
-            if let Some(sfx) = sound_effects_val {
-                map.insert("sound_effects".to_string(), json!(sfx));
-            }
-            if let Some(tts) = tts_text_val {
-                if !tts.is_empty() {
-                    map.insert("tts_text".to_string(), json!(tts));
-                    if let Some(lang) = tts_lang_val {
-                        map.insert("tts_lang".to_string(), json!(lang));
-                    }
-                }
             }
         }
 

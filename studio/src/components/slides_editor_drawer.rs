@@ -1,7 +1,8 @@
 use gloo_net::http::Request;
 use icondata_lu::{
     LuArrowDown, LuArrowUp, LuCheck, LuCode, LuColumns2, LuCopy, LuEye, LuLayoutGrid,
-    LuLoaderCircle, LuMic, LuPenLine, LuPlus, LuSave, LuSparkles, LuTrash2, LuWand, LuX,
+    LuLoaderCircle, LuMic, LuPenLine, LuPlay, LuPlus, LuSave, LuSparkles, LuTrash2, LuVolume2,
+    LuWand, LuX,
 };
 use leptos::prelude::*;
 use leptos::task::spawn_local;
@@ -28,6 +29,7 @@ pub struct SlideItem {
     pub subtitle: String,
     pub layout: String,
     pub speaker_notes: String,
+    pub sfx: String,
     pub items: Vec<SlideCardItem>,
 }
 
@@ -118,6 +120,10 @@ fn extract_slides(html: &str) -> Vec<SlideItem> {
             }
         }
 
+        let sfx = el
+            .get_attribute("data-sfx")
+            .unwrap_or_else(|| "whoosh".to_string());
+
         slides.push(SlideItem {
             id: slide_id,
             index: i as usize,
@@ -126,6 +132,7 @@ fn extract_slides(html: &str) -> Vec<SlideItem> {
             subtitle,
             layout,
             speaker_notes,
+            sfx,
             items,
         });
     }
@@ -260,6 +267,36 @@ pub fn SlidesEditorDrawer(
                 }
             }
         }
+    };
+
+    let update_sfx = move |idx: usize, val: String| {
+        let current = raw_html.get();
+        if let Some(doc) = parse_doc(&current) {
+            if let Ok(nodes) = doc.query_selector_all(".slide, section[id^='s'], [data-slide-id]") {
+                if let Some(node) = nodes.item(idx as u32) {
+                    if let Ok(el) = node.dyn_into::<web_sys::Element>() {
+                        let _ = el.set_attribute("data-sfx", &val);
+                        let updated = serialize_doc(&doc);
+                        raw_html.set(updated.clone());
+                        save_artifact_content(Some(updated));
+                    }
+                }
+            }
+        }
+    };
+
+    let play_sfx_test = move |sfx_name: String| {
+        let _ = js_sys::eval(&format!(
+            "try {{ document.querySelector('.zd-device-iframe')?.contentWindow?.postMessage({{ type: 'zd-play-sfx', sfx: '{sfx_name}' }}, '*'); }} catch(e){{}}"
+        ));
+    };
+
+    let play_notes_tts = move |notes: String| {
+        if notes.trim().is_empty() { return; }
+        let escaped = notes.replace('\\', "\\\\").replace('\'', "\\'").replace('\n', " ");
+        let _ = js_sys::eval(&format!(
+            "try {{ document.querySelector('.zd-device-iframe')?.contentWindow?.postMessage({{ type: 'zd-speak', text: '{escaped}' }}, '*'); }} catch(e){{}}"
+        ));
     };
 
     let run_ai_action = move |action_type: &'static str| {
@@ -1207,16 +1244,30 @@ pub fn SlidesEditorDrawer(
                                                                 {move || t(language.get(), "Speaker Notes & Script", "یادداشت‌های ارائه‌دهنده و متن سخنرانی")}
                                                             </span>
                                                         </div>
-                                                        <button
-                                                            type="button"
-                                                            class="zd-btn-soft zd-btn-gen-notes-mini"
-                                                            disabled=move || is_ai_loading.get()
-                                                            on:click=move |_| run_ai_action("speaker_notes")
-                                                            title=move || t(language.get(), "Auto-generate talking points with AI", "تولید خودکار متن سخنرانی با هوش مصنوعی")
-                                                        >
-                                                            <Icon data=LuSparkles size=11 />
-                                                            <span>{move || t(language.get(), "AI Script", "متن هوشمند")}</span>
-                                                        </button>
+                                                        <div style="display:flex;align-items:center;gap:6px;">
+                                                            <button
+                                                                type="button"
+                                                                class="zd-btn-soft zd-btn-gen-notes-mini"
+                                                                on:click={
+                                                                    let notes = current_slide.speaker_notes.clone();
+                                                                    move |_| play_notes_tts(notes.clone())
+                                                                }
+                                                                title=move || t(language.get(), "Play speech narration", "پخش گفتاری یادداشت با صدای هوش مصنوعی")
+                                                            >
+                                                                <Icon data=LuVolume2 size=11 />
+                                                                <span>{move || t(language.get(), "Test TTS", "تست صدا")}</span>
+                                                            </button>
+                                                            <button
+                                                                type="button"
+                                                                class="zd-btn-soft zd-btn-gen-notes-mini"
+                                                                disabled=move || is_ai_loading.get()
+                                                                on:click=move |_| run_ai_action("speaker_notes")
+                                                                title=move || t(language.get(), "Auto-generate talking points with AI", "تولید خودکار متن سخنرانی با هوش مصنوعی")
+                                                            >
+                                                                <Icon data=LuSparkles size=11 />
+                                                                <span>{move || t(language.get(), "AI Script", "متن هوشمند")}</span>
+                                                            </button>
+                                                        </div>
                                                     </div>
                                                     <p class="zd-slide-notes-desc">
                                                         {move || t(
@@ -1236,6 +1287,47 @@ pub fn SlidesEditorDrawer(
                                                         on:change=move |ev| update_speaker_notes(cur_idx, event_target_value(&ev))
                                                         rows=3
                                                     ></textarea>
+                                                </div>
+
+                                                <!-- Sound Effect (SFX) Selector -->
+                                                <div class="zd-slide-sfx-box" style="margin-top:12px;margin-bottom:12px;padding:12px;background:rgba(255,255,255,0.02);border:1px solid rgba(255,255,255,0.08);border-radius:8px;">
+                                                    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;">
+                                                        <div style="display:flex;align-items:center;gap:6px;">
+                                                            <Icon data=LuVolume2 size=13 />
+                                                            <span style="font-weight:600;font-size:0.82rem;">
+                                                                {move || t(language.get(), "Slide Audio / SFX Transition", "افکت صوتی انتقال اسلاید (SFX)")}
+                                                            </span>
+                                                        </div>
+                                                        <button
+                                                            type="button"
+                                                            class="zd-btn-soft zd-btn-gen-notes-mini"
+                                                            on:click={
+                                                                let sfx = current_slide.sfx.clone();
+                                                                move |_| play_sfx_test(sfx.clone())
+                                                            }
+                                                            title=move || t(language.get(), "Test sound effect in preview", "پخش آزمایشی این افکت صوتی")
+                                                        >
+                                                            <Icon data=LuPlay size=11 />
+                                                            <span>{move || t(language.get(), "Play SFX", "پخش افکت")}</span>
+                                                        </button>
+                                                    </div>
+                                                    <div style="display:flex;gap:8px;align-items:center;">
+                                                        <select
+                                                            class="zd-input zd-select"
+                                                            style="flex:1;font-size:0.8rem;"
+                                                            prop:value=current_slide.sfx.clone()
+                                                            on:change=move |ev| update_sfx(cur_idx, event_target_value(&ev))
+                                                        >
+                                                            <option value="whoosh">{move || t(language.get(), "Whoosh (Silky aerodynamic glide)", "وووش (حرکت نرم و پرسرعت)")}</option>
+                                                            <option value="punch">{move || t(language.get(), "Punch / Impact (Deep sub-bass punch)", "پانچ / ضربه‌ای (بیس عمیق برای ارقام)")}</option>
+                                                            <option value="chime">{move || t(language.get(), "Chime (Harmonic glass chime)", "چایم / زنگ‌دار (برای دستاوردها و نکات کلیدی)")}</option>
+                                                            <option value="digital">{move || t(language.get(), "Digital (Tech blip / data sequence)", "دیجیتال (سیگنال‌های تکنولوژی و معماری)")}</option>
+                                                            <option value="sweep">{move || t(language.get(), "Sweep (Smooth ambient frequency sweep)", "سوئیپ (پیمایش فرکانسی برای کاور)")}</option>
+                                                            <option value="riser">{move || t(language.get(), "Riser (Upward momentum build-up)", "رایزر (اوج صعودی برای مسیر آینده)")}</option>
+                                                            <option value="drop">{move || t(language.get(), "Drop (Sub-bass frequency drop)", "دراپ (افت بیس برای چالش‌ها و مسائل)")}</option>
+                                                            <option value="none">{move || t(language.get(), "None (Muted silence)", "بی‌صدا (سکوت)")}</option>
+                                                        </select>
+                                                    </div>
                                                 </div>
 
                                                 <!-- Slide Content Items / Cards -->

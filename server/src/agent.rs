@@ -28,8 +28,256 @@ const DEEP_PASSES: usize = 3;
 const DEEP_BUDGET: Duration = Duration::from_secs(45 * 60);
 
 /// Inline CSP injected into generated artifacts so model output cannot call
-/// home or reach back into the daemon API.
-pub const CSP_META: &str = r#"<meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'; script-src 'unsafe-inline'; img-src data: blob:; font-src data:; media-src data: blob:; connect-src 'none'; base-uri 'none'; form-action 'none'; frame-src 'none'">"#;
+/// external tracking or untrusted CDNs, while allowing self-hosted daemon TTS and WebAudio blobs.
+pub const CSP_META: &str = r#"<meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'; script-src 'unsafe-inline'; img-src data: blob:; font-src data:; media-src 'self' data: blob:; connect-src 'self' data: blob:; base-uri 'none'; form-action 'none'; frame-src 'none'">"#;
+
+/// Mathematical WebAudio synthesizer and Neural TTS audio director for ZenDesign slides and motion.
+pub const ZEN_AUDIO_SCRIPT: &str = r#"<script id="zen-audio-engine">
+window.ZenAudio = (() => {
+  let ctx = null;
+  let hasUserInteracted = false;
+
+  function getContext() {
+    if (!ctx) {
+      const AudioCtx = window.AudioContext || window.webkitAudioContext;
+      if (AudioCtx) ctx = new AudioCtx();
+    }
+    if (ctx && ctx.state === 'suspended') {
+      ctx.resume().catch(() => {});
+    }
+    return ctx;
+  }
+
+  function play(type) {
+    try {
+      const c = getContext();
+      if (!c) return;
+      const now = c.currentTime;
+
+      if (type === 'whoosh') {
+        const osc = c.createOscillator();
+        const gain = c.createGain();
+        const filter = c.createBiquadFilter();
+        osc.type = 'sine';
+        osc.frequency.setValueAtTime(140, now);
+        osc.frequency.exponentialRampToValueAtTime(520, now + 0.1);
+        osc.frequency.exponentialRampToValueAtTime(70, now + 0.3);
+        filter.type = 'lowpass';
+        filter.frequency.setValueAtTime(500, now);
+        filter.frequency.exponentialRampToValueAtTime(1800, now + 0.1);
+        filter.frequency.exponentialRampToValueAtTime(150, now + 0.3);
+        gain.gain.setValueAtTime(0.001, now);
+        gain.gain.linearRampToValueAtTime(0.2, now + 0.06);
+        gain.gain.exponentialRampToValueAtTime(0.001, now + 0.34);
+        osc.connect(filter);
+        filter.connect(gain);
+        gain.connect(c.destination);
+        osc.start(now);
+        osc.stop(now + 0.35);
+      } else if (type === 'punch' || type === 'impact') {
+        const osc = c.createOscillator();
+        const gain = c.createGain();
+        osc.type = 'triangle';
+        osc.frequency.setValueAtTime(130, now);
+        osc.frequency.exponentialRampToValueAtTime(34, now + 0.28);
+        gain.gain.setValueAtTime(0.35, now);
+        gain.gain.exponentialRampToValueAtTime(0.001, now + 0.38);
+        osc.connect(gain);
+        gain.connect(c.destination);
+        osc.start(now);
+        osc.stop(now + 0.4);
+      } else if (type === 'chime' || type === 'success') {
+        [659.25, 987.77, 1318.51].forEach((freq, i) => {
+          const osc = c.createOscillator();
+          const gain = c.createGain();
+          osc.type = 'sine';
+          osc.frequency.setValueAtTime(freq, now + i * 0.06);
+          gain.gain.setValueAtTime(0.001, now + i * 0.06);
+          gain.gain.linearRampToValueAtTime(0.12, now + i * 0.06 + 0.015);
+          gain.gain.exponentialRampToValueAtTime(0.001, now + i * 0.06 + 0.45);
+          osc.connect(gain);
+          gain.connect(c.destination);
+          osc.start(now + i * 0.06);
+          osc.stop(now + i * 0.06 + 0.48);
+        });
+      } else if (type === 'digital' || type === 'blip') {
+        [880, 1174.66, 1760].forEach((freq, i) => {
+          const osc = c.createOscillator();
+          const gain = c.createGain();
+          osc.type = 'sine';
+          osc.frequency.setValueAtTime(freq, now + i * 0.035);
+          gain.gain.setValueAtTime(0.08, now + i * 0.035);
+          gain.gain.exponentialRampToValueAtTime(0.001, now + i * 0.035 + 0.08);
+          osc.connect(gain);
+          gain.connect(c.destination);
+          osc.start(now + i * 0.035);
+          osc.stop(now + i * 0.035 + 0.09);
+        });
+      } else if (type === 'sweep') {
+        const osc = c.createOscillator();
+        const gain = c.createGain();
+        osc.type = 'sine';
+        osc.frequency.setValueAtTime(220, now);
+        osc.frequency.exponentialRampToValueAtTime(880, now + 0.4);
+        gain.gain.setValueAtTime(0.001, now);
+        gain.gain.linearRampToValueAtTime(0.14, now + 0.15);
+        gain.gain.exponentialRampToValueAtTime(0.001, now + 0.45);
+        osc.connect(gain);
+        gain.connect(c.destination);
+        osc.start(now);
+        osc.stop(now + 0.46);
+      } else if (type === 'riser') {
+        const osc = c.createOscillator();
+        const gain = c.createGain();
+        osc.type = 'sawtooth';
+        const filter = c.createBiquadFilter();
+        filter.type = 'lowpass';
+        filter.frequency.setValueAtTime(300, now);
+        filter.frequency.exponentialRampToValueAtTime(2400, now + 0.5);
+        osc.frequency.setValueAtTime(110, now);
+        osc.frequency.exponentialRampToValueAtTime(440, now + 0.5);
+        gain.gain.setValueAtTime(0.02, now);
+        gain.gain.linearRampToValueAtTime(0.12, now + 0.4);
+        gain.gain.exponentialRampToValueAtTime(0.001, now + 0.55);
+        osc.connect(filter);
+        filter.connect(gain);
+        gain.connect(c.destination);
+        osc.start(now);
+        osc.stop(now + 0.56);
+      } else if (type === 'drop') {
+        const osc = c.createOscillator();
+        const gain = c.createGain();
+        osc.type = 'sine';
+        osc.frequency.setValueAtTime(160, now);
+        osc.frequency.exponentialRampToValueAtTime(36, now + 0.6);
+        gain.gain.setValueAtTime(0.3, now);
+        gain.gain.exponentialRampToValueAtTime(0.001, now + 0.65);
+        osc.connect(gain);
+        gain.connect(c.destination);
+        osc.start(now);
+        osc.stop(now + 0.7);
+      }
+    } catch (e) {
+      console.warn('ZenAudio error:', e);
+    }
+  }
+
+  let currentAudio = null;
+  async function speak(text, options = {}) {
+    if (!text || !text.trim()) return;
+    stopSpeech();
+    try {
+      const resp = await fetch('/api/tts', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          text: text.trim(),
+          voice: options.voice || null,
+          rate: options.rate || null
+        })
+      });
+      if (resp.ok) {
+        const blob = await resp.blob();
+        const audioUrl = URL.createObjectURL(blob);
+        const audio = new Audio(audioUrl);
+        currentAudio = audio;
+        audio.onended = () => {
+          URL.revokeObjectURL(audioUrl);
+          if (currentAudio === audio) currentAudio = null;
+        };
+        await audio.play();
+        return;
+      }
+    } catch (err) {
+      console.warn('ZenAudio neural TTS fetch failed, trying speechSynthesis fallback:', err);
+    }
+
+    if (window.speechSynthesis) {
+      const u = new SpeechSynthesisUtterance(text.trim());
+      const isFa = /[\u0600-\u06FF]/.test(text);
+      u.lang = isFa ? 'fa-IR' : 'en-US';
+      window.speechSynthesis.speak(u);
+    }
+  }
+
+  function stopSpeech() {
+    if (currentAudio) {
+      currentAudio.pause();
+      currentAudio = null;
+    }
+    if (window.speechSynthesis) {
+      window.speechSynthesis.cancel();
+    }
+  }
+
+  function init() {
+    ['click', 'keydown', 'touchstart'].forEach(evt => {
+      window.addEventListener(evt, () => {
+        hasUserInteracted = true;
+        getContext();
+      }, { once: true, passive: true });
+    });
+
+    document.addEventListener('click', (e) => {
+      hasUserInteracted = true;
+      getContext();
+      const target = e.target.closest('[data-sfx], [data-sfx-type]');
+      if (target) {
+        const sfx = target.getAttribute('data-sfx') || target.getAttribute('data-sfx-type');
+        if (sfx && sfx !== 'none') play(sfx);
+      }
+    }, true);
+
+    document.addEventListener('mouseenter', (e) => {
+      const target = e.target.closest('[data-sfx-trigger="hover"]');
+      if (target) {
+        const sfx = target.getAttribute('data-sfx') || target.getAttribute('data-sfx-type');
+        if (sfx && sfx !== 'none') play(sfx);
+      }
+    }, true);
+
+    // Auto-detect slide activation and play slide transition sound effect
+    const observer = new MutationObserver((mutations) => {
+      if (!hasUserInteracted) return;
+      for (const m of mutations) {
+        if (m.type === 'attributes' && m.attributeName === 'class') {
+          const target = m.target;
+          if (target.classList && target.classList.contains('slide') && target.classList.contains('active')) {
+            const sfx = target.getAttribute('data-sfx') || 'whoosh';
+            if (sfx !== 'none') play(sfx);
+          }
+        }
+      }
+    });
+
+    document.querySelectorAll('.slide, section[id^="s"]').forEach((s) => {
+      observer.observe(s, { attributes: true, attributeFilter: ['class'] });
+    });
+
+    window.addEventListener('message', (e) => {
+      if (!e.data) return;
+      if (e.data.type === 'zd-speak' && e.data.text) {
+        speak(e.data.text, e.data);
+      } else if (e.data.type === 'zd-stop-speech') {
+        stopSpeech();
+      } else if (e.data.type === 'zd-play-sfx' && e.data.sfx) {
+        play(e.data.sfx);
+      }
+    });
+  }
+
+  if (typeof document !== 'undefined') {
+    if (document.readyState === 'loading') {
+      document.addEventListener('DOMContentLoaded', init);
+    } else {
+      init();
+    }
+  }
+
+  return { play, speak, stopSpeech, getContext };
+})();
+</script>"#;
+
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct CustomThemeTokens {
@@ -1060,12 +1308,30 @@ AUDIO & CINEMATIC PROCEDURAL SOUND DESIGN (Web Audio API):
     let tts_prompt = if let Some(text) = tts {
         format!(
             r#"
-TEXT-TO-SPEECH (TTS) NARRATION ENABLED:
+NEURAL TEXT-TO-SPEECH (TTS) NARRATION ENABLED:
 - Voiceover narration script: "{text}"
 - Narration language code: "{tts_lang}"
-- Implement Web Speech API in the <script> block:
-  const utterance = new SpeechSynthesisUtterance("{text}");
-  utterance.lang = "{tts_lang}";
+- Implement high-fidelity neural narration using the ZenDesign server endpoint `/api/tts` (with SpeechSynthesis fallback):
+  async function playNarration() {{
+    try {{
+      const res = await fetch('/api/tts', {{
+        method: 'POST',
+        headers: {{ 'Content-Type': 'application/json' }},
+        body: JSON.stringify({{ text: "{text}" }})
+      }});
+      if (res.ok) {{
+        const blob = await res.blob();
+        const audio = new Audio(URL.createObjectURL(blob));
+        await audio.play();
+        return;
+      }}
+    }} catch (e) {{}}
+    if (window.speechSynthesis) {{
+      const u = new SpeechSynthesisUtterance("{text}");
+      u.lang = "{tts_lang}";
+      window.speechSynthesis.speak(u);
+    }}
+  }}
 - Coordinate kinetic typography and subtitles with the spoken narration so words appear in rhythm.
 - Provide an inviting "Play Voiceover & Film" button or trigger speech synthesis on user interaction.
 "#,
@@ -1251,9 +1517,23 @@ CORE PRESENTATION ARCHITECTURE:
 7. VISUAL LAYOUTS & PRINT EXPORT:
    - Provide CSS for `.bento-grid`, `.stats-grid`, `.split-grid`, `.cards-grid`, `.timeline-steps`, `.comparison-grid`, `.zd-chart-container`, `.zd-bars-grid`, `.zd-donut-svg`, `.zd-trend-hero`, `.zd-roadmap-track`.
    - Provide `@media print` rules: each `.slide` is `position: relative !important; display: block !important; opacity: 1 !important; page-break-after: always;` and controls have `display: none !important;`.
-   - Provide slide speaker notes via `data-speaker-notes="..."`.
 
-8. TECHNICAL & OUTPUT CONTRACT:
+8. MODEL-DIRECTED SOUND DESIGN & PROCEDURAL AUDIO DIRECTION (ZenAudio):
+   - You are the sound designer and audio director. Elevate the presentation with mood-specific procedural sound effects and presentation narration.
+   - Assign a curated `data-sfx` attribute to EVERY slide (`<section class="slide" data-sfx="..." data-speaker-notes="...">`):
+     * `data-sfx="whoosh"`: Silky aerodynamic swoosh for clean forward story transitions.
+     * `data-sfx="punch"`: Visceral sub-bass impact for big statistics, metric milestones, or market shifts.
+     * `data-sfx="chime"`: Harmonic pentatonic glass chimes for achievements, awards, key takeaways, or quotes.
+     * `data-sfx="digital"`: Crisp high-tech digital sequence for technical architecture, code, or systems.
+     * `data-sfx="sweep"`: Smooth ambient frequency sweep for cover and section openers.
+     * `data-sfx="riser"`: Upward pitch and filter ramp for roadmap, future momentum, and expansion.
+     * `data-sfx="drop"`: Sub-bass frequency drop for problem, challenge, or conflict slides.
+     * `data-sfx="none"`: Muted silence when solemnity is required.
+   - Interactive elements can trigger sounds via `data-sfx-type="chime|punch|digital"` and `data-sfx-trigger="hover|click"`.
+   - Always write detailed, natural speaker talking points on EVERY slide via `data-speaker-notes="..."`. The ZenAudio engine automatically vocalizes these notes via `/api/tts` in presenter mode.
+   - On slide transition, call `if (window.ZenAudio) window.ZenAudio.play(slide.getAttribute('data-sfx') || 'whoosh');` so slide navigation triggers the chosen sound.
+
+9. TECHNICAL & OUTPUT CONTRACT:
    - Exactly ONE complete self-contained HTML5 file with all CSS in `<style>` and JavaScript in `<script>`.
    - NO external dependencies, no CDNs, no web fonts, no external image links. Use inline SVG icons where needed.
    - Return ONLY the ```html fenced code block with zero preambles or chat commentary."#,
@@ -1845,6 +2125,21 @@ pub fn sanitize_slides_html(html: &str) -> String {
         let after = &out[first_active_pos + "class='slide active'".len()..];
         let cleaned_after = after.replace("class='slide active'", "class='slide'");
         out = format!("{}{}", before, cleaned_after);
+    }
+
+    // 4. Update legacy CSP connect-src 'none' to allow self-hosted /api/tts neural voices
+    out = out.replace("connect-src 'none'", "connect-src 'self' data: blob:; media-src 'self' data: blob:");
+
+    // 5. Inject ZenAudio WebAudio sound effects & Neural TTS engine if not present
+    if !out.contains("zen-audio-engine") {
+        if let Some(pos) = out.rfind("</head>") {
+            out = format!("{}\n{}\n{}", &out[..pos], ZEN_AUDIO_SCRIPT, &out[pos..]);
+        } else if let Some(pos) = out.rfind("</body>") {
+            out = format!("{}\n{}\n{}", &out[..pos], ZEN_AUDIO_SCRIPT, &out[pos..]);
+        } else {
+            out.push_str("\n");
+            out.push_str(ZEN_AUDIO_SCRIPT);
+        }
     }
 
     out
@@ -3099,7 +3394,7 @@ mod tests {
     #[test]
     fn csp_is_added_once_and_blocks_network() {
         let html = ensure_csp("<html><head></head><body></body></html>");
-        assert!(html.contains("connect-src 'none'"));
+        assert!(html.contains("connect-src 'self' data: blob:"));
         assert_eq!(html.matches("Content-Security-Policy").count(), 1);
         let again = ensure_csp(&html);
         assert_eq!(again.matches("Content-Security-Policy").count(), 1);
@@ -3282,6 +3577,7 @@ mod tests {
         assert!(sanitized.contains(r#"<div class="slide active" id="s1">"#));
         assert!(sanitized.contains(r#"<div class="slide" id="s2">"#));
         assert!(sanitized.contains(r#"<div class="slide" id="s3">"#));
+        assert!(sanitized.contains("zen-audio-engine"));
     }
 }
 
