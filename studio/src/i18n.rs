@@ -1,4 +1,5 @@
 use web_sys::Storage;
+use crate::data::ModeId;
 
 /// The studio ships with two first-class interface languages. Persian flips
 /// the document to RTL and swaps the type stack to Vazirmatn; English uses
@@ -89,6 +90,18 @@ pub fn load_language() -> Language {
 pub fn store_language(lang: Language) {
     if let Some(storage) = storage() {
         let _ = storage.set_item("zen-language", lang.as_str());
+    }
+}
+
+pub fn load_mode() -> Option<ModeId> {
+    storage()
+        .and_then(|storage| storage.get_item("zen-mode").ok().flatten())
+        .map(|val| ModeId::parse(&val))
+}
+
+pub fn store_mode(mode: ModeId) {
+    if let Some(storage) = storage() {
+        let _ = storage.set_item("zen-mode", mode.as_str());
     }
 }
 

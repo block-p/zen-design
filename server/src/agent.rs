@@ -292,7 +292,11 @@ impl AgentOrchestrator {
         }
 
         if settings.provider == PROVIDER_TEMPLATE {
-            return self.render_template(req).await;
+            let candidates = providers::resolve_candidates(&settings);
+            let has_network_candidates = candidates.iter().any(|c| !c.base_url.is_empty() && !c.api_key.is_empty());
+            if !has_network_candidates {
+                return self.render_template(req).await;
+            }
         }
         self.run_provider(req, &settings).await
     }
@@ -707,8 +711,9 @@ only one complete fenced HTML document."
     fn write_artifact(&self, html: &str, session_id: Option<&str>) -> Result<(), String> {
         let workspace = Path::new(&self.workspace_dir);
         let target = workspace.join("index.html");
-        fs::write(&target, html).map_err(|e| format!("Failed to write to workspace: {}", e))?;
-        info!("Wrote artifact to {:?} ({} bytes)", target, html.len());
+        let sanitized = sanitize_slides_html(html);
+        fs::write(&target, &sanitized).map_err(|e| format!("Failed to write to workspace: {}", e))?;
+        info!("Wrote artifact to {:?} ({} bytes)", target, sanitized.len());
 
         if let Some(sid) = session_id {
             let session_dir = workspace.join("sessions").join(sid);
@@ -716,10 +721,10 @@ only one complete fenced HTML document."
                 warn!("Failed to create session dir {:?}: {e}", session_dir);
             } else {
                 let session_file = session_dir.join("index.html");
-                if let Err(e) = fs::write(&session_file, html) {
+                if let Err(e) = fs::write(&session_file, &sanitized) {
                     warn!("Failed to write session file {:?}: {e}", session_file);
                 } else {
-                    info!("Saved session copy to {:?} ({} bytes)", session_file, html.len());
+                    info!("Saved session copy to {:?} ({} bytes)", session_file, sanitized.len());
                 }
             }
         }
@@ -735,16 +740,17 @@ only one complete fenced HTML document."
         let target = workspace.join("index.html");
         let html = fs::read_to_string(&target)
             .map_err(|error| format!("Failed to read the agent artifact: {error}"))?;
-        let final_html = if html
+        let sanitized = sanitize_slides_html(&html);
+        let final_html = if sanitized
             .to_ascii_lowercase()
             .contains("content-security-policy")
         {
-            html
-        } else if !html_is_self_contained(&html) {
+            sanitized
+        } else if !html_is_self_contained(&sanitized) {
             info!("Agent artifact references local files; skipping CSP injection");
-            html
+            sanitized
         } else {
-            let hardened = ensure_csp(&html);
+            let hardened = ensure_csp(&sanitized);
             fs::write(&target, &hardened)
                 .map_err(|error| format!("Failed to harden the agent artifact: {error}"))?;
             hardened
@@ -1073,8 +1079,10 @@ TEXT-TO-SPEECH (TTS) NARRATION ENABLED:
     format!(
         r#"You are ZenDesign Motion: an elite motion designer and creative technologist (calibre of Apple Keynote product films, Studio Freight, Buck, ManvsMachine, and Claude Opus 4.6 art direction).
 You turn the user's brief into a jaw-dropping, cinema-grade kinetic motion piece that runs in the browser.
-You are NOT building a website. You are NOT building a presentation slide deck.
-You are directing a high-production motion graphics film composed purely of HTML5, CSS3, dynamic SVG and JavaScript.
+You are not building a
+website. You are NOT building a presentation slide deck.
+You are directing an 8–12 seconds high-production motion graphics film composed purely of HTML5, CSS3 (@keyframes, prefers-reduced-motion), dynamic SVG and JavaScript.
+NO nav bar, no rectangular cards, and No full-frame grain (use clean CSS gradients or max 3% opacity micro-textures).
 
 Design tokens (palette — derive tints with color-mix() or alpha; never invent conflicting hues):
 - background: {bg}
@@ -1085,7 +1093,7 @@ Design tokens (palette — derive tints with color-mix() or alpha; never invent 
 ABSOLUTE PROHIBITIONS (CATASTROPHIC FAILURE CRITERIA):
 - ZERO CARDS OR BOXES: Absolutely NO rectangular cards, NO rounded containers with borders, NO presentation slide cards, NO card grids, NO dashboard panels. If your output contains cards or boxes with titles and descriptions, IT IS AN IMMEDIATE FAILURE.
 - ZERO BULLET POINTS OR PARAGRAPHS: Do NOT display paragraphs of text or bulleted lists. A motion film communicates visually through bold kinetic typography (2 to 5 words max per beat) and synchronized graphic events.
-- ZERO WEBSITE CHROME: No headers with pill badges, no navbars, no buttons competing with the film.
+- ZERO WEBSITE CHROME: No headers with pill badges, NO nav bar, no buttons competing with the film.
 
 THE CANVAS & ATMOSPHERE:
 - {artboard_desc}
@@ -1195,38 +1203,57 @@ CORE PRESENTATION ARCHITECTURE:
    - Never allow any slide to vertically or horizontally overflow. If content is long, structure it into concise,
      punchy bullet cards or split columns, but PRESERVE all key facts, numbers, and messages.
 
-3. EDITORIAL SLIDE LAYOUT DIVERSITY:
-   Never make all slides look identical. Dynamically select the best layout for each slide:
-   - Cover / Title Slide: Bold oversized display heading, subtle category badge, presenter / subtitle.
-   - Metric & Big Stat Slide: Massive stat numbers (e.g. "+148%", "2.4M", "۰ تا ۱۰۰") with concise explanatory labels.
-   - Split Comparison / Two-Column: Balanced juxtaposition (Before vs After, Problem vs Solution, Feature comparison).
-   - Card Grid (3-4 items): Key takeaways or feature pillars with clean hairline borders and subtle hover lift.
-   - Quote / Focal Statement: Large editorial quotation with highlighted accent keywords.
-   - Summary / Conclusion: Clear roadmap, next steps or parting message.
+3. EDITORIAL SLIDE LAYOUT DIVERSITY & DATA VISUALIZATION:
+   Never make all slides look identical or text-only! Dynamically select the best layout for each slide:
+   - Data & Animated Charts:
+     * Bar Chart (`.zd-chart-bar-wrap`): Vertical gradient bars with animated rise (`@keyframes barGrow`), exact metric percentages, and crisp labels.
+     * Donut / Segmented Pie Chart (`.zd-donut-svg`): SVG circular chart with colored stroke segments and percentage indicators in the center.
+     * Trend & Area Curve (`.zd-trend-hero`): Smooth SVG bezier curve path with subtle gradient fill and pulsing highlight data points.
+   - Graphic Diagrams & Structures:
+     * Milestone Roadmap (`.zd-roadmap-track`): Sequential timeline with illuminated nodes, quarter badges (Q01, Q02...), and glass cards.
+     * Split Comparison / Two-Column: Balanced juxtaposition (Before vs After, Problem vs Solution, Feature comparison).
+     * Metric & Big Stat Slide: Massive stat numbers (e.g. "+148%", "2.4M", "۰ تا ۱۰۰") with concise explanatory labels.
+     * Card Bento Grid (3-4 items): Key takeaways or feature pillars with clean hairline borders, glow accents, and subtle hover lift.
+     * Cover / Title Slide: Bold oversized display heading, subtle category badge, presenter / subtitle.
+     * Quote / Focal Statement: Large editorial quotation with highlighted accent keywords.
 
-4. PERSIAN & BILINGUAL (RTL/LTR) PERFECTION:
+4. OPUS-GRADE GRAPHICS & CINEMATIC MOTION:
+   - Every slide must feature visual richness: glowing hairline accents, subtle dark-glass backdrop filters (`backdrop-filter: blur(12px)`), SVG geometric badges, or data cards.
+   - CRITICAL ANIMATION INVARIANTS:
+     * Chart and shape animations (`barGrow`, `drawLine`, `barGrowX`, `donutTurn`) MUST use `forwards` (e.g. `animation: barGrow 1.1s cubic-bezier(0.16, 1, 0.3, 1) forwards;`). NEVER use `backwards` on charts/bars as it causes elements to vanish after finishing!
+     * Slide isolation: `.slide` MUST have `position: absolute; inset: 0; opacity: 0; visibility: hidden; pointer-events: none; background: var(--bg);`. Only `.slide.active` has `opacity: 1; visibility: visible; pointer-events: auto;`. Only the first slide has `active` on load.
+   - Fluid, zero-jitter CSS animations:
+     * Slide deck transitions: Silky-smooth opacity fade (`opacity .32s cubic-bezier(0.16, 1, 0.3, 1)`) without diagonal shifts or jerky 2D translations to prevent subpixel jitter.
+     * Staggered entrance for cards: `animation: slideFadeIn 0.4s cubic-bezier(0.16, 1, 0.3, 1) backwards;` with subtle `translateY(8px)` (NEVER scale() transforms on text elements which distort font rendering).
+     * Continuous background loops (spins, pulses, cursor movements): Scope STRICTLY to `.slide.active` (e.g. `.slide.active .spin {{ animation: spin 24s linear infinite; }}`) so inactive slides consume 0% GPU and never cause frame drops during slide changes.
+     * Bar growth animations: Keep metric values above the bar track or rise without squashing/stretching text characters.
+
+5. PERSIAN & BILINGUAL (RTL/LTR) PERFECTION:
    - If the brief contains Persian / Arabic text, set `dir="rtl"` on the deck container or html.
    - When RTL is active:
      * Right arrow (ArrowRight) moves to the PREVIOUS slide, Left arrow (ArrowLeft) moves to the NEXT slide
        (or support intuitive natural flow with dual arrows and space bar).
-     * Progress bar and slide counters must align naturally with RTL reading direction.
+     * Progress bar, charts, and slide counters must align naturally with RTL reading direction.
      * Use appropriate Persian typography weights and line heights (1.6–1.8 for Persian body text).
 
-5. INTERACTION, KEYBOARD & CONTROLS:
+6. INTERACTION, KEYBOARD & CONTROLS:
    - Keyboard navigation: ArrowRight / ArrowLeft / Space / PageUp / PageDown.
+   - CRITICAL KEYBOARD SAFETY: Always check at the very top of the `keydown` listener:
+     `if (e.target && (e.target.isContentEditable || e.target.getAttribute('contenteditable') === 'true' || e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA')) return;`
+     Never hijack typing, space, arrows, or enter when the user is editing text!
    - Touch / Mouse navigation: Sleek, non-intrusive bottom navigation bar showing:
      * Slide indicator counter: e.g. "03 / 08" or "۳ از ۸"
      * Prev / Next subtle icon buttons
      * Hairline animated progress rail at the bottom edge.
      * Fullscreen toggle on key "f" or clicking a small fullscreen button.
-   - Slide transitions: Fluid 250–350ms transitions (clean fade + subtle 12px translateX/Y slide).
+   - Slide transitions: Fluid 320–350ms transitions (clean opacity fade).
 
-6. VISUAL LAYOUTS & PRINT EXPORT:
-   - Provide CSS for `.bento-grid`, `.stats-grid`, `.split-grid`, `.timeline-steps`, `.comparison-grid`.
+7. VISUAL LAYOUTS & PRINT EXPORT:
+   - Provide CSS for `.bento-grid`, `.stats-grid`, `.split-grid`, `.cards-grid`, `.timeline-steps`, `.comparison-grid`, `.zd-chart-container`, `.zd-bars-grid`, `.zd-donut-svg`, `.zd-trend-hero`, `.zd-roadmap-track`.
    - Provide `@media print` rules: each `.slide` is `position: relative !important; display: block !important; opacity: 1 !important; page-break-after: always;` and controls have `display: none !important;`.
    - Provide slide speaker notes via `data-speaker-notes="..."`.
 
-7. TECHNICAL & OUTPUT CONTRACT:
+8. TECHNICAL & OUTPUT CONTRACT:
    - Exactly ONE complete self-contained HTML5 file with all CSS in `<style>` and JavaScript in `<script>`.
    - NO external dependencies, no CDNs, no web fonts, no external image links. Use inline SVG icons where needed.
    - Return ONLY the ```html fenced code block with zero preambles or chat commentary."#,
@@ -1773,6 +1800,54 @@ pub fn ensure_csp(html: &str) -> String {
         }
     }
     format!("{CSP_META}\n{html}")
+}
+
+/// Automated sanitization pass for slides presentation artifacts:
+/// 1. Fixes chart/shape animation fill-mode: replaces `backwards;` or reset keyframe animations
+///    with `forwards;` so animated bars, SVG curves, and donut charts never vanish after 1s.
+/// 2. Ghosting defense: guarantees `.slide` has `visibility: hidden;` when inactive and opaque background.
+/// 3. Prevents multi-active ghosting: strips unintended `active` classes from later slides.
+pub fn sanitize_slides_html(html: &str) -> String {
+    let mut out = html.to_string();
+
+    // 1. Chart & metric animation fix: ensure keyframe animations persist (forwards) instead of resetting (backwards)
+    // Replace animation declarations on charts, bars, lines, funnels that mistakenly used backwards
+    out = out.replace("animation: barGrow 1.1s cubic-bezier(0.16,1,0.3,1) backwards;", "animation: barGrow 1.1s cubic-bezier(0.16,1,0.3,1) forwards;");
+    out = out.replace("animation: barGrow .9s var(--ease) backwards;", "animation: barGrow .9s var(--ease) forwards;");
+    out = out.replace("animation: drawLine 1.6s cubic-bezier(0.16,1,0.3,1) backwards;", "animation: drawLine 1.6s cubic-bezier(0.16,1,0.3,1) forwards;");
+    out = out.replace("animation: barGrowX .9s cubic-bezier(0.16,1,0.3,1) backwards;", "animation: barGrowX .9s cubic-bezier(0.16,1,0.3,1) forwards;");
+    out = out.replace("animation: donutTurn 1.3s cubic-bezier(0.16,1,0.3,1) backwards;", "animation: donutTurn 1.3s cubic-bezier(0.16,1,0.3,1) forwards;");
+
+    // Generic backwards -> forwards on chart classes
+    for needle in &["barGrow", "barGrowX", "drawLine", "donutTurn", "funnelGrow"] {
+        let pattern_backwards = format!("{} backwards", needle);
+        let pattern_forwards = format!("{} forwards", needle);
+        out = out.replace(&pattern_backwards, &pattern_forwards);
+    }
+
+    // 2. Ensure slide visibility isolation in CSS
+    if out.contains(".slide{") && !out.contains("visibility:hidden") && !out.contains("visibility: hidden") {
+        out = out.replace(
+            ".slide{",
+            ".slide{visibility:hidden;background:var(--bg);",
+        );
+    }
+
+    // 3. Strip unintended multiple 'active' classes in slides markup (only first slide should have active initially)
+    if let Some(first_active_pos) = out.find("class=\"slide active\"") {
+        let before = &out[..first_active_pos + "class=\"slide active\"".len()];
+        let after = &out[first_active_pos + "class=\"slide active\"".len()..];
+        let cleaned_after = after.replace("class=\"slide active\"", "class=\"slide\"");
+        out = format!("{}{}", before, cleaned_after);
+    }
+    if let Some(first_active_pos) = out.find("class='slide active'") {
+        let before = &out[..first_active_pos + "class='slide active'".len()];
+        let after = &out[first_active_pos + "class='slide active'".len()..];
+        let cleaned_after = after.replace("class='slide active'", "class='slide'");
+        out = format!("{}{}", before, cleaned_after);
+    }
+
+    out
 }
 
 pub fn generate_prototype_html(prompt: &str, design_system: &str, mode: &str) -> String {
@@ -2371,6 +2446,7 @@ fn generate_motion_html(req: &PromptRequest, tokens: &DesignTokens) -> String {
         <div class="hairline-progress">
             <div class="hairline-fill" id="timelineProgress"></div>
         </div>
+        <div style="display:none;" data-meta="ds-mode">DS: {design_system} &bull; Mode: {mode}</div>
     </div>
 
     <script>
@@ -2614,6 +2690,8 @@ fn generate_motion_html(req: &PromptRequest, tokens: &DesignTokens) -> String {
         tts_lang = tts_lang,
         subtitle_display = if tts_text.is_empty() { "display: none;" } else { "display: block;" },
         sfx_enabled = if sfx { "true" } else { "false" },
+        design_system = escape_html(&req.design_system),
+        mode = escape_html(&req.mode),
     )
 }
 
@@ -2900,82 +2978,70 @@ Make it deeply comprehensive, structured, and immediately actionable for product
         )
     };
 
-    match settings.provider.as_str() {
-        PROVIDER_OPENAI => {
-            let base = settings.openai.base_url.trim().trim_end_matches('/');
-            let model = settings.openai.model.trim();
-            if base.is_empty() || model.is_empty() {
-                return Err("OpenAI provider unconfigured".to_string());
-            }
-            let key = settings.openai_key();
+    let candidates = providers::resolve_candidates(settings);
+    for candidate in &candidates {
+        if candidate.provider == PROVIDER_OPENAI && !candidate.base_url.is_empty() {
             let body = serde_json::json!({
-                "model": model,
+                "model": candidate.model,
                 "temperature": 0.6,
                 "messages": [
                     { "role": "system", "content": system_role },
                     { "role": "user", "content": research_prompt }
                 ]
             });
-            let mut req = client.post(format!("{base}/chat/completions")).json(&body);
-            if !key.is_empty() {
-                req = req.bearer_auth(key);
+            let mut req = client.post(format!("{}/chat/completions", candidate.base_url)).json(&body);
+            if !candidate.api_key.is_empty() {
+                req = req.bearer_auth(&candidate.api_key);
             }
-            let resp = req.send().await.map_err(|e| e.to_string())?;
-            if !resp.status().is_success() {
-                return Err(format!("OpenAI returned status {}", resp.status()));
+            if let Ok(resp) = req.send().await {
+                if resp.status().is_success() {
+                    if let Ok(res_json) = resp.json::<serde_json::Value>().await {
+                        let text = res_json["choices"][0]["message"]["content"]
+                            .as_str()
+                            .unwrap_or_default()
+                            .to_string();
+                        if !text.trim().is_empty() {
+                            return Ok(text);
+                        }
+                    }
+                }
             }
-            let res_json: serde_json::Value = resp.json().await.map_err(|e| e.to_string())?;
-            let text = res_json["choices"][0]["message"]["content"]
-                .as_str()
-                .unwrap_or_default()
-                .to_string();
-            if text.trim().is_empty() {
-                return Err("Empty response from research provider".to_string());
-            }
-            Ok(text)
-        }
-        PROVIDER_ANTHROPIC => {
-            let base = settings.anthropic.base_url.trim().trim_end_matches('/');
-            let model = if settings.anthropic.model.trim().is_empty() {
-                "claude-opus-4-6"
-            } else {
-                settings.anthropic.model.trim()
-            };
-            let key = settings.anthropic_key();
-            if key.is_empty() {
-                return Err("Anthropic API key missing".to_string());
-            }
+        } else if candidate.provider == PROVIDER_ANTHROPIC
+            && !candidate.base_url.is_empty()
+            && !candidate.api_key.is_empty()
+        {
             let body = serde_json::json!({
-                "model": model,
+                "model": candidate.model,
                 "system": system_role,
                 "max_tokens": 2048,
                 "messages": [
                     { "role": "user", "content": research_prompt }
                 ]
             });
-            let resp = client
-                .post(format!("{base}/v1/messages"))
-                .header("x-api-key", key.trim())
+            if let Ok(resp) = client
+                .post(format!("{}/v1/messages", candidate.base_url))
+                .header("x-api-key", candidate.api_key.trim())
                 .header("anthropic-version", "2023-06-01")
                 .json(&body)
                 .send()
                 .await
-                .map_err(|e| e.to_string())?;
-            if !resp.status().is_success() {
-                return Err(format!("Anthropic returned status {}", resp.status()));
+            {
+                if resp.status().is_success() {
+                    if let Ok(res_json) = resp.json::<serde_json::Value>().await {
+                        let text = res_json["content"][0]["text"]
+                            .as_str()
+                            .unwrap_or_default()
+                            .to_string();
+                        if !text.trim().is_empty() {
+                            return Ok(text);
+                        }
+                    }
+                }
             }
-            let res_json: serde_json::Value = resp.json().await.map_err(|e| e.to_string())?;
-            let text = res_json["content"][0]["text"]
-                .as_str()
-                .unwrap_or_default()
-                .to_string();
-            if text.trim().is_empty() {
-                return Err("Empty response from research provider".to_string());
-            }
-            Ok(text)
         }
-        _ => Err("Provider does not support autonomous research".to_string()),
     }
+
+    Err("No LLM provider available for autonomous research".to_string())
 }
 
 #[cfg(test)]
@@ -3194,4 +3260,28 @@ mod tests {
         assert!(legibility_guard(&frames(30.0), &frames(2.0)).is_err());
         assert!(legibility_guard(&frames(30.0), &frames(25.0)).is_ok());
     }
+
+    #[test]
+    fn sanitize_slides_html_fixes_backwards_and_ghosting() {
+        let dirty = r#"
+            <style>
+                .slide{opacity:0;}
+                .zd-bar{animation: barGrow 1.1s cubic-bezier(0.16,1,0.3,1) backwards;}
+                .zd-curve{animation: drawLine 1.6s cubic-bezier(0.16,1,0.3,1) backwards;}
+            </style>
+            <div class="slide active" id="s1">Slide 1</div>
+            <div class="slide active" id="s2">Slide 2</div>
+            <div class="slide active" id="s3">Slide 3</div>
+        "#;
+
+        let sanitized = sanitize_slides_html(dirty);
+        assert!(sanitized.contains("animation: barGrow 1.1s cubic-bezier(0.16,1,0.3,1) forwards;"));
+        assert!(sanitized.contains("animation: drawLine 1.6s cubic-bezier(0.16,1,0.3,1) forwards;"));
+        assert!(sanitized.contains(".slide{visibility:hidden;background:var(--bg);opacity:0;}"));
+        // Only s1 should keep 'slide active', subsequent slides become 'slide'
+        assert!(sanitized.contains(r#"<div class="slide active" id="s1">"#));
+        assert!(sanitized.contains(r#"<div class="slide" id="s2">"#));
+        assert!(sanitized.contains(r#"<div class="slide" id="s3">"#));
+    }
 }
+

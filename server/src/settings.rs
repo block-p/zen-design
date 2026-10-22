@@ -16,16 +16,18 @@ use serde::{Deserialize, Serialize};
 use serde_json::json;
 use tracing::{info, warn};
 
+pub const PROVIDER_AUTO: &str = "auto";
 pub const PROVIDER_TEMPLATE: &str = "template";
 pub const PROVIDER_OPENAI: &str = "openai";
 pub const PROVIDER_ANTHROPIC: &str = "anthropic";
 pub const PROVIDER_OPENCODE: &str = "opencode";
 
-pub const KNOWN_PROVIDERS: [&str; 4] = [
-    PROVIDER_TEMPLATE,
+pub const KNOWN_PROVIDERS: [&str; 5] = [
+    PROVIDER_AUTO,
     PROVIDER_OPENAI,
     PROVIDER_ANTHROPIC,
     PROVIDER_OPENCODE,
+    PROVIDER_TEMPLATE,
 ];
 
 #[derive(Clone, Debug, Default, Serialize, Deserialize)]
@@ -94,18 +96,58 @@ impl Settings {
         base.join("zen-design").join("config.toml")
     }
 
+    pub fn auto_detect_credentials(&mut self) -> bool {
+        let sources = crate::detector::scan_local_sources();
+        for src in sources {
+            if src.has_key {
+                if let Ok(res) = crate::detector::resolve_source(&src.id) {
+                    self.active_source = Some(src.id.clone());
+                    if res.provider == PROVIDER_OPENAI {
+                        self.provider = PROVIDER_OPENAI.to_string();
+                        self.openai.base_url = res.base_url;
+                        self.openai.api_key = res.api_key;
+                        self.openai.model = res.model.unwrap_or_else(|| "kr/auto".to_string());
+                    } else if res.provider == PROVIDER_ANTHROPIC {
+                        self.provider = PROVIDER_ANTHROPIC.to_string();
+                        self.anthropic.base_url = res.base_url;
+                        self.anthropic.api_key = res.api_key;
+                        self.anthropic.model = res.model.unwrap_or_else(|| "claude-opus-4-6".to_string());
+                    }
+                    info!(
+                        "Auto-detected AI credentials from '{}' (model: {})",
+                        src.name,
+                        self.active_profile().model
+                    );
+                    return true;
+                }
+            }
+        }
+        false
+    }
+
     pub fn load() -> Self {
         let path = Self::config_path();
-        match fs::read_to_string(&path) {
+        let mut settings = match fs::read_to_string(&path) {
             Ok(raw) => match toml::from_str::<Settings>(&raw) {
-                Ok(settings) => settings,
+                Ok(s) => s,
                 Err(error) => {
                     warn!("Ignoring invalid settings at {}: {error}", path.display());
                     Settings::default()
                 }
             },
             Err(_) => Settings::default(),
+        };
+
+        let needs_auto = settings.provider == PROVIDER_TEMPLATE
+            || settings.provider == PROVIDER_AUTO
+            || settings.provider.is_empty()
+            || (settings.provider == PROVIDER_OPENAI && settings.openai.base_url.is_empty());
+
+        if needs_auto && settings.auto_detect_credentials() {
+            let _ = settings.save();
         }
+
+        settings
     }
 
     pub fn save(&self) -> Result<(), String> {
@@ -130,16 +172,16 @@ impl Settings {
 
     pub fn active_profile(&self) -> &ProviderProfile {
         match self.provider.as_str() {
-            PROVIDER_OPENAI => &self.openai,
+            PROVIDER_OPENAI | PROVIDER_AUTO => &self.openai,
             PROVIDER_ANTHROPIC => &self.anthropic,
             PROVIDER_OPENCODE => &self.opencode,
-            _ => &self.opencode,
+            _ => &self.openai,
         }
     }
 
     pub fn profile_mut(&mut self, provider: &str) -> Option<&mut ProviderProfile> {
         match provider {
-            PROVIDER_OPENAI => Some(&mut self.openai),
+            PROVIDER_OPENAI | PROVIDER_AUTO => Some(&mut self.openai),
             PROVIDER_ANTHROPIC => Some(&mut self.anthropic),
             PROVIDER_OPENCODE => Some(&mut self.opencode),
             _ => None,
@@ -159,7 +201,11 @@ impl Settings {
     /// Human label for the active connection, e.g. `9router via OpenAI`.
     pub fn provider_label(&self) -> String {
         match self.provider.as_str() {
-            PROVIDER_OPENAI => "OpenAI-compatible".to_string(),
+            PROVIDER_AUTO => "Auto (خودکار / هوشمند)".to_string(),
+            PROVIDER_OPENAI => {
+                let name = self.active_source.as_deref().unwrap_or("OpenAI-compatible");
+                format!("{name}")
+            }
             PROVIDER_ANTHROPIC => "Anthropic".to_string(),
             PROVIDER_OPENCODE => "OpenCode agent".to_string(),
             _ => "Offline template".to_string(),

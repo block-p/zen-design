@@ -105,7 +105,7 @@ pub fn generate(
         match request.send().await {
             Ok(response) if response.ok() => {
                 if let Some(hist) = history {
-                    load_history(hist);
+                    load_history(hist, None);
                 }
                 push_activity(
                     entries,
@@ -597,13 +597,18 @@ pub fn save_model_choice(
     });
 }
 
-pub fn load_history(history: RwSignal<Vec<ChatHistoryItem>>) {
+pub fn load_history(history: RwSignal<Vec<ChatHistoryItem>>, mode: Option<RwSignal<ModeId>>) {
     spawn_local(async move {
         if let Ok(resp) = Request::get("/api/history").send().await {
             if resp.ok() {
                 if let Ok(body) = resp.text().await {
                     if let Ok(res) = serde_json::from_str::<HistoryResponse>(&body) {
                         history.set(res.items);
+                        if let Some(m_sig) = mode {
+                            if let Some(curr) = res.current_mode {
+                                m_sig.set(ModeId::parse(&curr));
+                            }
+                        }
                     }
                 }
             }

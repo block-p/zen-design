@@ -77,7 +77,7 @@ fn extract_slides(html: &str) -> Vec<SlideItem> {
             .unwrap_or_default();
 
         let badge = el
-            .query_selector(".badge, .category-badge, [class*='badge']")
+            .query_selector(".badge, .category-badge, .cover-badge, .s-kicker, .k-txt, [class*='badge']")
             .ok()
             .flatten()
             .and_then(|e| e.text_content())
@@ -85,7 +85,7 @@ fn extract_slides(html: &str) -> Vec<SlideItem> {
             .unwrap_or_default();
 
         let title = el
-            .query_selector("h1, h2, h3, .display-title, [class*='title']")
+            .query_selector(".s-title, .display-title, h1, h2, h3, [class*='title']")
             .ok()
             .flatten()
             .and_then(|e| e.text_content())
@@ -93,7 +93,7 @@ fn extract_slides(html: &str) -> Vec<SlideItem> {
             .unwrap_or_else(|| format!("Slide {}", i + 1));
 
         let subtitle = el
-            .query_selector(".sub, .body-text, p")
+            .query_selector(".s-sub, .cover-sub, .cover-en, .sub, .body-text, p")
             .ok()
             .flatten()
             .and_then(|e| e.text_content())
@@ -101,7 +101,7 @@ fn extract_slides(html: &str) -> Vec<SlideItem> {
             .unwrap_or_default();
 
         let mut items = Vec::new();
-        if let Ok(card_nodes) = el.query_selector_all(".card, .node, .point, .item, li, div[class*='card']") {
+        if let Ok(card_nodes) = el.query_selector_all(".card, .node, .point, .item, li, .bl li, div[class*='card']") {
             let card_len = card_nodes.length();
             for j in 0..card_len {
                 if let Some(card_node) = card_nodes.item(j) {
@@ -201,12 +201,12 @@ pub fn SlidesEditorDrawer(
     });
 
     // Save HTML back to workspace
-    let save_artifact = move || {
+    let save_artifact_content = move |custom_html: Option<String>| {
         if is_saving.get() {
             return;
         }
         is_saving.set(true);
-        let content = raw_html.get();
+        let content = custom_html.unwrap_or_else(|| raw_html.get());
         let lang = language.get();
 
         spawn_local(async move {
@@ -242,6 +242,10 @@ pub fn SlidesEditorDrawer(
         });
     };
 
+    let save_artifact = move || {
+        save_artifact_content(None);
+    };
+
     let update_speaker_notes = move |idx: usize, val: String| {
         let current = raw_html.get();
         if let Some(doc) = parse_doc(&current) {
@@ -249,7 +253,9 @@ pub fn SlidesEditorDrawer(
                 if let Some(node) = nodes.item(idx as u32) {
                     if let Ok(el) = node.dyn_into::<web_sys::Element>() {
                         let _ = el.set_attribute("data-speaker-notes", &val);
-                        raw_html.set(serialize_doc(&doc));
+                        let updated = serialize_doc(&doc);
+                        raw_html.set(updated.clone());
+                        save_artifact_content(Some(updated));
                     }
                 }
             }
@@ -326,7 +332,8 @@ pub fn SlidesEditorDrawer(
                                 } else {
                                     format!("{}\n{}", current_html, html_snippet)
                                 };
-                                raw_html.set(updated);
+                                raw_html.set(updated.clone());
+                                save_artifact_content(Some(updated));
                                 let new_total = slides.get().len();
                                 selected_slide_idx.set(new_total.saturating_sub(1));
                                 jump_preview(new_total.saturating_sub(1));
@@ -354,15 +361,27 @@ pub fn SlidesEditorDrawer(
                                                         if let Ok(Some(new_el)) =
                                                             temp_doc.query_selector(".slide, section")
                                                         {
-                                                            if let Some(parent) = el.parent_node() {
-                                                                if let Ok(imported) =
-                                                                    doc.import_node_with_deep(&new_el, true)
-                                                                {
-                                                                    let _ = parent
-                                                                        .replace_child(&imported, &el);
-                                                                    raw_html.set(serialize_doc(&doc));
+                                                        let old_id = el.id();
+                                                        let is_active = el.class_list().contains("active");
+                                                        if let Some(parent) = el.parent_node() {
+                                                            if let Ok(imported) =
+                                                                doc.import_node_with_deep(&new_el, true)
+                                                            {
+                                                                if let Ok(imported_el) = imported.clone().dyn_into::<web_sys::Element>() {
+                                                                    if !old_id.is_empty() {
+                                                                        imported_el.set_id(&old_id);
+                                                                    }
+                                                                    if is_active {
+                                                                        let _ = imported_el.class_list().add_1("active");
+                                                                    }
                                                                 }
+                                                                let _ = parent
+                                                                    .replace_child(&imported, &el);
+                                                                let next_html = serialize_doc(&doc);
+                                                                raw_html.set(next_html.clone());
+                                                                save_artifact_content(Some(next_html));
                                                             }
+                                                        }
                                                         }
                                                     }
                                                 } else {
@@ -370,7 +389,9 @@ pub fn SlidesEditorDrawer(
                                                         "data-speaker-notes",
                                                         notes_out,
                                                     );
-                                                    raw_html.set(serialize_doc(&doc));
+                                                    let next_html = serialize_doc(&doc);
+                                                    raw_html.set(next_html.clone());
+                                                    save_artifact_content(Some(next_html));
                                                 }
                                             }
                                         }
@@ -457,13 +478,25 @@ pub fn SlidesEditorDrawer(
                                                     if let Ok(Some(new_el)) =
                                                         temp_doc.query_selector(".slide, section")
                                                     {
+                                                        let old_id = el.id();
+                                                        let is_active = el.class_list().contains("active");
                                                         if let Some(parent) = el.parent_node() {
                                                             if let Ok(imported) =
                                                                 doc.import_node_with_deep(&new_el, true)
                                                             {
+                                                                if let Ok(imported_el) = imported.clone().dyn_into::<web_sys::Element>() {
+                                                                    if !old_id.is_empty() {
+                                                                        imported_el.set_id(&old_id);
+                                                                    }
+                                                                    if is_active {
+                                                                        let _ = imported_el.class_list().add_1("active");
+                                                                    }
+                                                                }
                                                                 let _ = parent
                                                                     .replace_child(&imported, &el);
-                                                                raw_html.set(serialize_doc(&doc));
+                                                                let next_html = serialize_doc(&doc);
+                                                                raw_html.set(next_html.clone());
+                                                                save_artifact_content(Some(next_html));
                                                             }
                                                         }
                                                     }
@@ -504,9 +537,11 @@ pub fn SlidesEditorDrawer(
             if let Ok(nodes) = doc.query_selector_all(".slide, section[id^='s'], [data-slide-id]") {
                 if let Some(node) = nodes.item(idx as u32) {
                     if let Ok(el) = node.dyn_into::<web_sys::Element>() {
-                        if let Ok(Some(title_el)) = el.query_selector("h1, h2, h3, .display-title, [class*='title']") {
+                        if let Ok(Some(title_el)) = el.query_selector(".s-title, .display-title, h1, h2, h3, [class*='title']") {
                             title_el.set_text_content(Some(&val));
-                            raw_html.set(serialize_doc(&doc));
+                            let updated = serialize_doc(&doc);
+                            raw_html.set(updated.clone());
+                            save_artifact_content(Some(updated));
                         }
                     }
                 }
@@ -520,9 +555,11 @@ pub fn SlidesEditorDrawer(
             if let Ok(nodes) = doc.query_selector_all(".slide, section[id^='s'], [data-slide-id]") {
                 if let Some(node) = nodes.item(idx as u32) {
                     if let Ok(el) = node.dyn_into::<web_sys::Element>() {
-                        if let Ok(Some(badge_el)) = el.query_selector(".badge, .category-badge, [class*='badge']") {
+                        if let Ok(Some(badge_el)) = el.query_selector(".k-txt, .badge, .category-badge, .cover-badge, .s-kicker, [class*='badge']") {
                             badge_el.set_text_content(Some(&val));
-                            raw_html.set(serialize_doc(&doc));
+                            let updated = serialize_doc(&doc);
+                            raw_html.set(updated.clone());
+                            save_artifact_content(Some(updated));
                         }
                     }
                 }
@@ -536,9 +573,11 @@ pub fn SlidesEditorDrawer(
             if let Ok(nodes) = doc.query_selector_all(".slide, section[id^='s'], [data-slide-id]") {
                 if let Some(node) = nodes.item(idx as u32) {
                     if let Ok(el) = node.dyn_into::<web_sys::Element>() {
-                        if let Ok(Some(sub_el)) = el.query_selector(".sub, .body-text, p") {
+                        if let Ok(Some(sub_el)) = el.query_selector(".s-sub, .cover-sub, .cover-en, .sub, .body-text, p") {
                             sub_el.set_text_content(Some(&val));
-                            raw_html.set(serialize_doc(&doc));
+                            let updated = serialize_doc(&doc);
+                            raw_html.set(updated.clone());
+                            save_artifact_content(Some(updated));
                         }
                     }
                 }
@@ -552,11 +591,13 @@ pub fn SlidesEditorDrawer(
             if let Ok(nodes) = doc.query_selector_all(".slide, section[id^='s'], [data-slide-id]") {
                 if let Some(node) = nodes.item(slide_idx as u32) {
                     if let Ok(el) = node.dyn_into::<web_sys::Element>() {
-                        if let Ok(card_nodes) = el.query_selector_all(".card, .node, .point, .item, li, div[class*='card']") {
+                        if let Ok(card_nodes) = el.query_selector_all(".card, .node, .point, .item, li, .bl li, div[class*='card']") {
                             if let Some(card_node) = card_nodes.item(item_idx as u32) {
                                 if let Ok(card_el) = card_node.dyn_into::<web_sys::Element>() {
                                     card_el.set_text_content(Some(&val));
-                                    raw_html.set(serialize_doc(&doc));
+                                    let updated = serialize_doc(&doc);
+                                    raw_html.set(updated.clone());
+                                    save_artifact_content(Some(updated));
                                 }
                             }
                         }
@@ -572,11 +613,13 @@ pub fn SlidesEditorDrawer(
             if let Ok(nodes) = doc.query_selector_all(".slide, section[id^='s'], [data-slide-id]") {
                 if let Some(node) = nodes.item(slide_idx as u32) {
                     if let Ok(el) = node.dyn_into::<web_sys::Element>() {
-                        if let Ok(card_nodes) = el.query_selector_all(".card, .node, .point, .item, li, div[class*='card']") {
+                        if let Ok(card_nodes) = el.query_selector_all(".card, .node, .point, .item, li, .bl li, div[class*='card']") {
                             if let Some(card_node) = card_nodes.item(item_idx as u32) {
                                 if let Ok(card_el) = card_node.dyn_into::<web_sys::Element>() {
                                     card_el.remove();
-                                    raw_html.set(serialize_doc(&doc));
+                                    let updated = serialize_doc(&doc);
+                                    raw_html.set(updated.clone());
+                                    save_artifact_content(Some(updated));
                                 }
                             }
                         }
@@ -593,7 +636,7 @@ pub fn SlidesEditorDrawer(
                 if let Some(node) = nodes.item(slide_idx as u32) {
                     if let Ok(el) = node.dyn_into::<web_sys::Element>() {
                         // Find container or fallback to slide
-                        let target_container = el.query_selector(".cards-grid, .grid, .slide-content, .cards")
+                        let target_container = el.query_selector(".cards-grid, .bento-grid, .grid, .slide-content, .cards, .s-body")
                             .ok()
                             .flatten()
                             .unwrap_or_else(|| el.clone());
@@ -602,7 +645,9 @@ pub fn SlidesEditorDrawer(
                             let _ = new_card.set_attribute("class", "card");
                             new_card.set_inner_html("<p>New bullet item or card description</p>");
                             let _ = target_container.append_child(&new_card);
-                            raw_html.set(serialize_doc(&doc));
+                            let updated = serialize_doc(&doc);
+                            raw_html.set(updated.clone());
+                            save_artifact_content(Some(updated));
                         }
                     }
                 }
@@ -619,7 +664,9 @@ pub fn SlidesEditorDrawer(
                     if let Some(node) = nodes.item(idx as u32) {
                         if let Ok(el) = node.dyn_into::<web_sys::Element>() {
                             el.remove();
-                            raw_html.set(serialize_doc(&doc));
+                            let updated = serialize_doc(&doc);
+                            raw_html.set(updated.clone());
+                            save_artifact_content(Some(updated));
                             let next_idx = idx.saturating_sub(1);
                             selected_slide_idx.set(next_idx);
                             jump_preview(next_idx);
@@ -642,7 +689,9 @@ pub fn SlidesEditorDrawer(
                             if let Some(parent) = node.parent_node() {
                                 let next_sibling = node.next_sibling();
                                 let _ = parent.insert_before(&cloned_el, next_sibling.as_ref());
-                                raw_html.set(serialize_doc(&doc));
+                                let updated = serialize_doc(&doc);
+                                raw_html.set(updated.clone());
+                                save_artifact_content(Some(updated));
                                 selected_slide_idx.set(idx + 1);
                                 jump_preview(idx + 1);
                             }
@@ -1043,6 +1092,42 @@ pub fn SlidesEditorDrawer(
                                                             title="KPI Big Numbers"
                                                         >
                                                             <span>{"📊 "}{move || t(language.get(), "KPI Stats", "شاخص‌های کلیدی")}</span>
+                                                        </button>
+                                                        <button
+                                                            type="button"
+                                                            class="zd-layout-btn"
+                                                            disabled=move || is_ai_loading.get()
+                                                            on:click=move |_| apply_layout_to_slide(cur_idx, "chart_bar")
+                                                            title="Animated Bar Chart"
+                                                        >
+                                                            <span>{"📈 "}{move || t(language.get(), "Bar Chart", "نمودار ستونی")}</span>
+                                                        </button>
+                                                        <button
+                                                            type="button"
+                                                            class="zd-layout-btn"
+                                                            disabled=move || is_ai_loading.get()
+                                                            on:click=move |_| apply_layout_to_slide(cur_idx, "chart_donut")
+                                                            title="SVG Donut / Pie Chart"
+                                                        >
+                                                            <span>{"🍩 "}{move || t(language.get(), "Donut Chart", "نمودار حلقوی")}</span>
+                                                        </button>
+                                                        <button
+                                                            type="button"
+                                                            class="zd-layout-btn"
+                                                            disabled=move || is_ai_loading.get()
+                                                            on:click=move |_| apply_layout_to_slide(cur_idx, "chart_trend")
+                                                            title="Smooth Trend Curve Chart"
+                                                        >
+                                                            <span>{"📉 "}{move || t(language.get(), "Trend Curve", "نمودار روند")}</span>
+                                                        </button>
+                                                        <button
+                                                            type="button"
+                                                            class="zd-layout-btn"
+                                                            disabled=move || is_ai_loading.get()
+                                                            on:click=move |_| apply_layout_to_slide(cur_idx, "roadmap")
+                                                            title="Milestone Roadmap Flow"
+                                                        >
+                                                            <span>{"🗺️ "}{move || t(language.get(), "Roadmap", "نقشه راه")}</span>
                                                         </button>
                                                         <button
                                                             type="button"

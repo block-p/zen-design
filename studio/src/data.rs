@@ -628,5 +628,7 @@ pub struct ChatHistoryItem {
 pub struct HistoryResponse {
     #[serde(default)]
     pub items: Vec<ChatHistoryItem>,
+    #[serde(default)]
+    pub current_mode: Option<String>,
 }
 

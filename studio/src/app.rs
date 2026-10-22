@@ -10,7 +10,7 @@ use crate::data::{
     ActivityEntry, ActivityKind, AspectRatio, ChatHistoryItem, ConnectionState, CustomThemeTokens,
     DesignSystemId, DeviceId, ModeId,
 };
-use crate::i18n::{load_language, load_theme, store_language, store_theme, t};
+use crate::i18n::{load_language, load_mode, load_theme, store_language, store_mode, store_theme, t};
 use crate::settings::SettingsView;
 use crate::stream::{push_activity, start_event_stream};
 
@@ -49,7 +49,13 @@ pub fn App() -> impl IntoView {
     let tts_text = RwSignal::new(String::new());
     let tts_lang = RwSignal::new("fa-IR".to_string());
 
-    let mode = RwSignal::new(ModeId::Prototype);
+    let initial_mode = load_mode().unwrap_or(ModeId::Slides);
+    let mode = RwSignal::new(initial_mode);
+
+    Effect::new(move |_| {
+        let m = mode.get();
+        store_mode(m);
+    });
     let device = RwSignal::new(DeviceId::Desktop);
 
     let prompt = RwSignal::new(String::new());
@@ -81,7 +87,7 @@ pub fn App() -> impl IntoView {
     let event_count = RwSignal::new(0_u32);
 
     load_settings(settings, settings_error);
-    load_history(history);
+    load_history(history, Some(mode));
 
     match start_event_stream(
         connection,

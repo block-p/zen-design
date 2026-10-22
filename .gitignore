@@ -26,3 +26,4 @@ config.toml
 history.json
 .env*
 release_builds/
+test_shots/

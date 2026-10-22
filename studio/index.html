@@ -26,6 +26,10 @@
           } else {
             document.documentElement.setAttribute('data-theme', 'light');
           }
+
+          if (!localStorage.getItem('zen-mode')) {
+            localStorage.setItem('zen-mode', 'slides');
+          }
         } catch (e) {}
       })();
     </script>

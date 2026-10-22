@@ -20,16 +20,118 @@ use serde_json::{json, Value};
 use tokio::io::{AsyncBufReadExt, AsyncReadExt, BufReader};
 use tokio::process::Command;
 use tokio::sync::broadcast;
-use tracing::info;
+use tracing::{info, warn};
 
 use crate::agent::AgentEvent;
-use crate::settings::{Settings, PROVIDER_ANTHROPIC, PROVIDER_OPENAI, PROVIDER_OPENCODE};
+use crate::settings::{
+    Settings, PROVIDER_ANTHROPIC, PROVIDER_AUTO, PROVIDER_OPENAI, PROVIDER_OPENCODE,
+};
 
 /// Result of a provider run: either raw model text (the orchestrator extracts
 /// and stores the HTML) or proof that the agent wrote the artifact itself.
 pub enum Generated {
     Text(String),
     ArtifactWritten,
+}
+
+#[derive(Clone, Debug)]
+pub struct ModelCandidate {
+    pub provider: String,
+    pub base_url: String,
+    pub model: String,
+    pub api_key: String,
+    pub description: String,
+}
+
+pub fn resolve_candidates(settings: &Settings) -> Vec<ModelCandidate> {
+    let mut candidates = Vec::new();
+    let mut seen = std::collections::HashSet::new();
+
+    let mut add = |provider: &str, base_url: &str, model: &str, api_key: &str, desc: &str| {
+        let clean_model = model.trim();
+        let key = (
+            provider.to_string(),
+            base_url.trim_end_matches('/').to_string(),
+            clean_model.to_string(),
+        );
+        if !seen.contains(&key) && !clean_model.is_empty() {
+            seen.insert(key);
+            candidates.push(ModelCandidate {
+                provider: provider.to_string(),
+                base_url: base_url.trim_end_matches('/').to_string(),
+                model: clean_model.to_string(),
+                api_key: api_key.trim().to_string(),
+                description: desc.to_string(),
+            });
+        }
+    };
+
+    // 1. Primary profile from settings
+    let prov = settings.provider.as_str();
+    if prov == PROVIDER_OPENAI || prov == PROVIDER_AUTO {
+        let base = settings.openai.base_url.trim();
+        let key = settings.openai_key();
+        let model = settings.openai.model.trim();
+        if !base.is_empty() {
+            let m = if model.is_empty() || model == "auto" {
+                "kr/auto"
+            } else {
+                model
+            };
+            add(PROVIDER_OPENAI, base, m, &key, "Active OpenAI Profile");
+            if base.contains("20130") || base.contains("9router") || base.contains("antigravity") {
+                add(PROVIDER_OPENAI, base, "kr/auto", &key, "Router Auto-Model");
+                add(PROVIDER_OPENAI, base, "kr/claude-sonnet-4.5", &key, "Router Claude Sonnet 4.5");
+                add(PROVIDER_OPENAI, base, "ag/gemini-3.8-flash-high", &key, "Router Gemini 3.8 Flash High");
+                add(PROVIDER_OPENAI, base, "kr/deepseek-3.2", &key, "Router DeepSeek 3.2");
+            }
+        }
+    } else if prov == PROVIDER_ANTHROPIC {
+        let base = settings.anthropic.base_url.trim();
+        let key = settings.anthropic_key();
+        let model = if settings.anthropic.model.trim().is_empty() {
+            "claude-opus-4-6"
+        } else {
+            settings.anthropic.model.trim()
+        };
+        if !base.is_empty() && !key.is_empty() {
+            add(PROVIDER_ANTHROPIC, base, model, &key, "Active Anthropic Profile");
+        }
+    }
+
+    // 2. Scan all locally detected tools and credentials
+    let detected = crate::detector::scan_local_sources();
+    for src in detected {
+        if !src.has_key {
+            continue;
+        }
+        if let Ok(res) = crate::detector::resolve_source(&src.id) {
+            let desc = format!("Detected: {}", src.name);
+            let first_m = res.model.as_deref().unwrap_or("kr/auto");
+            add(&res.provider, &res.base_url, first_m, &res.api_key, &desc);
+
+            for m in &src.models {
+                add(&res.provider, &res.base_url, m, &res.api_key, &format!("{} ({})", src.name, m));
+            }
+
+            if res.base_url.contains("20130") || res.base_url.contains("9router") {
+                add(&res.provider, &res.base_url, "kr/auto", &res.api_key, "Router Auto-Model");
+                add(&res.provider, &res.base_url, "kr/claude-sonnet-4.5", &res.api_key, "Router Claude Sonnet 4.5");
+                add(&res.provider, &res.base_url, "ag/gemini-3.8-flash-high", &res.api_key, "Router Gemini 3.8 Flash High");
+            }
+        }
+    }
+
+    // 3. Fallback OpenCode CLI
+    candidates.push(ModelCandidate {
+        provider: PROVIDER_OPENCODE.to_string(),
+        base_url: String::new(),
+        model: settings.opencode.model.clone(),
+        api_key: String::new(),
+        description: "OpenCode CLI local agent".to_string(),
+    });
+
+    candidates
 }
 
 const MAX_OUTPUT_TOKENS: u32 = 16_384;
@@ -109,27 +211,62 @@ pub async fn generate_with_images(
     sender: &broadcast::Sender<String>,
     workspace: &Path,
 ) -> Result<Generated, String> {
-    match settings.provider.as_str() {
-        PROVIDER_OPENAI => openai_generate(client, settings, system, user, images, sender)
-            .await
-            .map(Generated::Text),
-        PROVIDER_ANTHROPIC => anthropic_generate(client, settings, system, user, images, sender)
-            .await
-            .map(Generated::Text),
-        PROVIDER_OPENCODE => {
-            if !images.is_empty() {
-                return Err(
-                    "Visual review needs an OpenAI-compatible or Anthropic API provider; \
-                     OpenCode has no attached frames."
-                        .to_string(),
-                );
-            }
-            opencode_generate(settings, system, user, sender, workspace).await
-        }
-        other => Err(format!(
-            "No model is configured (provider: {other}). Open Settings and connect one."
-        )),
+    let candidates = resolve_candidates(settings);
+    if candidates.is_empty() {
+        return Err(
+            "No AI model configured or detected on your system. Open Settings to connect one."
+                .to_string(),
+        );
     }
+
+    let mut last_error = String::new();
+    for (idx, candidate) in candidates.iter().enumerate() {
+        if idx > 0 {
+            emit_event(
+                sender,
+                "status",
+                format!(
+                    "Notice: Previous model failed. Auto-failover switching to '{}' ({})…",
+                    candidate.model, candidate.description
+                ),
+            );
+        }
+
+        let res = match candidate.provider.as_str() {
+            PROVIDER_OPENAI => {
+                openai_generate_candidate(client, candidate, system, user, images, sender)
+                    .await
+                    .map(Generated::Text)
+            }
+            PROVIDER_ANTHROPIC => {
+                anthropic_generate_candidate(client, candidate, system, user, images, sender)
+                    .await
+                    .map(Generated::Text)
+            }
+            PROVIDER_OPENCODE => {
+                if !images.is_empty() {
+                    continue;
+                }
+                opencode_generate_candidate(candidate, system, user, sender, workspace).await
+            }
+            _ => continue,
+        };
+
+        match res {
+            Ok(gen) => return Ok(gen),
+            Err(err) => {
+                warn!(
+                    "Candidate '{}' ({}) failed: {}",
+                    candidate.model, candidate.description, err
+                );
+                last_error = err;
+            }
+        }
+    }
+
+    Err(format!(
+        "All available models failed. Last error: {last_error}"
+    ))
 }
 
 /// List models for the settings dialog. OpenAI-compatible endpoints expose
@@ -233,23 +370,21 @@ pub async fn list_models(
     }
 }
 
-async fn openai_generate(
+async fn openai_generate_candidate(
     client: &reqwest::Client,
-    settings: &Settings,
+    candidate: &ModelCandidate,
     system: &str,
     user: &str,
     images: &[Vec<u8>],
     sender: &broadcast::Sender<String>,
 ) -> Result<String, String> {
-    let base = settings.openai.base_url.trim().trim_end_matches('/');
+    let base = candidate.base_url.trim().trim_end_matches('/');
     if base.is_empty() {
-        return Err(
-            "OpenAI-compatible base URL is not set. Open Settings → 9Router / OpenAI.".to_string(),
-        );
+        return Err("OpenAI-compatible base URL is not set.".to_string());
     }
-    let model = settings.openai.model.trim();
+    let model = candidate.model.trim();
     if model.is_empty() {
-        return Err("No model selected. Open Settings and choose one.".to_string());
+        return Err("No model selected.".to_string());
     }
 
     let url = format!("{base}/chat/completions");
@@ -257,12 +392,13 @@ async fn openai_generate(
         sender,
         "status",
         format!(
-            "Contacting {base} · {model}{} — no reasoning timeout, stream stays open.",
+            "Connecting to {base} · {model}{} ({})…",
             if images.is_empty() {
                 String::new()
             } else {
                 format!(" · {} frame(s) attached", images.len())
-            }
+            },
+            candidate.description
         ),
     );
 
@@ -277,13 +413,12 @@ async fn openai_generate(
         ],
     });
 
-    let key = settings.openai_key();
     let mut request = client
         .post(&url)
         .header("Accept", "text/event-stream")
         .json(&body);
-    if !key.is_empty() {
-        request = request.bearer_auth(key);
+    if !candidate.api_key.is_empty() {
+        request = request.bearer_auth(&candidate.api_key);
     }
 
     let response = request
@@ -363,30 +498,29 @@ pub(crate) fn openai_delta(data: &str) -> Result<Option<String>, String> {
     Ok(None)
 }
 
-async fn anthropic_generate(
+async fn anthropic_generate_candidate(
     client: &reqwest::Client,
-    settings: &Settings,
+    candidate: &ModelCandidate,
     system: &str,
     user: &str,
     images: &[Vec<u8>],
     sender: &broadcast::Sender<String>,
 ) -> Result<String, String> {
-    let base = settings.anthropic.base_url.trim().trim_end_matches('/');
+    let base = candidate.base_url.trim().trim_end_matches('/');
     let base = if base.is_empty() {
         "https://api.anthropic.com"
     } else {
         base
     };
-    let model = if settings.anthropic.model.trim().is_empty() {
+    let model = if candidate.model.trim().is_empty() {
         "claude-opus-4-6"
     } else {
-        settings.anthropic.model.trim()
+        candidate.model.trim()
     };
-    let key = settings.anthropic_key();
-    if key.trim().is_empty() {
+    let key = candidate.api_key.trim();
+    if key.is_empty() {
         return Err(
-            "Anthropic API key is not configured. Add it in Settings or export ANTHROPIC_API_KEY."
-                .to_string(),
+            "Anthropic API key is not configured.".to_string(),
         );
     }
 
@@ -394,12 +528,13 @@ async fn anthropic_generate(
         sender,
         "status",
         format!(
-            "Contacting {base} · {model}{} — streaming Messages API.",
+            "Connecting to {base} · {model}{} — streaming Messages API ({}).",
             if images.is_empty() {
                 String::new()
             } else {
                 format!(" · {} frame(s) attached", images.len())
-            }
+            },
+            candidate.description
         ),
     );
 
@@ -487,15 +622,15 @@ pub(crate) fn anthropic_delta(data: &str) -> Result<Option<String>, String> {
 /// Runs the local `opencode` CLI inside `workspace/`. The agent may write
 /// `index.html` itself (preferred, detected by mtime/size), otherwise its text
 /// output is treated as the artifact source.
-async fn opencode_generate(
-    settings: &Settings,
+async fn opencode_generate_candidate(
+    candidate: &ModelCandidate,
     system: &str,
     user: &str,
     sender: &broadcast::Sender<String>,
     workspace: &Path,
 ) -> Result<Generated, String> {
     let binary = std::env::var("ZEN_OPENCODE_BIN").unwrap_or_else(|_| "opencode".to_string());
-    let model = settings.opencode.model.trim().to_string();
+    let model = candidate.model.trim().to_string();
 
     emit_event(
         sender,

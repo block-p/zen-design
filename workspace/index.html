@@ -4,1408 +4,1379 @@
 
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>تولد پردازنده ۳ نانومتری</title>
+<title>قدرت — Power</title>
 <style>
-@import url('https://fonts.googleapis.com/css2?family=Vazirmatn:wght@100;400;700;800;900&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Vazirmatn:wght@100;300;400;700;900&display=swap');
 
-*,*::before,*::after{margin:0;padding:0;box-sizing:border-box}
+*, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
 
-:root{
-  --bg:#0a2540;
-  --txt:#ffffff;
-  --acc:#635bff;
-  --W:720px;
-  --H:1280px;
-}
-
-html,body{
-  width:100%;height:100%;
-  background:#000;
-  overflow:hidden;
-  font-family:'Vazirmatn',system-ui,sans-serif;
+:root {
+  --bg: #050508;
+  --gold: #C8A96E;
+  --white: #E8E8F0;
+  --red: #8B1A2E;
+  --blue: #1A3A6E;
+  --accent: #635bff;
+  --beat: 0;
 }
 
-#stage{
-  position:fixed;
-  top:50%;left:50%;
-  width:var(--W);height:var(--H);
-  transform-origin:center center;
-  transform:translate(-50%,-50%) scale(1);
-  overflow:hidden;
-  background:var(--bg);
+html, body {
+  width: 100%; height: 100%;
+  background: #000;
+  overflow: hidden;
+  font-family: 'Vazirmatn', 'Inter', system-ui, sans-serif;
 }
 
-#bg-canvas{
-  position:absolute;inset:0;
-  width:100%;height:100%;
-  pointer-events:none;z-index:0;
+#viewport {
+  position: fixed;
+  top: 50%; left: 50%;
+  width: 720px; height: 1280px;
+  transform-origin: center center;
+  transform: translate(-50%, -50%) scale(1);
+  background: var(--bg);
+  overflow: hidden;
 }
 
-#ambient{
-  position:absolute;inset:0;
-  background:radial-gradient(ellipse at 50% 50%,color-mix(in srgb,#635bff 18%,transparent),transparent 72%);
-  pointer-events:none;z-index:1;
+#bg-canvas {
+  position: absolute; inset: 0;
+  width: 100%; height: 100%;
+  z-index: 1;
 }
 
-#scene{
-  position:absolute;inset:0;
-  z-index:2;
-  perspective:900px;
-  perspective-origin:50% 50%;
+#scene {
+  position: absolute; inset: 0;
+  z-index: 2;
+  display: flex; align-items: center; justify-content: center;
 }
 
-/* BEAT LAYERS */
-.beat{
-  position:absolute;inset:0;
-  display:flex;flex-direction:column;
-  align-items:center;justify-content:center;
-  opacity:0;
-  pointer-events:none;
-  will-change:opacity,transform;
+#svg-layer {
+  position: absolute; inset: 0;
+  z-index: 3;
+  pointer-events: none;
 }
 
-/* KINETIC TYPO */
-.typo-mask{
-  overflow:hidden;
-  display:inline-block;
-  padding:0.18em 0.12em;
-  margin:-0.18em -0.12em;
-  vertical-align:bottom;
-}
-.typo-line{
-  display:block;
-  font-weight:900;
-  font-size:clamp(56px,12vw,140px);
-  line-height:1.25;
-  letter-spacing:0;
-  color:#fff;
-  transform:translateY(120%);
-  will-change:transform;
-  white-space:nowrap;
-}
-.typo-sub{
-  font-size:clamp(22px,4vw,52px);
-  font-weight:700;
-  line-height:1.3;
-  letter-spacing:0;
-  color:color-mix(in srgb,#635bff 90%,#fff);
-  transform:translateY(120%);
-  display:block;
-  will-change:transform;
-}
-.typo-accent{color:var(--acc)}
-.typo-outline{
-  -webkit-text-stroke:2px #635bff;
-  color:transparent;
-}
-.typo-sm{
-  font-size:clamp(18px,3vw,38px);
-  font-weight:700;
-  line-height:1.35;
-  letter-spacing:0.02em;
-  color:rgba(255,255,255,0.55);
-  transform:translateY(120%);
-  display:block;
+#typo-layer {
+  position: absolute; inset: 0;
+  z-index: 4;
+  display: flex; flex-direction: column;
+  align-items: center; justify-content: center;
+  pointer-events: none;
 }
 
-/* SVG ARTIFACTS */
-.artifact{
-  position:relative;
-  display:flex;align-items:center;justify-content:center;
-  will-change:transform,opacity;
+.beat-el {
+  position: absolute; inset: 0;
+  display: flex; flex-direction: column;
+  align-items: center; justify-content: center;
+  opacity: 0;
+  transition: opacity 0.3s;
+  pointer-events: none;
 }
 
-/* PROGRESS BAR */
-#progress-bar{
-  position:absolute;
-  bottom:0;left:0;
-  height:2px;width:0%;
-  background:linear-gradient(90deg,#635bff,#a78bfa);
-  z-index:99;
-  transition:none;
-}
-#progress-bar::after{
-  content:'';
-  position:absolute;right:0;top:-3px;
-  width:8px;height:8px;
-  border-radius:50%;
-  background:#a78bfa;
-  box-shadow:0 0 12px 4px #635bff;
-}
-#time-counter{
-  position:absolute;
-  bottom:14px;left:50%;
-  transform:translateX(-50%);
-  font-family:'Courier New',monospace;
-  font-size:11px;
-  color:rgba(255,255,255,0.35);
-  z-index:99;
-  letter-spacing:0.12em;
-  direction:ltr;
+.typo-mask {
+  overflow: hidden;
+  display: inline-block;
+  padding: 0.18em 0.12em;
+  margin: -0.18em -0.12em;
+  vertical-align: bottom;
 }
 
-/* CONTROLS */
-#ctrl{
-  position:absolute;
-  bottom:28px;right:20px;
-  display:flex;gap:10px;
-  z-index:99;
-}
-.ctrl-btn{
-  background:none;border:none;
-  color:rgba(255,255,255,0.45);
-  font-size:16px;cursor:pointer;
-  padding:6px;
-  transition:color .2s;
-  font-family:inherit;
-}
-.ctrl-btn:hover{color:#fff}
-
-/* AUDIO GATE */
-#audio-gate{
-  position:absolute;inset:0;
-  z-index:200;
-  display:flex;flex-direction:column;
-  align-items:center;justify-content:center;
-  background:rgba(10,37,64,0.92);
-  cursor:pointer;
-  gap:24px;
-}
-#audio-gate .gate-icon{
-  font-size:64px;opacity:.8;
-}
-#audio-gate .gate-text{
-  font-size:22px;font-weight:700;
-  color:rgba(255,255,255,0.8);
-  letter-spacing:0;
-}
-#audio-gate .gate-hint{
-  font-size:13px;color:rgba(255,255,255,0.4);
+.typo-inner {
+  display: inline-block;
+  transform: translateY(120%);
+  transition: transform 0.7s cubic-bezier(0.16,1,0.3,1);
+  color: var(--white);
+  font-weight: 900;
+  line-height: 1.15;
+  letter-spacing: 0;
+  text-align: center;
 }
 
-/* GLITCH OVERLAY */
-#glitch-overlay{
-  position:absolute;inset:0;z-index:50;
-  pointer-events:none;opacity:0;
-  background:linear-gradient(transparent 49%,rgba(99,91,255,0.15) 50%,transparent 51%);
-  background-size:100% 4px;
-  will-change:opacity;
+.typo-inner.revealed { transform: translateY(0); }
+
+.word-gold { color: var(--gold); }
+.word-red { color: var(--red); }
+.word-blue { color: #4A7ADE; }
+
+/* Progress bar */
+#progress-bar {
+  position: absolute; bottom: 0; left: 0;
+  height: 2px; width: 0%;
+  background: var(--gold);
+  z-index: 10;
+  box-shadow: 0 0 8px var(--gold), 0 0 20px var(--gold);
+  transition: width 0.05s linear;
+}
+#progress-bar::after {
+  content: '';
+  position: absolute; right: 0; top: 50%;
+  transform: translateY(-50%);
+  width: 6px; height: 6px; border-radius: 50%;
+  background: var(--gold);
+  box-shadow: 0 0 10px var(--gold);
 }
 
-/* SCAN LINE */
-#scan-line{
-  position:absolute;left:0;right:0;
-  height:2px;
-  background:linear-gradient(90deg,transparent,rgba(99,91,255,0.6),transparent);
-  z-index:30;pointer-events:none;
-  top:0;will-change:transform;
+#timer {
+  position: absolute; bottom: 14px; left: 50%;
+  transform: translateX(-50%);
+  font-family: 'Courier New', monospace;
+  font-size: 11px;
+  color: rgba(200,169,110,0.5);
+  z-index: 10;
+  letter-spacing: 0.1em;
 }
 
-@media (prefers-reduced-motion:reduce){
-  .beat,.typo-line,.typo-sub,.typo-sm{animation:none!important;transform:none!important;opacity:1!important}
-  #audio-gate{display:none}
+#ctrl-btns {
+  position: absolute; bottom: 30px; right: 20px;
+  z-index: 10;
+  display: flex; flex-direction: column; gap: 8px;
+  align-items: flex-end;
+}
+
+.ctrl-btn {
+  background: none; border: none; cursor: pointer;
+  color: rgba(200,169,110,0.6);
+  font-family: 'Vazirmatn', sans-serif;
+  font-size: 13px;
+  padding: 4px 8px;
+  transition: color 0.2s;
+}
+.ctrl-btn:hover { color: var(--gold); }
+
+#start-hud {
+  position: absolute; inset: 0;
+  z-index: 20;
+  display: flex; flex-direction: column;
+  align-items: center; justify-content: center;
+  background: rgba(5,5,8,0.85);
+  backdrop-filter: blur(4px);
+}
+
+#start-hud .hud-title {
+  font-size: 72px; font-weight: 900;
+  color: var(--gold);
+  letter-spacing: 0;
+  margin-bottom: 16px;
+  text-shadow: 0 0 40px rgba(200,169,110,0.6);
+}
+#start-hud .hud-sub {
+  font-size: 18px; color: rgba(232,232,240,0.6);
+  margin-bottom: 48px;
+}
+#start-btn {
+  background: none;
+  border: 1px solid rgba(200,169,110,0.5);
+  color: var(--gold);
+  font-family: 'Vazirmatn', sans-serif;
+  font-size: 18px; font-weight: 700;
+  padding: 16px 48px;
+  cursor: pointer;
+  letter-spacing: 0;
+  transition: all 0.3s;
+  position: relative;
+}
+#start-btn::before {
+  content: '';
+  position: absolute; inset: -1px;
+  background: linear-gradient(135deg, var(--gold), transparent, var(--gold));
+  opacity: 0;
+  transition: opacity 0.3s;
+  z-index: -1;
+}
+#start-btn:hover { 
+  background: rgba(200,169,110,0.1);
+  box-shadow: 0 0 30px rgba(200,169,110,0.3);
+}
+
+/* Subtitle overlay */
+#subtitle {
+  position: absolute;
+  bottom: 60px; left: 40px; right: 40px;
+  z-index: 9;
+  text-align: center;
+  font-size: 16px;
+  font-weight: 400;
+  color: rgba(232,232,240,0.75);
+  line-height: 1.6;
+  letter-spacing: 0;
+  opacity: 0;
+  transition: opacity 0.4s;
+  pointer-events: none;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .typo-inner { transition: none; }
+  #start-hud { display: none; }
 }
 </style>
 </head>
 <body>
-
-<div id="stage">
+<div id="viewport">
   <canvas id="bg-canvas"></canvas>
-  <div id="ambient"></div>
-  <div id="glitch-overlay"></div>
-  <div id="scan-line"></div>
-  <div id="scene">
-
-    <!-- BEAT 01: GENESIS -->
-    <div class="beat" id="b01">
-      <div class="artifact" id="a01" style="margin-bottom:40px">
-        <svg width="320" height="320" viewBox="0 0 320 320" fill="none" xmlns="http://www.w3.org/2000/svg">
-          <defs>
-            <radialGradient id="rg1" cx="50%" cy="50%" r="50%">
-              <stop offset="0%" stop-color="#635bff" stop-opacity="0.8"/>
-              <stop offset="100%" stop-color="#0a2540" stop-opacity="0"/>
-            </radialGradient>
-            <filter id="glow1">
-              <feGaussianBlur stdDeviation="3" result="blur"/>
-              <feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge>
-            </filter>
-          </defs>
-          <circle cx="160" cy="160" r="155" stroke="rgba(99,91,255,0.15)" stroke-width="1"/>
-          <circle cx="160" cy="160" r="120" stroke="rgba(99,91,255,0.25)" stroke-width="1" stroke-dasharray="4 6"/>
-          <circle cx="160" cy="160" r="85" stroke="rgba(99,91,255,0.4)" stroke-width="1.5"/>
-          <circle cx="160" cy="160" r="50" stroke="rgba(99,91,255,0.6)" stroke-width="2" filter="url(#glow1)"/>
-          <circle cx="160" cy="160" r="18" fill="rgba(99,91,255,0.9)" filter="url(#glow1)"/>
-          <circle cx="160" cy="160" r="6" fill="#fff"/>
-          <path id="orbit1" d="M 160 75 A 85 85 0 1 1 159.99 75" stroke="#635bff" stroke-width="2" fill="none" stroke-dasharray="20 520" filter="url(#glow1)">
-            <animateTransform attributeName="transform" type="rotate" from="0 160 160" to="360 160 160" dur="3s" repeatCount="indefinite"/>
-          </path>
-          <path d="M 160 40 A 120 120 0 1 1 159.99 40" stroke="rgba(99,91,255,0.5)" stroke-width="1.5" fill="none" stroke-dasharray="8 12">
-            <animateTransform attributeName="transform" type="rotate" from="360 160 160" to="0 160 160" dur="5s" repeatCount="indefinite"/>
-          </path>
-          <g id="ticks1">
-            <line x1="160" y1="5" x2="160" y2="20" stroke="rgba(255,255,255,0.4)" stroke-width="1.5">
-              <animateTransform attributeName="transform" type="rotate" from="0 160 160" to="360 160 160" dur="8s" repeatCount="indefinite"/>
-            </line>
-          </g>
-          <fill url(#rg1) d="M160 160 m-155 0 a155 155 0 1 1 310 0" />
-        </svg>
-      </div>
-      <div>
-        <span class="typo-mask"><span class="typo-line" id="b01t1">آغاز</span></span>
-        <span class="typo-mask"><span class="typo-line typo-outline" id="b01t2">آفرینش</span></span>
-      </div>
-      <div style="margin-top:18px">
-        <span class="typo-mask"><span class="typo-sm" id="b01t3">پردازنده ۳ نانومتری</span></span>
-      </div>
-    </div>
-
-    <!-- BEAT 02: SILICON WAFER -->
-    <div class="beat" id="b02">
-      <div class="artifact" id="a02" style="margin-bottom:32px">
-        <svg width="340" height="280" viewBox="0 0 340 280" fill="none" xmlns="http://www.w3.org/2000/svg">
-          <defs>
-            <filter id="glow2"><feGaussianBlur stdDeviation="4" result="b"/><feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge></filter>
-            <linearGradient id="wafGrad" x1="0" y1="0" x2="1" y2="1">
-              <stop offset="0%" stop-color="#635bff" stop-opacity="0.6"/>
-              <stop offset="100%" stop-color="#a78bfa" stop-opacity="0.2"/>
-            </linearGradient>
-          </defs>
-          <!-- Isometric wafer grid -->
-          <g transform="translate(170,140) rotate(-30)" style="transform-box:fill-box;transform-origin:center">
-            <rect x="-120" y="-100" width="240" height="200" rx="4" fill="url(#wafGrad)" stroke="rgba(99,91,255,0.5)" stroke-width="1.5"/>
-            <!-- Grid lines -->
-            <line x1="-120" y1="-60" x2="120" y2="-60" stroke="rgba(99,91,255,0.3)" stroke-width="0.5"/>
-            <line x1="-120" y1="-20" x2="120" y2="-20" stroke="rgba(99,91,255,0.3)" stroke-width="0.5"/>
-            <line x1="-120" y1="20" x2="120" y2="20" stroke="rgba(99,91,255,0.3)" stroke-width="0.5"/>
-            <line x1="-120" y1="60" x2="120" y2="60" stroke="rgba(99,91,255,0.3)" stroke-width="0.5"/>
-            <line x1="-80" y1="-100" x2="-80" y2="100" stroke="rgba(99,91,255,0.3)" stroke-width="0.5"/>
-            <line x1="-40" y1="-100" x2="-40" y2="100" stroke="rgba(99,91,255,0.3)" stroke-width="0.5"/>
-            <line x1="0" y1="-100" x2="0" y2="100" stroke="rgba(99,91,255,0.3)" stroke-width="0.5"/>
-            <line x1="40" y1="-100" x2="40" y2="100" stroke="rgba(99,91,255,0.3)" stroke-width="0.5"/>
-            <line x1="80" y1="-100" x2="80" y2="100" stroke="rgba(99,91,255,0.3)" stroke-width="0.5"/>
-            <!-- Crystal nodes -->
-            <circle cx="-80" cy="-60" r="4" fill="#635bff" filter="url(#glow2)"/>
-            <circle cx="0" cy="-20" r="6" fill="#a78bfa" filter="url(#glow2)"/>
-            <circle cx="80" cy="20" r="4" fill="#635bff" filter="url(#glow2)"/>
-            <circle cx="-40" cy="60" r="5" fill="#fff" opacity=".6" filter="url(#glow2)"/>
-            <animateTransform attributeName="transform" type="rotate" from="-30" to="330" dur="12s" repeatCount="indefinite" additive="sum"/>
-          </g>
-          <!-- UV beam -->
-          <rect x="130" y="0" width="80" height="280" fill="url(#uvBeam)" opacity="0.12">
-            <animate attributeName="x" values="0;260;0" dur="3s" repeatCount="indefinite"/>
-            <animate attributeName="opacity" values="0.06;0.18;0.06" dur="3s" repeatCount="indefinite"/>
-          </rect>
-          <defs>
-            <linearGradient id="uvBeam" x1="0" y1="0" x2="1" y2="0">
-              <stop offset="0%" stop-color="transparent"/>
-              <stop offset="50%" stop-color="#a78bfa"/>
-              <stop offset="100%" stop-color="transparent"/>
-            </linearGradient>
-          </defs>
-        </svg>
-      </div>
-      <div>
-        <span class="typo-mask"><span class="typo-line" id="b02t1">تبلور</span></span>
-        <span class="typo-mask"><span class="typo-line typo-accent" id="b02t2">سیلیکون</span></span>
-      </div>
-    </div>
-
-    <!-- BEAT 03: UV LITHOGRAPHY -->
-    <div class="beat" id="b03">
-      <div class="artifact" id="a03" style="margin-bottom:28px">
-        <svg width="360" height="300" viewBox="0 0 360 300" fill="none">
-          <defs>
-            <filter id="glow3"><feGaussianBlur stdDeviation="5" result="b"/><feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge></filter>
-            <radialGradient id="uvCore" cx="50%" cy="20%" r="60%">
-              <stop offset="0%" stop-color="#a78bfa" stop-opacity="1"/>
-              <stop offset="100%" stop-color="transparent"/>
-            </radialGradient>
-          </defs>
-          <!-- UV Lens -->
-          <circle cx="180" cy="60" r="40" fill="rgba(167,139,250,0.15)" stroke="#a78bfa" stroke-width="2" filter="url(#glow3)"/>
-          <circle cx="180" cy="60" r="24" fill="rgba(167,139,250,0.3)" stroke="#635bff" stroke-width="1.5" filter="url(#glow3)"/>
-          <circle cx="180" cy="60" r="10" fill="#a78bfa" filter="url(#glow3)"/>
-          <!-- UV Rays fanning down -->
-          <line x1="180" y1="100" x2="60" y2="280" stroke="url(#uvRay1)" stroke-width="1" opacity="0.7"/>
-          <line x1="180" y1="100" x2="100" y2="280" stroke="url(#uvRay1)" stroke-width="1.5" opacity="0.8"/>
-          <line x1="180" y1="100" x2="140" y2="280" stroke="url(#uvRay1)" stroke-width="2" opacity="0.9"/>
-          <line x1="180" y1="100" x2="180" y2="280" stroke="url(#uvRay1)" stroke-width="2.5" opacity="1" filter="url(#glow3)"/>
-          <line x1="180" y1="100" x2="220" y2="280" stroke="url(#uvRay1)" stroke-width="2" opacity="0.9"/>
-          <line x1="180" y1="100" x2="260" y2="280" stroke="url(#uvRay1)" stroke-width="1.5" opacity="0.8"/>
-          <line x1="180" y1="100" x2="300" y2="280" stroke="url(#uvRay1)" stroke-width="1" opacity="0.7"/>
-          <defs>
-            <linearGradient id="uvRay1" x1="0" y1="0" x2="0" y2="1">
-              <stop offset="0%" stop-color="#a78bfa"/>
-              <stop offset="100%" stop-color="rgba(99,91,255,0.1)"/>
-            </linearGradient>
-          </defs>
-          <!-- Mask pattern on wafer -->
-          <rect x="40" y="250" width="280" height="30" fill="rgba(99,91,255,0.1)" stroke="rgba(99,91,255,0.4)" stroke-width="1"/>
-          <rect x="60" y="252" width="20" height="26" fill="rgba(99,91,255,0.4)"/>
-          <rect x="100" y="252" width="30" height="26" fill="rgba(99,91,255,0.4)"/>
-          <rect x="150" y="252" width="15" height="26" fill="rgba(99,91,255,0.4)"/>
-          <rect x="185" y="252" width="25" height="26" fill="rgba(99,91,255,0.4)"/>
-          <rect x="230" y="252" width="18" height="26" fill="rgba(99,91,255,0.4)"/>
-          <rect x="265" y="252" width="22" height="26" fill="rgba(99,91,255,0.4)"/>
-          <!-- Scanning beam animate -->
-          <rect x="40" y="250" width="8" height="30" fill="#a78bfa" opacity="0.7" filter="url(#glow3)">
-            <animate attributeName="x" values="40;272;40" dur="2s" repeatCount="indefinite"/>
-          </rect>
-        </svg>
-      </div>
-      <div>
-        <span class="typo-mask"><span class="typo-line" id="b03t1">اشعه</span></span>
-        <span class="typo-mask"><span class="typo-line typo-accent" id="b03t2">ماوراءبنفش</span></span>
-      </div>
-    </div>
-
-    <!-- BEAT 04: ETCHING -->
-    <div class="beat" id="b04">
-      <div class="artifact" id="a04" style="margin-bottom:28px">
-        <svg width="340" height="280" viewBox="0 0 340 280" fill="none">
-          <defs>
-            <filter id="glow4"><feGaussianBlur stdDeviation="4"/><feMerge><feMergeNode/><feMergeNode in="SourceGraphic"/></feMerge></filter>
-          </defs>
-          <!-- Atomic layer cross-section -->
-          <g>
-            <rect x="20" y="60" width="300" height="35" fill="rgba(99,91,255,0.12)" stroke="rgba(99,91,255,0.5)" stroke-width="1"/>
-            <rect x="20" y="95" width="300" height="30" fill="rgba(99,91,255,0.08)" stroke="rgba(99,91,255,0.3)" stroke-width="1"/>
-            <rect x="20" y="125" width="300" height="25" fill="rgba(99,91,255,0.05)" stroke="rgba(99,91,255,0.2)" stroke-width="1"/>
-            <!-- Etched channels drawing in -->
-            <rect x="80" y="60" width="16" height="65" fill="#0a2540" stroke="#635bff" stroke-width="1.5" filter="url(#glow4)">
-              <animate attributeName="height" values="0;65" dur="1.5s" fill="freeze"/>
-            </rect>
-            <rect x="130" y="60" width="16" height="65" fill="#0a2540" stroke="#635bff" stroke-width="1.5" filter="url(#glow4)">
-              <animate attributeName="height" values="0;65" dur="1.5s" begin="0.3s" fill="freeze"/>
-            </rect>
-            <rect x="180" y="60" width="16" height="65" fill="#0a2540" stroke="#635bff" stroke-width="1.5" filter="url(#glow4)">
-              <animate attributeName="height" values="0;65" dur="1.5s" begin="0.6s" fill="freeze"/>
-            </rect>
-            <rect x="230" y="60" width="16" height="65" fill="#0a2540" stroke="#635bff" stroke-width="1.5" filter="url(#glow4)">
-              <animate attributeName="height" values="0;65" dur="1.5s" begin="0.9s" fill="freeze"/>
-            </rect>
-          </g>
-          <!-- Scale indicator -->
-          <line x1="30" y1="200" x2="80" y2="200" stroke="#635bff" stroke-width="1.5"/>
-          <line x1="30" y1="196" x2="30" y2="204" stroke="#635bff" stroke-width="1.5"/>
-          <line x1="80" y1="196" x2="80" y2="204" stroke="#635bff" stroke-width="1.5"/>
-          <text x="55" y="220" text-anchor="middle" fill="rgba(255,255,255,0.5)" font-size="11" font-family="Courier New">3nm</text>
-          <!-- Particle etch dots -->
-          <circle cx="88" cy="70" r="2" fill="#a78bfa" opacity="0.8" filter="url(#glow4)">
-            <animate attributeName="cy" values="70;160;70" dur="2s" repeatCount="indefinite"/>
-            <animate attributeName="opacity" values="0.8;0;0.8" dur="2s" repeatCount="indefinite"/>
-          </circle>
-          <circle cx="138" cy="80" r="2" fill="#a78bfa" opacity="0.8" filter="url(#glow4)">
-            <animate attributeName="cy" values="80;160;80" dur="2s" begin="0.4s" repeatCount="indefinite"/>
-            <animate attributeName="opacity" values="0.8;0;0.8" dur="2s" begin="0.4s" repeatCount="indefinite"/>
-          </circle>
-          <circle cx="188" cy="75" r="2" fill="#a78bfa" opacity="0.8" filter="url(#glow4)">
-            <animate attributeName="cy" values="75;160;75" dur="2s" begin="0.8s" repeatCount="indefinite"/>
-            <animate attributeName="opacity" values="0.8;0;0.8" dur="2s" begin="0.8s" repeatCount="indefinite"/>
-          </circle>
-        </svg>
-      </div>
-      <div>
-        <span class="typo-mask"><span class="typo-line" id="b04t1">حکاکی</span></span>
-        <span class="typo-mask"><span class="typo-line typo-outline" id="b04t2">اتمی</span></span>
-      </div>
-    </div>
-
-    <!-- BEAT 05: TRANSISTORS -->
-    <div class="beat" id="b05">
-      <div class="artifact" id="a05" style="margin-bottom:32px">
-        <canvas id="transistor-canvas" width="360" height="280"></canvas>
-      </div>
-      <div>
-        <span class="typo-mask"><span class="typo-line" id="b05t1">۱۶ میلیارد</span></span>
-        <span class="typo-mask"><span class="typo-line typo-accent" id="b05t2">ترانزیستور</span></span>
-      </div>
-    </div>
-
-    <!-- BEAT 06: INTERCONNECT -->
-    <div class="beat" id="b06">
-      <div class="artifact" id="a06" style="margin-bottom:28px">
-        <svg width="360" height="290" viewBox="0 0 360 290" fill="none">
-          <defs>
-            <filter id="glow6"><feGaussianBlur stdDeviation="4"/><feMerge><feMergeNode/><feMergeNode in="SourceGraphic"/></feMerge></filter>
-            <linearGradient id="wireGrad" x1="0" y1="0" x2="1" y2="0">
-              <stop offset="0%" stop-color="#635bff"/>
-              <stop offset="100%" stop-color="#a78bfa"/>
-            </linearGradient>
-          </defs>
-          <!-- Interconnect grid -->
-          <g stroke="rgba(99,91,255,0.25)" stroke-width="0.7" fill="none">
-            <path d="M30 50 H330"/>
-            <path d="M30 90 H330"/>
-            <path d="M30 130 H330"/>
-            <path d="M30 170 H330"/>
-            <path d="M30 210 H330"/>
-            <path d="M80 20 V260"/>
-            <path d="M140 20 V260"/>
-            <path d="M200 20 V260"/>
-            <path d="M260 20 V260"/>
-          </g>
-          <!-- Active signal traces -->
-          <path d="M30 50 H200 V130 H330" stroke="url(#wireGrad)" stroke-width="2" fill="none" filter="url(#glow6)" stroke-dasharray="400" stroke-dashoffset="400">
-            <animate attributeName="stroke-dashoffset" values="400;0" dur="1.2s" fill="freeze"/>
-          </path>
-          <path d="M80 260 V170 H260 V90 H330" stroke="url(#wireGrad)" stroke-width="2" fill="none" filter="url(#glow6)" stroke-dasharray="500" stroke-dashoffset="500">
-            <animate attributeName="stroke-dashoffset" values="500;0" dur="1.4s" begin="0.3s" fill="freeze"/>
-          </path>
-          <path d="M30 210 H140 V50" stroke="#a78bfa" stroke-width="1.5" fill="none" filter="url(#glow6)" stroke-dasharray="350" stroke-dashoffset="350">
-            <animate attributeName="stroke-dashoffset" values="350;0" dur="1s" begin="0.6s" fill="freeze"/>
-          </path>
-          <!-- Pulse dots on wires -->
-          <circle r="4" fill="#fff" filter="url(#glow6)">
-            <animateMotion dur="2s" repeatCount="indefinite" path="M30 50 H200 V130 H330"/>
-          </circle>
-          <circle r="3" fill="#a78bfa" filter="url(#glow6)">
-            <animateMotion dur="2.2s" repeatCount="indefinite" begin="0.5s" path="M80 260 V170 H260 V90 H330"/>
-          </circle>
-          <!-- Nodes -->
-          <circle cx="200" cy="50" r="5" fill="#635bff" filter="url(#glow6)"/>
-          <circle cx="200" cy="130" r="5" fill="#635bff" filter="url(#glow6)"/>
-          <circle cx="140" cy="170" r="5" fill="#a78bfa" filter="url(#glow6)"/>
-          <circle cx="260" cy="170" r="5" fill="#a78bfa" filter="url(#glow6)"/>
-          <circle cx="260" cy="90" r="5" fill="#635bff" filter="url(#glow6)"/>
-        </svg>
-      </div>
-      <div>
-        <span class="typo-mask"><span class="typo-line" id="b06t1">شبکه</span></span>
-        <span class="typo-mask"><span class="typo-line typo-accent" id="b06t2">اتصالات</span></span>
-      </div>
-    </div>
-
-    <!-- BEAT 07: CLOCK FREQUENCY -->
-    <div class="beat" id="b07">
-      <div class="artifact" id="a07" style="margin-bottom:24px">
-        <svg width="360" height="260" viewBox="0 0 360 260" fill="none">
-          <defs>
-            <filter id="glow7"><feGaussianBlur stdDeviation="5"/><feMerge><feMergeNode/><feMergeNode in="SourceGraphic"/></feMerge></filter>
-          </defs>
-          <!-- Clock waveform -->
-          <polyline id="clkWave" points="10,180 10,180" stroke="#635bff" stroke-width="2.5" fill="none" filter="url(#glow7)">
-            <animate attributeName="points" 
-              values="10,180 10,180;
-                      10,180 40,180 40,80 80,80 80,180 120,180 120,80 160,80 160,180 200,180 200,80 240,80 240,180 280,180 280,80 320,80 320,180 350,180"
-              dur="1.5s" fill="freeze"/>
-          </polyline>
-          <!-- Frequency label -->
-          <text x="180" y="50" text-anchor="middle" fill="rgba(99,91,255,0.9)" font-size="14" font-family="Courier New" letter-spacing="2" filter="url(#glow7)">4.2 GHz</text>
-          <text x="180" y="30" text-anchor="middle" fill="rgba(255,255,255,0.4)" font-size="10" font-family="Courier New" letter-spacing="1">CLK FREQ</text>
-          <!-- Rising pulse indicator -->
-          <line x1="40" y1="80" x2="40" y2="180" stroke="rgba(167,139,250,0.4)" stroke-width="1" stroke-dasharray="4 4"/>
-          <line x1="120" y1="80" x2="120" y2="180" stroke="rgba(167,139,250,0.4)" stroke-width="1" stroke-dasharray="4 4"/>
-          <line x1="200" y1="80" x2="200" y2="180" stroke="rgba(167,139,250,0.4)" stroke-width="1" stroke-dasharray="4 4"/>
-          <line x1="280" y1="80" x2="280" y2="180" stroke="rgba(167,139,250,0.4)" stroke-width="1" stroke-dasharray="4 4"/>
-          <!-- Y axis -->
-          <line x1="10" y1="60" x2="10" y2="210" stroke="rgba(255,255,255,0.2)" stroke-width="1"/>
-          <line x1="10" y1="210" x2="350" y2="210" stroke="rgba(255,255,255,0.2)" stroke-width="1"/>
-          <!-- Glowing pulse traveler -->
-          <circle r="5" fill="#a78bfa" filter="url(#glow7)" opacity="0.9">
-            <animateMotion dur="1.5s" repeatCount="indefinite" 
-              path="M40,80 H80 V180 H120 V80 H160 V180 H200 V80 H240 V180 H280 V80 H320"/>
-          </circle>
-        </svg>
-      </div>
-      <div>
-        <span class="typo-mask"><span class="typo-line" id="b07t1">انفجار</span></span>
-        <span class="typo-mask"><span class="typo-line typo-accent" id="b07t2">فرکانس</span></span>
-      </div>
-    </div>
-
-    <!-- BEAT 08: POWER EFFICIENCY -->
-    <div class="beat" id="b08">
-      <div class="artifact" id="a08" style="margin-bottom:28px">
-        <svg width="340" height="280" viewBox="0 0 340 280" fill="none">
-          <defs>
-            <filter id="glow8"><feGaussianBlur stdDeviation="4"/><feMerge><feMergeNode/><feMergeNode in="SourceGraphic"/></feMerge></filter>
-            <linearGradient id="barGrad" x1="0" y1="1" x2="0" y2="0">
-              <stop offset="0%" stop-color="#635bff"/>
-              <stop offset="100%" stop-color="#a78bfa"/>
-            </linearGradient>
-          </defs>
-          <!-- 3D ring power meter -->
-          <circle cx="170" cy="130" r="110" stroke="rgba(99,91,255,0.1)" stroke-width="20" fill="none"/>
-          <circle cx="170" cy="130" r="110" stroke="url(#barGrad)" stroke-width="20" fill="none"
-            stroke-dasharray="0 692" stroke-linecap="round" filter="url(#glow8)"
-            transform="rotate(-90 170 130)">
-            <animate attributeName="stroke-dasharray" values="0 692;580 692" dur="2s" fill="freeze"/>
-          </circle>
-          <!-- Inner metric -->
-          <text x="170" y="118" text-anchor="middle" fill="#fff" font-size="44" font-weight="900" font-family="'Courier New'" filter="url(#glow8)">84%</text>
-          <text x="170" y="148" text-anchor="middle" fill="rgba(99,91,255,0.8)" font-size="13" font-family="'Courier New'" letter-spacing="2">بهره‌وری</text>
-          <!-- Tick marks -->
-          <g stroke="rgba(255,255,255,0.2)" stroke-width="1">
-            <line x1="170" y1="8" x2="170" y2="20" transform="rotate(0 170 130)"/>
-            <line x1="170" y1="8" x2="170" y2="20" transform="rotate(45 170 130)"/>
-            <line x1="170" y1="8" x2="170" y2="20" transform="rotate(90 170 130)"/>
-            <line x1="170" y1="8" x2="170" y2="20" transform="rotate(135 170 130)"/>
-            <line x1="170" y1="8" x2="170" y2="20" transform="rotate(180 170 130)"/>
-            <line x1="170" y1="8" x2="170" y2="20" transform="rotate(225 170 130)"/>
-            <line x1="170" y1="8" x2="170" y2="20" transform="rotate(270 170 130)"/>
-            <line x1="170" y1="8" x2="170" y2="20" transform="rotate(315 170 130)"/>
-          </g>
-        </svg>
-      </div>
-      <div>
-        <span class="typo-mask"><span class="typo-line" id="b08t1">مصرف</span></span>
-        <span class="typo-mask"><span class="typo-line typo-accent" id="b08t2">کمتر</span></span>
-      </div>
-    </div>
-
-    <!-- BEAT 09: CACHE LAYERS -->
-    <div class="beat" id="b09">
-      <div class="artifact" id="a09" style="margin-bottom:28px">
-        <svg width="360" height="280" viewBox="0 0 360 280" fill="none">
-          <defs>
-            <filter id="glow9"><feGaussianBlur stdDeviation="3"/><feMerge><feMergeNode/><feMergeNode in="SourceGraphic"/></feMerge></filter>
-          </defs>
-          <!-- 3D isometric cache layers -->
-          <!-- Layer 3 (back) -->
-          <ellipse cx="180" cy="200" rx="140" ry="40" fill="rgba(10,37,64,0.8)" stroke="rgba(99,91,255,0.3)" stroke-width="1.5"/>
-          <rect x="40" y="160" width="280" height="40" fill="rgba(99,91,255,0.06)" stroke="rgba(99,91,255,0.3)" stroke-width="1.5"/>
-          <text x="180" y="183" text-anchor="middle" fill="rgba(255,255,255,0.3)" font-size="11" font-family="Courier New">L3 Cache · 32MB</text>
-          <!-- Layer 2 -->
-          <ellipse cx="180" cy="155" rx="120" ry="34" fill="rgba(10,37,64,0.9)" stroke="rgba(99,91,255,0.45)" stroke-width="1.5"/>
-          <rect x="60" y="118" width="240" height="37" fill="rgba(99,91,255,0.10)" stroke="rgba(99,91,255,0.45)" stroke-width="1.5"/>
-          <text x="180" y="140" text-anchor="middle" fill="rgba(255,255,255,0.45)" font-size="11" font-family="Courier New">L2 Cache · 12MB</text>
-          <!-- Layer 1 (top) -->
-          <ellipse cx="180" cy="108" rx="90" ry="26" fill="rgba(10,37,64,1)" stroke="#635bff" stroke-width="2" filter="url(#glow9)"/>
-          <rect x="90" y="82" width="180" height="26" fill="rgba(99,91,255,0.2)" stroke="#635bff" stroke-width="2" filter="url(#glow9)"/>
-          <text x="180" y="98" text-anchor="middle" fill="rgba(255,255,255,0.75)" font-size="11" font-family="Courier New">L1 Cache · 192KB</text>
-          <!-- Data pulse L1 -->
-          <circle r="6" fill="#a78bfa" filter="url(#glow9)" opacity="0.9">
-            <animateMotion dur="1.8s" repeatCount="indefinite" path="M90,95 H270"/>
-            <animate attributeName="opacity" values="0;1;0" dur="1.8s" repeatCount="indefinite"/>
-          </circle>
-        </svg>
-      </div>
-      <div>
-        <span class="typo-mask"><span class="typo-line" id="b09t1">حافظه</span></span>
-        <span class="typo-mask"><span class="typo-line typo-outline" id="b09t2">سه‌لایه</span></span>
-      </div>
-    </div>
-
-    <!-- BEAT 10: NEURAL ENGINE -->
-    <div class="beat" id="b10">
-      <div class="artifact" id="a10" style="margin-bottom:28px">
-        <canvas id="neural-canvas" width="360" height="280"></canvas>
-      </div>
-      <div>
-        <span class="typo-mask"><span class="typo-line" id="b10t1">موتور</span></span>
-        <span class="typo-mask"><span class="typo-line typo-accent" id="b10t2">عصبی</span></span>
-      </div>
-    </div>
-
-    <!-- BEAT 11: PERFORMANCE -->
-    <div class="beat" id="b11">
-      <div class="artifact" id="a11" style="margin-bottom:24px">
-        <svg width="360" height="270" viewBox="0 0 360 270" fill="none">
-          <defs>
-            <filter id="glow11"><feGaussianBlur stdDeviation="4"/><feMerge><feMergeNode/><feMergeNode in="SourceGraphic"/></feMerge></filter>
-            <linearGradient id="perfGrad" x1="0" y1="1" x2="1" y2="0">
-              <stop offset="0%" stop-color="#635bff"/>
-              <stop offset="100%" stop-color="#a78bfa"/>
-            </linearGradient>
-          </defs>
-          <!-- Spline performance curve -->
-          <path d="M20 220 C 60 220, 80 200, 100 170 S 140 100, 180 80 S 250 50, 340 30" 
-            stroke="url(#perfGrad)" stroke-width="3" fill="none" filter="url(#glow11)"
-            stroke-dasharray="500" stroke-dashoffset="500">
-            <animate attributeName="stroke-dashoffset" values="500;0" dur="2s" fill="freeze"/>
-          </path>
-          <!-- Area fill under curve -->
-          <path d="M20 220 C 60 220, 80 200, 100 170 S 140 100, 180 80 S 250 50, 340 30 V240 H20Z" 
-            fill="url(#perfGrad)" opacity="0.07"/>
-          <!-- Grid -->
-          <line x1="20" y1="220" x2="340" y2="220" stroke="rgba(255,255,255,0.1)" stroke-width="1"/>
-          <line x1="20" y1="160" x2="340" y2="160" stroke="rgba(255,255,255,0.07)" stroke-width="1" stroke-dasharray="4 4"/>
-          <line x1="20" y1="100" x2="340" y2="100" stroke="rgba(255,255,255,0.07)" stroke-width="1" stroke-dasharray="4 4"/>
-          <line x1="20" y1="40" x2="340" y2="40" stroke="rgba(255,255,255,0.07)" stroke-width="1" stroke-dasharray="4 4"/>
-          <!-- Marker dot -->
-          <circle cx="340" cy="30" r="6" fill="#a78bfa" filter="url(#glow11)">
-            <animate attributeName="r" values="6;10;6" dur="1s" repeatCount="indefinite"/>
-          </circle>
-          <!-- Labels -->
-          <text x="340" y="20" text-anchor="middle" fill="rgba(167,139,250,0.9)" font-size="11" font-family="Courier New">PEAK</text>
-          <text x="20" y="240" fill="rgba(255,255,255,0.3)" font-size="10" font-family="Courier New">0</text>
-          <text x="180" y="240" text-anchor="middle" fill="rgba(255,255,255,0.3)" font-size="10" font-family="Courier New">زمان</text>
-          <text x="340" y="240" text-anchor="end" fill="rgba(255,255,255,0.3)" font-size="10" font-family="Courier New">∞</text>
-        </svg>
-      </div>
-      <div>
-        <span class="typo-mask"><span class="typo-line" id="b11t1">اوج</span></span>
-        <span class="typo-mask"><span class="typo-line typo-accent" id="b11t2">عملکرد</span></span>
-      </div>
-    </div>
-
-    <!-- BEAT 12: THERMAL -->
-    <div class="beat" id="b12">
-      <div class="artifact" id="a12" style="margin-bottom:28px">
-        <svg width="340" height="280" viewBox="0 0 340 280" fill="none">
-          <defs>
-            <filter id="glow12"><feGaussianBlur stdDeviation="5"/><feMerge><feMergeNode/><feMergeNode in="SourceGraphic"/></feMerge></filter>
-            <radialGradient id="heatMap" cx="50%" cy="50%" r="50%">
-              <stop offset="0%" stop-color="#635bff" stop-opacity="0.8"/>
-              <stop offset="40%" stop-color="#a78bfa" stop-opacity="0.4"/>
-              <stop offset="100%" stop-color="transparent"/>
-            </radialGradient>
-          </defs>
-          <!-- Chip die outline -->
-          <rect x="85" y="60" width="170" height="160" rx="6" stroke="rgba(99,91,255,0.5)" stroke-width="2" fill="rgba(99,91,255,0.05)"/>
-          <!-- Heat zones -->
-          <ellipse cx="170" cy="140" rx="70" ry="65" fill="url(#heatMap)"/>
-          <ellipse cx="170" cy="140" rx="40" ry="38" fill="rgba(99,91,255,0.3)" filter="url(#glow12)">
-            <animate attributeName="rx" values="40;46;40" dur="2s" repeatCount="indefinite"/>
-            <animate attributeName="ry" values="38;44;38" dur="2s" repeatCount="indefinite"/>
-          </ellipse>
-          <ellipse cx="170" cy="140" rx="16" ry="15" fill="#635bff" filter="url(#glow12)"/>
-          <!-- Core labels -->
-          <rect x="95" y="70" width="35" height="28" rx="2" fill="rgba(99,91,255,0.15)" stroke="rgba(99,91,255,0.4)" stroke-width="1"/>
-          <rect x="155" y="70" width="35" height="28" rx="2" fill="rgba(99,91,255,0.15)" stroke="rgba(99,91,255,0.4)" stroke-width="1"/>
-          <rect x="215" y="70" width="35" height="28" rx="2" fill="rgba(99,91,255,0.15)" stroke="rgba(99,91,255,0.4)" stroke-width="1"/>
-          <rect x="95" y="200" width="35" height="28" rx="2" fill="rgba(99,91,255,0.15)" stroke="rgba(99,91,255,0.4)" stroke-width="1"/>
-          <rect x="155" y="200" width="35" height="28" rx="2" fill="rgba(99,91,255,0.15)" stroke="rgba(99,91,255,0.4)" stroke-width="1"/>
-          <rect x="215" y="200" width="35" height="28" rx="2" fill="rgba(99,91,255,0.15)" stroke="rgba(99,91,255,0.4)" stroke-width="1"/>
-          <!-- Thermal reading -->
-          <text x="170" y="250" text-anchor="middle" fill="rgba(255,255,255,0.5)" font-size="11" font-family="Courier New">TJ MAX: 105°C</text>
-        </svg>
-      </div>
-      <div>
-        <span class="typo-mask"><span class="typo-line" id="b12t1">کنترل</span></span>
-        <span class="typo-mask"><span class="typo-line typo-outline" id="b12t2">حرارت</span></span>
-      </div>
-    </div>
-
-    <!-- BEAT 13: AI CORES -->
-    <div class="beat" id="b13">
-      <div class="artifact" id="a13" style="margin-bottom:28px">
-        <svg width="360" height="280" viewBox="0 0 360 280" fill="none">
-          <defs>
-            <filter id="glow13"><feGaussianBlur stdDeviation="4"/><feMerge><feMergeNode/><feMergeNode in="SourceGraphic"/></feMerge></filter>
-          </defs>
-          <!-- Matrix array dots - AI compute grid -->
-          <g filter="url(#glow13)">
-            <!-- Row of compute units -->
-            <g fill="#635bff" opacity="0.9">
-              <rect x="30" y="40" width="22" height="22" rx="2"/>
-              <rect x="65" y="40" width="22" height="22" rx="2"/>
-              <rect x="100" y="40" width="22" height="22" rx="2"/>
-              <rect x="135" y="40" width="22" height="22" rx="2"/>
-              <rect x="170" y="40" width="22" height="22" rx="2"/>
-              <rect x="205" y="40" width="22" height="22" rx="2"/>
-              <rect x="240" y="40" width="22" height="22" rx="2"/>
-              <rect x="275" y="40" width="22" height="22" rx="2"/>
-              <rect x="310" y="40" width="22" height="22" rx="2"/>
-            </g>
-            <g fill="rgba(99,91,255,0.5)">
-              <rect x="30" y="75" width="22" height="22" rx="2"/>
-              <rect x="65" y="75" width="22" height="22" rx="2"/>
-              <rect x="100" y="75" width="22" height="22" rx="2"/>
-              <rect x="135" y="75" width="22" height="22" rx="2"/>
-              <rect x="170" y="75" width="22" height="22" rx="2"/>
-              <rect x="205" y="75" width="22" height="22" rx="2"/>
-              <rect x="240" y="75" width="22" height="22" rx="2"/>
-              <rect x="275" y="75" width="22" height="22" rx="2"/>
-              <rect x="310" y="75" width="22" height="22" rx="2"/>
-            </g>
-            <g fill="rgba(99,91,255,0.7)">
-              <rect x="30" y="110" width="22" height="22" rx="2"/>
-              <rect x="65" y="110" width="22" height="22" rx="2"/>
-              <rect x="100" y="110" width="22" height="22" rx="2"/>
-              <rect x="135" y="110" width="22" height="22" rx="2"/>
-              <rect x="170" y="110" width="22" height="22" rx="2"/>
-              <rect x="205" y="110" width="22" height="22" rx="2"/>
-              <rect x="240" y="110" width="22" height="22" rx="2"/>
-              <rect x="275" y="110" width="22" height="22" rx="2"/>
-              <rect x="310" y="110" width="22" height="22" rx="2"/>
-            </g>
-            <g fill="rgba(167,139,250,0.85)">
-              <rect x="30" y="145" width="22" height="22" rx="2"/>
-              <rect x="65" y="145" width="22" height="22" rx="2"/>
-              <rect x="100" y="145" width="22" height="22" rx="2"/>
-              <rect x="135" y="145" width="22" height="22" rx="2"/>
-              <rect x="170" y="145" width="22" height="22" rx="2"/>
-              <rect x="205" y="145" width="22" height="22" rx="2"/>
-              <rect x="240" y="145" width="22" height="22" rx="2"/>
-              <rect x="275" y="145" width="22" height="22" rx="2"/>
-              <rect x="310" y="145" width="22" height="22" rx="2"/>
-            </g>
-          </g>
-          <!-- Activation scan wave -->
-          <rect x="0" y="30" width="30" height="150" fill="rgba(167,139,250,0.2)" filter="url(#glow13)">
-            <animate attributeName="x" values="-30;340" dur="2s" repeatCount="indefinite"/>
-          </rect>
-          <!-- TOPS metric -->
-          <text x="180" y="220" text-anchor="middle" fill="rgba(255,255,255,0.9)" font-size="32" font-weight="900" font-family="Courier New" filter="url(#glow13)">38 TOPS</text>
-          <text x="180" y="248" text-anchor="middle" fill="rgba(99,91,255,0.7)" font-size="11" font-family="Courier New" letter-spacing="2">عملیات هوش مصنوعی</text>
-        </svg>
-      </div>
-      <div>
-        <span class="typo-mask"><span class="typo-line" id="b13t1">هسته‌های</span></span>
-        <span class="typo-mask"><span class="typo-line typo-accent" id="b13t2">هوشمند</span></span>
-      </div>
-    </div>
-
-    <!-- BEAT 14: SURGE VELOCITY -->
-    <div class="beat" id="b14">
-      <div class="artifact" id="a14" style="margin-bottom:20px">
-        <canvas id="surge-canvas" width="360" height="260"></canvas>
-      </div>
-      <div>
-        <span class="typo-mask"><span class="typo-line" id="b14t1">سرعت</span></span>
-        <span class="typo-mask"><span class="typo-line typo-outline" id="b14t2">نور</span></span>
-      </div>
-      <div style="margin-top:14px">
-        <span class="typo-mask"><span class="typo-sm" id="b14t3">تریلیون‌ها عملیات در ثانیه</span></span>
-      </div>
-    </div>
-
-    <!-- BEAT 15: FINALE -->
-    <div class="beat" id="b15">
-      <div class="artifact" id="a15" style="margin-bottom:28px">
-        <svg width="360" height="300" viewBox="0 0 360 300" fill="none">
-          <defs>
-            <filter id="glow15"><feGaussianBlur stdDeviation="6"/><feMerge><feMergeNode/><feMergeNode in="SourceGraphic"/></feMerge></filter>
-            <radialGradient id="finCore" cx="50%" cy="50%" r="50%">
-              <stop offset="0%" stop-color="#635bff"/>
-              <stop offset="60%" stop-color="#a78bfa" stop-opacity="0.5"/>
-              <stop offset="100%" stop-color="transparent"/>
-            </radialGradient>
-          </defs>
-          <!-- Outer orbit rings -->
-          <circle cx="180" cy="150" r="135" stroke="rgba(99,91,255,0.15)" stroke-width="1.5" stroke-dasharray="6 8">
-            <animateTransform attributeName="transform" type="rotate" from="0 180 150" to="360 180 150" dur="20s" repeatCount="indefinite"/>
-          </circle>
-          <circle cx="180" cy="150" r="105" stroke="rgba(99,91,255,0.25)" stroke-width="1.5">
-            <animateTransform attributeName="transform" type="rotate" from="360 180 150" to="0 180 150" dur="14s" repeatCount="indefinite"/>
-          </circle>
-          <circle cx="180" cy="150" r="75" stroke="rgba(99,91,255,0.4)" stroke-width="2" filter="url(#glow15)">
-            <animateTransform attributeName="transform" type="rotate" from="0 180 150" to="360 180 150" dur="9s" repeatCount="indefinite"/>
-          </circle>
-          <!-- Orbital satellites -->
-          <circle r="7" fill="#a78bfa" filter="url(#glow15)">
-            <animateMotion dur="14s" repeatCount="indefinite" path="M180,45 A105,105 0 1,1 179.99,45"/>
-          </circle>
-          <circle r="5" fill="#635bff" filter="url(#glow15)">
-            <animateMotion dur="9s" repeatCount="indefinite" begin="1s" path="M180,75 A75,75 0 1,1 179.99,75"/>
-          </circle>
-          <circle r="4" fill="#fff" opacity=".7" filter="url(#glow15)">
-            <animateMotion dur="20s" repeatCount="indefinite" begin="2s" path="M180,15 A135,135 0 1,1 179.99,15"/>
-          </circle>
-          <!-- Core -->
-          <circle cx="180" cy="150" r="45" fill="url(#finCore)" filter="url(#glow15)">
-            <animate attributeName="r" values="45;52;45" dur="3s" repeatCount="indefinite"/>
-          </circle>
-          <circle cx="180" cy="150" r="25" fill="rgba(99,91,255,0.8)" filter="url(#glow15)"/>
-          <circle cx="180" cy="150" r="10" fill="#fff" opacity="0.9"/>
-          <!-- 3nm text -->
-          <text x="180" y="156" text-anchor="middle" fill="#0a2540" font-size="9" font-weight="900" font-family="Courier New">3nm</text>
-        </svg>
-      </div>
-      <div>
-        <span class="typo-mask"><span class="typo-line" id="b15t1">متولد</span></span>
-        <span class="typo-mask"><span class="typo-line typo-accent" id="b15t2">شد</span></span>
-      </div>
-      <div style="margin-top:16px">
-        <span class="typo-mask"><span class="typo-sub" id="b15t3">پردازنده ۳ نانومتری</span></span>
-      </div>
-    </div>
-
-  </div><!-- /scene -->
-
-  <div id="progress-bar"></div>
-  <div id="time-counter">00:00 / 60s</div>
-  <div id="ctrl">
-    <button class="ctrl-btn" id="btn-replay" title="پخش مجدد">↺</button>
-    <button class="ctrl-btn" id="btn-sound" title="صدا">♪</button>
+  <div id="svg-layer">
+    <svg id="main-svg" width="720" height="1280" viewBox="0 0 720 1280" style="position:absolute;inset:0;overflow:visible;"></svg>
   </div>
+  <div id="typo-layer"></div>
+  <div id="progress-bar"></div>
+  <div id="timer">00:00 / 60s</div>
+  <div id="ctrl-btns">
+    <button class="ctrl-btn" id="btn-replay">↺</button>
+    <button class="ctrl-btn" id="btn-sound">♪</button>
+  </div>
+  <div id="subtitle"></div>
 
-  <div id="audio-gate">
-    <div class="gate-icon">⬡</div>
-    <div class="gate-text">لمس کنید برای شروع</div>
-    <div class="gate-hint">همراه با موسیقی سینمایی</div>
+  <div id="start-hud">
+    <div class="hud-title">قدرت</div>
+    <div class="hud-sub">علوم سیاسی — ۶۰ ثانیه</div>
+    <button id="start-btn">▶ پخش فیلم + صدا</button>
   </div>
 </div>
 
 <script>
-// ══════════════════════════════════════════
-// RESIZE
-// ══════════════════════════════════════════
-const stage = document.getElementById('stage');
+// ─── RESIZE ───────────────────────────────────────────────────
+const VP = document.getElementById('viewport');
 function resize(){
   const s = Math.min(window.innerWidth/720, window.innerHeight/1280);
-  stage.style.transform = `translate(-50%,-50%) scale(${s})`;
+  VP.style.transform = `translate(-50%,-50%) scale(${s})`;
 }
-resize();
-window.addEventListener('resize', resize);
+resize(); window.addEventListener('resize', resize);
 
-// ══════════════════════════════════════════
-// WEB AUDIO ENGINE
-// ══════════════════════════════════════════
-let audioCtx, masterGain, audioStarted = false;
-const droneOscs = [];
+// ─── GLOBALS ──────────────────────────────────────────────────
+const TOTAL = 60;
+let startTime = null, elapsed = 0, paused = false, pauseAt = 0;
+let audioCtx = null, masterGain = null, soundOn = false;
+let animId = null;
+const beatActive = new Set();
 
-function initAudio(){
-  if(audioStarted) return;
-  audioStarted = true;
-  audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-  masterGain = audioCtx.createGain();
-  masterGain.gain.setValueAtTime(0.001, audioCtx.currentTime);
-  masterGain.gain.linearRampToValueAtTime(1, audioCtx.currentTime + 1.5);
-  masterGain.connect(audioCtx.destination);
+// ─── CANVAS SETUP ─────────────────────────────────────────────
+const bgC = document.getElementById('bg-canvas');
+const bgCtx = bgC.getContext('2d');
+bgC.width = 720; bgC.height = 1280;
 
-  // DRONE PAD: Dm9 pentatonic
-  const droneFreqs = [73.4, 110, 146.8, 174.6, 220, 261.6];
-  droneFreqs.forEach((f,i)=>{
-    const osc = audioCtx.createOscillator();
-    const gain = audioCtx.createGain();
-    const filt = audioCtx.createBiquadFilter();
-    const lfo = audioCtx.createOscillator();
-    const lfoGain = audioCtx.createGain();
-
-    osc.type = i%2===0 ? 'sawtooth' : 'sine';
-    osc.frequency.value = f;
-    filt.type = 'lowpass';
-    filt.frequency.value = 320;
-    filt.Q.value = 1.2;
-    gain.gain.value = 0.045 / (1 + i*0.3);
-
-    lfo.type = 'sine';
-    lfo.frequency.value = 0.08 + i*0.03;
-    lfoGain.gain.value = 3;
-    lfo.connect(lfoGain);
-    lfoGain.connect(osc.frequency);
-    lfo.start();
-
-    osc.connect(filt);
-    filt.connect(gain);
-    gain.connect(masterGain);
-    osc.start();
-    droneOscs.push({osc, gain});
-  });
-}
-
-function bassImpact(t=0){
-  if(!audioCtx) return;
-  const now = audioCtx.currentTime + t;
-  const osc = audioCtx.createOscillator();
-  const gain = audioCtx.createGain();
-  const filt = audioCtx.createBiquadFilter();
-  osc.type = 'sine';
-  osc.frequency.setValueAtTime(90, now);
-  osc.frequency.exponentialRampToValueAtTime(32, now + 0.8);
-  filt.type = 'lowpass';
-  filt.frequency.value = 140;
-  gain.gain.setValueAtTime(0.001, now);
-  gain.gain.linearRampToValueAtTime(0.4, now + 0.015);
-  gain.gain.exponentialRampToValueAtTime(0.001, now + 1.0);
-  osc.connect(filt); filt.connect(gain); gain.connect(masterGain);
-  osc.start(now); osc.stop(now + 1.1);
-  // detuned layer
-  const osc2 = audioCtx.createOscillator();
-  const g2 = audioCtx.createGain();
-  osc2.type = 'sine';
-  osc2.frequency.setValueAtTime(90 * 1.0017, now);
-  osc2.frequency.exponentialRampToValueAtTime(32 * 1.0017, now + 0.8);
-  g2.gain.setValueAtTime(0.001, now);
-  g2.gain.linearRampToValueAtTime(0.2, now + 0.015);
-  g2.gain.exponentialRampToValueAtTime(0.001, now + 1.0);
-  osc2.connect(g2); g2.connect(masterGain);
-  osc2.start(now); osc2.stop(now + 1.1);
-}
-
-function chime(t=0){
-  if(!audioCtx) return;
-  const now = audioCtx.currentTime + t;
-  [659, 987, 1318].forEach((f,i)=>{
-    const osc = audioCtx.createOscillator();
-    const gain = audioCtx.createGain();
-    const filt = audioCtx.createBiquadFilter();
-    osc.type = 'sine';
-    osc.frequency.value = f;
-    filt.type = 'bandpass';
-    filt.frequency.value = f;
-    filt.Q.value = 8;
-    const d = now + i*0.04;
-    gain.gain.setValueAtTime(0.001, d);
-    gain.gain.linearRampToValueAtTime(0.12 - i*0.02, d + 0.005);
-    gain.gain.exponentialRampToValueAtTime(0.001, d + 0.35);
-    osc.connect(filt); filt.connect(gain); gain.connect(masterGain);
-    osc.start(d); osc.stop(d + 0.4);
-  });
-}
-
-function whoosh(t=0){
-  if(!audioCtx) return;
-  const now = audioCtx.currentTime + t;
-  const bufSz = audioCtx.sampleRate * 0.8;
-  const buf = audioCtx.createBuffer(1, bufSz, audioCtx.sampleRate);
-  const data = buf.getChannelData(0);
-  for(let i=0;i<bufSz;i++) data[i] = (Math.random()*2-1);
-  const src = audioCtx.createBufferSource();
-  src.buffer = buf;
-  const filt = audioCtx.createBiquadFilter();
-  filt.type = 'bandpass';
-  filt.frequency.setValueAtTime(180, now);
-  filt.frequency.exponentialRampToValueAtTime(1200, now + 0.35);
-  filt.frequency.exponentialRampToValueAtTime(100, now + 0.7);
-  filt.Q.value = 2;
-  const gain = audioCtx.createGain();
-  gain.gain.setValueAtTime(0.001, now);
-  gain.gain.linearRampToValueAtTime(0.18, now + 0.1);
-  gain.gain.exponentialRampToValueAtTime(0.001, now + 0.75);
-  src.connect(filt); filt.connect(gain); gain.connect(masterGain);
-  src.start(now);
-}
-
-// ══════════════════════════════════════════
-// BG CANVAS — PARTICLES
-// ══════════════════════════════════════════
-const bgCanvas = document.getElementById('bg-canvas');
-const bgCtx = bgCanvas.getContext('2d');
-bgCanvas.width = 720; bgCanvas.height = 1280;
-const PARTICLES = [];
-for(let i=0;i<90;i++){
-  PARTICLES.push({
+// Particles
+const PCOUNT = 120;
+const particles = [];
+for(let i=0;i<PCOUNT;i++){
+  particles.push({
     x: Math.random()*720,
     y: Math.random()*1280,
-    vx: (Math.random()-0.5)*0.25,
-    vy: (Math.random()-0.5)*0.18,
-    r: Math.random()*1.8+0.4,
+    r: Math.random()*1.5+0.5,
+    vx: (Math.random()-0.5)*0.3,
+    vy: -Math.random()*0.4-0.1,
     a: Math.random()*0.5+0.1,
-    pulse: Math.random()*Math.PI*2
-  });
-}
-function drawBG(t){
-  bgCtx.clearRect(0,0,720,1280);
-  // Ambient radial
-  const grad = bgCtx.createRadialGradient(360,640,0,360,640,520);
-  grad.addColorStop(0, `rgba(99,91,255,0.13)`);
-  grad.addColorStop(1, 'rgba(10,37,64,0)');
-  bgCtx.fillStyle = grad;
-  bgCtx.fillRect(0,0,720,1280);
-  // Light ray sweep
-  const rayX = 360 + Math.sin(t*0.12)*200;
-  const rayGrad = bgCtx.createLinearGradient(rayX-60,0,rayX+60,1280);
-  rayGrad.addColorStop(0,'rgba(99,91,255,0)');
-  rayGrad.addColorStop(0.5,'rgba(99,91,255,0.04)');
-  rayGrad.addColorStop(1,'rgba(99,91,255,0)');
-  bgCtx.fillStyle = rayGrad;
-  bgCtx.fillRect(0,0,720,1280);
-  // Particles
-  PARTICLES.forEach(p=>{
-    p.x += p.vx; p.y += p.vy;
-    if(p.x<0) p.x=720; if(p.x>720) p.x=0;
-    if(p.y<0) p.y=1280; if(p.y>1280) p.y=0;
-    p.pulse += 0.02;
-    const alpha = p.a * (0.6 + 0.4*Math.sin(p.pulse));
-    bgCtx.beginPath();
-    bgCtx.arc(p.x, p.y, p.r, 0, Math.PI*2);
-    bgCtx.fillStyle = `rgba(167,139,250,${alpha})`;
-    bgCtx.fill();
+    gold: Math.random()>0.6
   });
 }
 
-// ══════════════════════════════════════════
-// TRANSISTOR CANVAS BEAT 05
-// ══════════════════════════════════════════
-let transistorPhase = 0;
-function drawTransistorCanvas(t){
-  const c = document.getElementById('transistor-canvas');
-  if(!c) return;
-  const ctx = c.getContext('2d');
-  ctx.clearRect(0,0,360,280);
-  const cols = 28, rows = 20;
-  const cw = 360/cols, rh = 230/rows;
-  for(let r=0;r<rows;r++){
-    for(let c2=0;c2<cols;c2++){
-      const phase = (r*cols+c2)*0.15 + t*3;
-      const glow = (Math.sin(phase)+1)/2;
-      const alpha = 0.15 + glow*0.7;
-      ctx.fillStyle = `rgba(99,91,255,${alpha})`;
-      ctx.fillRect(c2*cw+1, r*rh+1, cw-2, rh-2);
-    }
-  }
-  // Scan line
-  const scanY = (t*60) % 230;
-  const scanGrad = ctx.createLinearGradient(0, scanY-8, 0, scanY+8);
-  scanGrad.addColorStop(0,'rgba(167,139,250,0)');
-  scanGrad.addColorStop(0.5,'rgba(167,139,250,0.8)');
-  scanGrad.addColorStop(1,'rgba(167,139,250,0)');
-  ctx.fillStyle = scanGrad;
-  ctx.fillRect(0, scanY-8, 360, 16);
-  // Label
-  ctx.fillStyle = 'rgba(255,255,255,0.4)';
-  ctx.font = '11px Courier New';
-  ctx.textAlign = 'center';
-  ctx.fillText('TRANSISTOR DENSITY MAP', 180, 260);
-}
-
-// ══════════════════════════════════════════
-// NEURAL CANVAS BEAT 10
-// ══════════════════════════════════════════
-const NEURONS = [];
-for(let i=0;i<18;i++){
-  NEURONS.push({
-    x: 40 + Math.random()*280,
-    y: 20 + Math.random()*240,
-    r: 5 + Math.random()*6,
-    phase: Math.random()*Math.PI*2
-  });
-}
-function drawNeuralCanvas(t){
-  const c = document.getElementById('neural-canvas');
-  if(!c) return;
-  const ctx = c.getContext('2d');
-  ctx.clearRect(0,0,360,280);
-  // Connections
-  NEURONS.forEach((n,i)=>{
-    NEURONS.forEach((n2,j)=>{
-      if(j<=i) return;
-      const dx = n2.x-n.x, dy = n2.y-n.y;
-      const dist = Math.sqrt(dx*dx+dy*dy);
-      if(dist > 130) return;
-      const alpha = (1-dist/130)*0.35;
-      ctx.strokeStyle = `rgba(99,91,255,${alpha})`;
-      ctx.lineWidth = 1;
-      ctx.beginPath();
-      ctx.moveTo(n.x, n.y);
-      ctx.lineTo(n2.x, n2.y);
-      ctx.stroke();
-      // Pulse traveling
-      const frac = (t*0.5 + i*0.07) % 1;
-      const px = n.x + dx*frac, py = n.y + dy*frac;
-      const pa = Math.sin((t*4 + i*0.5)) > 0.5 ? 0.8 : 0;
-      if(pa > 0){
-        ctx.beginPath();
-        ctx.arc(px, py, 2.5, 0, Math.PI*2);
-        ctx.fillStyle = `rgba(167,139,250,${pa * (1-dist/130)})`;
-        ctx.fill();
-      }
+// Foreground particles (beat-triggered)
+let fgParticles = [];
+function spawnBurst(x,y,count,color){
+  for(let i=0;i<count;i++){
+    const a = Math.random()*Math.PI*2;
+    const v = Math.random()*4+1;
+    fgParticles.push({
+      x,y, vx:Math.cos(a)*v, vy:Math.sin(a)*v,
+      r: Math.random()*3+1, life:1, decay: Math.random()*0.02+0.015,
+      color
     });
-  });
-  // Neuron nodes
-  NEURONS.forEach(n=>{
-    n.phase += 0.04;
-    const pulse = (Math.sin(n.phase)+1)/2;
-    const r = n.r * (0.85 + pulse*0.3);
-    // Glow
-    const grad = ctx.createRadialGradient(n.x,n.y,0,n.x,n.y,r*3);
-    grad.addColorStop(0, `rgba(99,91,255,${0.5+pulse*0.4})`);
-    grad.addColorStop(1, 'rgba(99,91,255,0)');
-    ctx.beginPath();
-    ctx.arc(n.x, n.y, r*3, 0, Math.PI*2);
-    ctx.fillStyle = grad;
-    ctx.fill();
-    ctx.beginPath();
-    ctx.arc(n.x, n.y, r, 0, Math.PI*2);
-    ctx.fillStyle = `rgba(99,91,255,${0.7+pulse*0.3})`;
-    ctx.fill();
-    ctx.beginPath();
-    ctx.arc(n.x, n.y, r*0.4, 0, Math.PI*2);
-    ctx.fillStyle = '#fff';
-    ctx.globalAlpha = 0.9;
-    ctx.fill();
-    ctx.globalAlpha = 1;
-  });
-}
-
-// ══════════════════════════════════════════
-// SURGE CANVAS BEAT 14
-// ══════════════════════════════════════════
-function drawSurgeCanvas(t){
-  const c = document.getElementById('surge-canvas');
-  if(!c) return;
-  const ctx = c.getContext('2d');
-  ctx.clearRect(0,0,360,260);
-  const numLines = 12;
-  for(let i=0;i<numLines;i++){
-    const y = 20 + i*(220/numLines);
-    const freq = 8 + i*2.5;
-    const amp = 10 + i*3;
-    ctx.beginPath();
-    ctx.moveTo(0, y);
-    for(let x=0;x<=360;x+=2){
-      const wave = Math.sin((x/360)*freq*Math.PI*2 + t*(4+i*0.5)) * amp * Math.sin(Math.PI*x/360);
-      ctx.lineTo(x, y + wave);
-    }
-    const alpha = 0.15 + (i/numLines)*0.6;
-    const hue = 240 + i*5;
-    ctx.strokeStyle = `hsla(${hue},70%,75%,${alpha})`;
-    ctx.lineWidth = 1 + i*0.1;
-    ctx.stroke();
-  }
-  // Speed particles
-  for(let i=0;i<20;i++){
-    const px = ((t*300 + i*100) % 400) - 20;
-    const py = 20 + Math.random()*220;
-    ctx.beginPath();
-    ctx.moveTo(px, py);
-    ctx.lineTo(px - 30 - Math.random()*40, py);
-    const lg = ctx.createLinearGradient(px-70, 0, px, 0);
-    lg.addColorStop(0, 'rgba(99,91,255,0)');
-    lg.addColorStop(1, 'rgba(167,139,250,0.7)');
-    ctx.strokeStyle = lg;
-    ctx.lineWidth = 1;
-    ctx.stroke();
   }
 }
 
-// ══════════════════════════════════════════
-// EASING
-// ══════════════════════════════════════════
-function easeOutExpo(t){ return t===1?1:1-Math.pow(2,-10*t) }
-function easeInExpo(t){ return t===0?0:Math.pow(2,10*t-10) }
+// ─── WEB AUDIO ────────────────────────────────────────────────
+function initAudio(){
+  if(audioCtx) return;
+  audioCtx = new (window.AudioContext||window.webkitAudioContext)();
+  masterGain = audioCtx.createGain();
+  masterGain.gain.value = 0.7;
+  masterGain.connect(audioCtx.destination);
 
-// ══════════════════════════════════════════
-// BEAT SYSTEM
-// ══════════════════════════════════════════
-const TOTAL = 60;
+  // Ambient drone pad
+  const drones = [73.4,110,174.6,261.6];
+  drones.forEach((freq,i)=>{
+    const osc = audioCtx.createOscillator();
+    const g = audioCtx.createGain();
+    const lp = audioCtx.createBiquadFilter();
+    osc.type = i<2 ? 'sawtooth' : 'sine';
+    osc.frequency.value = freq;
+    // LFO
+    const lfo = audioCtx.createOscillator();
+    const lfoG = audioCtx.createGain();
+    lfo.frequency.value = 0.1+i*0.07;
+    lfoG.gain.value = 2;
+    lfo.connect(lfoG); lfoG.connect(osc.frequency);
+    lfo.start();
+    lp.type='lowpass'; lp.frequency.value = 320;
+    g.gain.value = 0.055;
+    osc.connect(lp); lp.connect(g); g.connect(masterGain);
+    osc.start();
+  });
+}
+
+function playImpact(){
+  if(!audioCtx) return;
+  const t = audioCtx.currentTime;
+  // Sub-bass
+  const osc = audioCtx.createOscillator();
+  const g = audioCtx.createGain();
+  const lp = audioCtx.createBiquadFilter();
+  osc.type = 'sine';
+  osc.frequency.setValueAtTime(90,t);
+  osc.frequency.exponentialRampToValueAtTime(32,t+0.8);
+  lp.type='lowpass'; lp.frequency.value=140;
+  g.gain.setValueAtTime(0.001,t);
+  g.gain.linearRampToValueAtTime(0.4,t+0.015);
+  g.gain.exponentialRampToValueAtTime(0.001,t+0.9);
+  osc.connect(lp); lp.connect(g); g.connect(masterGain);
+  osc.start(t); osc.stop(t+1);
+}
+
+function playChime(freq=659){
+  if(!audioCtx) return;
+  const t = audioCtx.currentTime;
+  [freq, freq*1.5].forEach((f,i)=>{
+    const osc = audioCtx.createOscillator();
+    const g = audioCtx.createGain();
+    const bp = audioCtx.createBiquadFilter();
+    osc.type='sine'; osc.frequency.value=f;
+    bp.type='bandpass'; bp.frequency.value=f; bp.Q.value=4;
+    g.gain.setValueAtTime(0.001,t);
+    g.gain.linearRampToValueAtTime(0.18-i*0.06,t+0.005);
+    g.gain.exponentialRampToValueAtTime(0.001,t+0.35);
+    osc.connect(bp); bp.connect(g); g.connect(masterGain);
+    osc.start(t+i*0.03); osc.stop(t+0.5);
+  });
+}
+
+function playWhoosh(){
+  if(!audioCtx) return;
+  const t = audioCtx.currentTime;
+  // Noise via many detuned oscs
+  for(let i=0;i<6;i++){
+    const osc = audioCtx.createOscillator();
+    const g = audioCtx.createGain();
+    const lp = audioCtx.createBiquadFilter();
+    osc.type='sawtooth';
+    osc.frequency.setValueAtTime(180+i*40,t);
+    osc.frequency.linearRampToValueAtTime(900+i*60,t+0.3);
+    osc.frequency.linearRampToValueAtTime(100,t+0.7);
+    lp.type='lowpass';
+    lp.frequency.setValueAtTime(200,t);
+    lp.frequency.linearRampToValueAtTime(1400,t+0.3);
+    lp.frequency.linearRampToValueAtTime(120,t+0.7);
+    g.gain.setValueAtTime(0.001,t);
+    g.gain.linearRampToValueAtTime(0.04,t+0.15);
+    g.gain.exponentialRampToValueAtTime(0.001,t+0.75);
+    osc.connect(lp); lp.connect(g); g.connect(masterGain);
+    osc.start(t); osc.stop(t+0.8);
+  }
+}
+
+// ─── WEB SPEECH TTS ───────────────────────────────────────────
+let ttsUtterance = null;
+function startTTS(){
+  if(!window.speechSynthesis) return;
+  window.speechSynthesis.cancel();
+  ttsUtterance = new SpeechSynthesisUtterance("در سال ۲۰۲۶، علوم سیاسی دیگر تنها به تحلیل متون کهن یا ساختار سنتی دولت‌ها محدود نمی‌شود. جهان امروز، صحنه پیوند عمیق قدرت، داده و فناوری است. جایی که هوش مصنوعی مولد، دیپلماسی الگوریتمی و جریان‌های پیچیده اطلاعات، سرنوشت ژئوپلیتیک را رقم می‌زنند. یک پژوهشگر سیاسی در سال ۲۰۲۶، همان‌قدر که نیازمند درک نظریه‌های موازنه قدرت است، باید سازوکار جنگ شناختی، حکمرانی سایبری و تأثیر هوش مصنوعی بر اراده رأی‌دهندگان را بشناسد. در این دوران پرشتاب، دموکراسی بیش از هر زمان دیگری با چالش شفافیت الگوریتم‌ها و حفظ هویت انسانی روبه‌روست. علوم سیاسی در سال ۲۰۲۶، قطب‌نمایی است برای عبور از آشفتگی داده‌ها؛ دانشی که به ما یادآوری می‌کند در میان نبردهای نامرئی سایبری، هدف نهایی قدرت همچنان باید عدالت، صلح و انسان باشد.");
+  ttsUtterance.lang = "fa-IR";
+  ttsUtterance.rate = 0.9;
+  ttsUtterance.pitch = 1.0;
+  window.speechSynthesis.speak(ttsUtterance);
+}
+
+// ─── SVG LAYER ────────────────────────────────────────────────
+const svg = document.getElementById('main-svg');
+let svgContent = '';
+
+function setSVG(html){ svg.innerHTML = html; }
+function clearSVG(){ svg.innerHTML = ''; }
+
+// ─── TYPO LAYER ───────────────────────────────────────────────
+const typoLayer = document.getElementById('typo-layer');
+
+function showTypo(lines, sizes, colors, delays, yOffset=0){
+  typoLayer.innerHTML = '';
+  const wrap = document.createElement('div');
+  wrap.style.cssText = `display:flex;flex-direction:column;align-items:center;gap:8px;transform:translateY(${yOffset}px);`;
+  lines.forEach((text,i)=>{
+    const mask = document.createElement('div');
+    mask.className = 'typo-mask';
+    const inner = document.createElement('div');
+    inner.className = 'typo-inner';
+    inner.textContent = text;
+    inner.style.fontSize = sizes[i]||'96px';
+    inner.style.color = colors[i]||'var(--white)';
+    inner.style.letterSpacing = '0';
+    inner.style.lineHeight = '1.15';
+    mask.appendChild(inner);
+    wrap.appendChild(mask);
+    setTimeout(()=>inner.classList.add('revealed'), (delays[i]||0)*1000);
+  });
+  typoLayer.appendChild(wrap);
+}
+
+function clearTypo(){ typoLayer.innerHTML = ''; }
+
+// subtitle helper
+const subEl = document.getElementById('subtitle');
+let subTimer = null;
+function showSub(text, dur=3500){
+  clearTimeout(subTimer);
+  subEl.textContent = text;
+  subEl.style.opacity = '1';
+  subTimer = setTimeout(()=>{ subEl.style.opacity='0'; }, dur);
+}
+
+// ─── BEAT DEFINITIONS ─────────────────────────────────────────
+// Each beat: {start, end, enter, exit}
 const BEATS = [
-  {id:'b01', start:0,   end:4,   audio:['bass','chime']},
-  {id:'b02', start:4,   end:8,   audio:['whoosh','chime']},
-  {id:'b03', start:8,   end:12,  audio:['bass','whoosh']},
-  {id:'b04', start:12,  end:16,  audio:['chime','bass']},
-  {id:'b05', start:16,  end:20,  audio:['whoosh']},
-  {id:'b06', start:20,  end:24,  audio:['bass','chime']},
-  {id:'b07', start:24,  end:28,  audio:['whoosh','bass']},
-  {id:'b08', start:28,  end:32,  audio:['chime']},
-  {id:'b09', start:32,  end:36,  audio:['bass','whoosh']},
-  {id:'b10', start:36,  end:40,  audio:['chime','bass']},
-  {id:'b11', start:40,  end:44,  audio:['whoosh']},
-  {id:'b12', start:44,  end:48,  audio:['bass','chime']},
-  {id:'b13', start:48,  end:52,  audio:['whoosh','bass']},
-  {id:'b14', start:52,  end:56,  audio:['chime','whoosh']},
-  {id:'b15', start:56,  end:60,  audio:['bass','chime']},
+  { id:1, start:0,   end:4   },
+  { id:2, start:4,   end:8   },
+  { id:3, start:8,   end:12  },
+  { id:4, start:12,  end:16  },
+  { id:5, start:16,  end:20  },
+  { id:6, start:20,  end:24  },
+  { id:7, start:24,  end:28  },
+  { id:8, start:28,  end:32  },
+  { id:9, start:32,  end:36  },
+  { id:10, start:36, end:40  },
+  { id:11, start:40, end:44  },
+  { id:12, start:44, end:48  },
+  { id:13, start:48, end:52  },
+  { id:14, start:52, end:56  },
+  { id:15, start:56, end:60  },
 ];
 
-let currentBeat = -1;
-let beatStates = {}; // track which beats have been activated
-BEATS.forEach(b=> beatStates[b.id] = false);
+// ─── BEAT ENTER FUNCTIONS ─────────────────────────────────────
 
-function getBeatAtTime(t){
-  for(let i=0;i<BEATS.length;i++){
-    if(t >= BEATS[i].start && t < BEATS[i].end) return i;
+function beat1_enter(){
+  playImpact();
+  // Big Bang: concentric rings exploding SVG
+  setSVG(`
+    <defs>
+      <radialGradient id="rg1" cx="50%" cy="50%" r="50%">
+        <stop offset="0%" stop-color="#C8A96E" stop-opacity="0.8"/>
+        <stop offset="100%" stop-color="#C8A96E" stop-opacity="0"/>
+      </radialGradient>
+      <filter id="glow1"><feGaussianBlur stdDeviation="3" result="blur"/>
+        <feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge></filter>
+    </defs>
+    <g transform="translate(360,560)" filter="url(#glow1)">
+      ${[0,1,2,3,4,5].map(i=>`
+        <circle r="${30+i*60}" fill="none" stroke="#C8A96E"
+          stroke-width="${2.5-i*0.3}"
+          stroke-dasharray="${(30+i*60)*2*Math.PI} ${(30+i*60)*2*Math.PI}"
+          stroke-dashoffset="${(30+i*60)*2*Math.PI}"
+          opacity="${0.8-i*0.12}">
+          <animate attributeName="stroke-dashoffset" from="${(30+i*60)*2*Math.PI}" to="0"
+            dur="${0.6+i*0.15}s" begin="${i*0.1}s" fill="freeze" calcMode="spline"
+            keySplines="0.16 1 0.3 1"/>
+          <animate attributeName="opacity" from="${0.8-i*0.12}" to="${0.1+i*0.02}"
+            dur="2s" begin="${0.6+i*0.15}s" fill="freeze"/>
+        </circle>`).join('')}
+      <circle r="4" fill="#E8E8F0">
+        <animate attributeName="r" values="4;20;4" dur="1s" repeatCount="1"/>
+        <animate attributeName="opacity" values="1;0.3;1" dur="1s" repeatCount="1"/>
+      </circle>
+    </g>
+    <radialGradient id="amb1" cx="50%" cy="44%" r="40%">
+      <stop offset="0%" stop-color="#C8A96E" stop-opacity="0.12"/>
+      <stop offset="100%" stop-color="#C8A96E" stop-opacity="0"/>
+    </radialGradient>
+    <rect width="720" height="1280" fill="url(#amb1)"/>
+  `);
+  showTypo(['قدرت'], ['160px'], ['#C8A96E'], [0.4], -80);
+  showSub('در آغاز، قدرت بود');
+  spawnBurst(360,560,60,'#C8A96E');
+}
+
+function beat2_enter(){
+  playWhoosh();
+  // Triangle of power: 3 forces
+  const pts = [[360,380],[180,700],[540,700]];
+  const labels = ['مردم','نخبه','نهاد'];
+  setSVG(`
+    <defs><filter id="glow2"><feGaussianBlur stdDeviation="4"/>
+      <feMerge><feMergeNode/><feMergeNode in="SourceGraphic"/></feMerge></filter></defs>
+    <g filter="url(#glow2)">
+      ${pts.map((p,i)=>{
+        const next = pts[(i+1)%3];
+        const len = Math.hypot(next[0]-p[0],next[1]-p[1]);
+        return `<line x1="${p[0]}" y1="${p[1]}" x2="${next[0]}" y2="${next[1]}"
+          stroke="#C8A96E" stroke-width="2"
+          stroke-dasharray="${len} ${len}" stroke-dashoffset="${len}">
+          <animate attributeName="stroke-dashoffset" from="${len}" to="0"
+            dur="0.8s" begin="${i*0.25}s" fill="freeze" calcMode="spline"
+            keySplines="0.16 1 0.3 1"/>
+        </line>
+        <circle cx="${p[0]}" cy="${p[1]}" r="6" fill="#C8A96E" opacity="0">
+          <animate attributeName="opacity" from="0" to="1" dur="0.3s"
+            begin="${i*0.25+0.7}s" fill="freeze"/>
+          <animate attributeName="r" values="6;14;6" dur="1.2s"
+            begin="${i*0.25+0.7}s" repeatCount="indefinite"/>
+        </circle>
+        <text x="${p[0]+(i===0?0:i===1?-30:30)}" y="${p[1]+(i===0?-24:20)}"
+          fill="#C8A96E" font-size="20" font-family="Vazirmatn,sans-serif"
+          text-anchor="middle" opacity="0" font-weight="700">
+          ${labels[i]}
+          <animate attributeName="opacity" from="0" to="0.8" dur="0.4s"
+            begin="${i*0.25+0.8}s" fill="freeze"/>
+        </text>`;
+      }).join('')}
+    </g>
+    <radialGradient id="ambT" cx="50%" cy="50%" r="35%">
+      <stop offset="0%" stop-color="#1A3A6E" stop-opacity="0.2"/>
+      <stop offset="100%" stop-color="#1A3A6E" stop-opacity="0"/>
+    </radialGradient>
+    <rect width="720" height="1280" fill="url(#ambT)"/>
+  `);
+  showTypo(['کی حکم','می‌راند؟'],['100px','100px'],['#E8E8F0','#C8A96E'],[0.2,0.45], -200);
+  showSub('تثلیث قدرت: مردم، نخبه، نهاد');
+  spawnBurst(360,540,40,'#1A3A6E');
+}
+
+function beat3_enter(){
+  playChime(659);
+  // Gears / State Machine
+  setSVG(`
+    <defs>
+      <filter id="glow3"><feGaussianBlur stdDeviation="3"/>
+        <feMerge><feMergeNode/><feMergeNode in="SourceGraphic"/></feMerge></filter>
+    </defs>
+    <g transform="translate(360,580)" filter="url(#glow3)">
+      <!-- Central gear -->
+      <g><animateTransform attributeName="transform" type="rotate" from="0" to="360" dur="8s" repeatCount="indefinite"/>
+        ${buildGear(0,0,80,16,'#1A3A6E','#4A7ADE',3)}</g>
+      <!-- Satellite gear L -->
+      <g transform="translate(-150,0)">
+        <animateTransform attributeName="transform" type="rotate" from="360" to="0" dur="4s" additive="sum" repeatCount="indefinite"/>
+        ${buildGear(0,0,45,12,'#C8A96E','#E8C88E',2)}</g>
+      <!-- Satellite gear R -->
+      <g transform="translate(150,0)">
+        <animateTransform attributeName="transform" type="rotate" from="360" to="0" dur="4s" additive="sum" repeatCount="indefinite"/>
+        ${buildGear(0,0,45,12,'#C8A96E','#E8C88E',2)}</g>
+      <!-- Satellite gear top -->
+      <g transform="translate(0,-130)">
+        <animateTransform attributeName="transform" type="rotate" from="0" to="360" dur="5.3s" additive="sum" repeatCount="indefinite"/>
+        ${buildGear(0,0,35,10,'#8B1A2E','#BF3A5E',2)}</g>
+      <!-- Connection lines -->
+      <line x1="0" y1="0" x2="-150" y2="0" stroke="#C8A96E" stroke-width="1" stroke-dasharray="4,4" opacity="0.5">
+        <animate attributeName="stroke-dashoffset" from="0" to="-40" dur="1s" repeatCount="indefinite"/>
+      </line>
+      <line x1="0" y1="0" x2="150" y2="0" stroke="#C8A96E" stroke-width="1" stroke-dasharray="4,4" opacity="0.5">
+        <animate attributeName="stroke-dashoffset" from="0" to="40" dur="1s" repeatCount="indefinite"/>
+      </line>
+      <line x1="0" y1="0" x2="0" y2="-130" stroke="#8B1A2E" stroke-width="1" stroke-dasharray="4,4" opacity="0.5">
+        <animate attributeName="stroke-dashoffset" from="0" to="-40" dur="1s" repeatCount="indefinite"/>
+      </line>
+    </g>
+  `);
+  showTypo(['دولت','نهاد','قانون'],['110px','90px','80px'],['#4A7ADE','#C8A96E','#E8E8F0'],[0.1,0.3,0.5],80);
+  showSub('چرخ‌های ماشین دولت');
+}
+
+function buildGear(cx,cy,r,teeth,fill,stroke,sw){
+  let d = '';
+  const ri = r*0.75;
+  const step = (Math.PI*2)/teeth;
+  for(let i=0;i<teeth;i++){
+    const a = i*step - Math.PI/2;
+    const a1 = a-step*0.3, a2=a-step*0.1, a3=a+step*0.1, a4=a+step*0.3;
+    d += `M${cx+Math.cos(a1)*ri} ${cy+Math.sin(a1)*ri}
+          L${cx+Math.cos(a2)*r} ${cy+Math.sin(a2)*r}
+          L${cx+Math.cos(a3)*r} ${cy+Math.sin(a3)*r}
+          L${cx+Math.cos(a4)*ri} ${cy+Math.sin(a4)*ri} `;
   }
-  return BEATS.length-1;
+  return `<circle cx="${cx}" cy="${cy}" r="${ri}" fill="${fill}" stroke="${stroke}" stroke-width="${sw}"/>
+          <path d="${d}" fill="${fill}" stroke="${stroke}" stroke-width="${sw}" stroke-linejoin="round"/>
+          <circle cx="${cx}" cy="${cy}" r="${r*0.2}" fill="${stroke}" opacity="0.8"/>`;
 }
 
-function showBeat(idx, progress){
-  const beat = BEATS[idx];
-  const el = document.getElementById(beat.id);
-  if(!el) return;
-  el.style.opacity = '1';
+function beat4_enter(){
+  playImpact(); playChime(987);
+  // Ideology collision: two sine waves
+  setSVG(`
+    <defs>
+      <filter id="glow4"><feGaussianBlur stdDeviation="5"/>
+        <feMerge><feMergeNode/><feMergeNode in="SourceGraphic"/></feMerge></filter>
+      <radialGradient id="expG" cx="50%" cy="50%" r="50%">
+        <stop offset="0%" stop-color="#E8E8F0" stop-opacity="0.9"/>
+        <stop offset="60%" stop-color="#C8A96E" stop-opacity="0.3"/>
+        <stop offset="100%" stop-color="#C8A96E" stop-opacity="0"/>
+      </radialGradient>
+    </defs>
+    <g filter="url(#glow4)">
+      <path id="waveL" fill="none" stroke="#8B1A2E" stroke-width="3" opacity="0.9"/>
+      <path id="waveR" fill="none" stroke="#1A3A6E" stroke-width="3" opacity="0.9"/>
+    </g>
+    <circle cx="360" cy="640" r="0" fill="url(#expG)" opacity="0.8" id="expCirc">
+      <animate attributeName="r" values="0;0;200;0" dur="4s" begin="0s" fill="freeze" calcMode="spline"
+        keyTimes="0;0.4;0.65;1" keySplines="0.16 1 0.3 1;0.16 1 0.3 1;0.7 0 0.84 0"/>
+      <animate attributeName="opacity" values="0;0;0.8;0" dur="4s" begin="0s" fill="freeze"
+        keyTimes="0;0.4;0.65;1"/>
+    </circle>
+  `);
+  // Animate waves via JS on RAF
+  showTypo(['ایدئولوژی'],['130px'],['#E8E8F0'],[0.5], 100);
+  showSub('چپ در برابر راست — تصادم ایدئولوژی');
+  spawnBurst(360,640,100,'#E8E8F0');
 }
 
-function hideBeat(idx){
-  const beat = BEATS[idx];
-  const el = document.getElementById(beat.id);
-  if(!el) return;
-  animateBeatOut(el, idx);
+let wavePhase = 0;
+function updateWaves(t){
+  const wL = document.getElementById('waveL');
+  const wR = document.getElementById('waveR');
+  if(!wL||!wR) return;
+  const progress = Math.min((t-12)/4,1);
+  // Left wave travels right
+  let dL='', dR='';
+  for(let x=0;x<=360;x+=4){
+    const fx = x*progress;
+    const y = 640 + Math.sin((fx/60+wavePhase)*Math.PI*2)*80*Math.sin(Math.min(fx/180,1)*Math.PI);
+    if(x===0) dL+=`M${fx} ${y}`; else dL+=`L${fx} ${y}`;
+  }
+  for(let x=720;x>=360;x-=4){
+    const fx = (720-x)*progress;
+    const y = 640 + Math.sin((-fx/60+wavePhase)*Math.PI*2)*80*Math.sin(Math.min(fx/180,1)*Math.PI);
+    if(x===720) dR+=`M${720-fx} ${y}`; else dR+=`L${720-fx} ${y}`;
+  }
+  wL.setAttribute('d',dL);
+  wR.setAttribute('d',dR);
 }
 
-// CSS transitions for typo lines
-function animateBeatIn(beatIdx){
-  const beat = BEATS[beatIdx];
-  const el = document.getElementById(beat.id);
-  if(!el) return;
-  el.style.opacity = '1';
-  el.style.transform = 'none';
-  // Reveal typo lines
-  const lines = el.querySelectorAll('.typo-line, .typo-sub, .typo-sm');
-  lines.forEach((line, i)=>{
-    line.style.transition = 'none';
-    line.style.transform = 'translateY(115%)';
-    requestAnimationFrame(()=>{
-      requestAnimationFrame(()=>{
-        line.style.transition = `transform ${400+i*60}ms cubic-bezier(0.16,1,0.3,1) ${i*70}ms`;
-        line.style.transform = 'translateY(0%)';
+function beat5_enter(){
+  playWhoosh();
+  // People / Boids spiral
+  setSVG(`
+    <defs>
+      <radialGradient id="pplG" cx="50%" cy="50%" r="50%">
+        <stop offset="0%" stop-color="#C8A96E" stop-opacity="0.15"/>
+        <stop offset="100%" stop-color="#C8A96E" stop-opacity="0"/>
+      </radialGradient>
+    </defs>
+    <rect width="720" height="1280" fill="url(#pplG)"/>
+    <canvas id="boids-canvas" width="720" height="1280" style="position:absolute;inset:0;opacity:0.95"/>
+  `);
+  // Canvas boids is handled in RAF
+  showTypo(['مردم'],['180px'],['#C8A96E'],[0.3], -200);
+  showSub('اراده عمومی — نیروی جمعی');
+  initBoidsCanvas();
+}
+
+// Simple boids
+let boids = [];
+let boidsActive = false;
+let boidsPhase = 0; // 0=scatter 1=spiral
+function initBoidsCanvas(){
+  boidsActive = true;
+  boidsPhase = 0;
+  boids = [];
+  for(let i=0;i<300;i++){
+    boids.push({
+      x:Math.random()*720, y:Math.random()*1280,
+      vx:(Math.random()-0.5)*2, vy:(Math.random()-0.5)*2
+    });
+  }
+}
+
+function updateBoids(t){
+  if(!boidsActive) return;
+  const canvas = document.getElementById('boids-canvas');
+  if(!canvas) { boidsActive=false; return; }
+  const ctx2 = canvas.getContext('2d');
+  ctx2.clearRect(0,0,720,1280);
+  const phase = t - 16;
+  boidsPhase = phase < 2 ? 0 : 1;
+  boids.forEach(b=>{
+    if(boidsPhase===1){
+      // Attract to center spiral
+      const dx=360-b.x, dy=640-b.y;
+      const dist=Math.hypot(dx,dy)+1;
+      b.vx += dx/dist*0.3;
+      b.vy += dy/dist*0.3;
+      // tangential swirl
+      b.vx += -dy/dist*0.1;
+      b.vy += dx/dist*0.1;
+    } else {
+      b.vx += (Math.random()-0.5)*0.2;
+      b.vy += (Math.random()-0.5)*0.2;
+    }
+    const spd = Math.hypot(b.vx,b.vy);
+    if(spd>3){ b.vx=b.vx/spd*3; b.vy=b.vy/spd*3; }
+    b.x += b.vx; b.y += b.vy;
+    b.x = ((b.x%720)+720)%720;
+    b.y = ((b.y%1280)+1280)%1280;
+    const dist2 = Math.hypot(b.x-360,b.y-640);
+    const alpha = boidsPhase===1 ? Math.max(0,1-dist2/300)*0.8+0.2 : 0.5;
+    ctx2.beginPath();
+    ctx2.arc(b.x,b.y,1.5,0,Math.PI*2);
+    ctx2.fillStyle = `rgba(200,169,110,${alpha})`;
+    ctx2.fill();
+  });
+}
+
+function beat6_enter(){
+  playChime(440);
+  boidsActive = false;
+  // Balance scale SVG
+  setSVG(`
+    <defs>
+      <filter id="glow6"><feGaussianBlur stdDeviation="4"/>
+        <feMerge><feMergeNode/><feMergeNode in="SourceGraphic"/></feMerge></filter>
+    </defs>
+    <g transform="translate(360,520)" filter="url(#glow6)">
+      <!-- Pole -->
+      <line x1="0" y1="-100" x2="0" y2="180" stroke="#C8A96E" stroke-width="3"/>
+      <circle cx="0" cy="-100" r="8" fill="#C8A96E"/>
+      <!-- Beam with rotate animation -->
+      <g id="scaleBeam">
+        <animateTransform attributeName="transform" type="rotate"
+          values="0;-15;8;-10;5;-3;0" dur="4s" repeatCount="indefinite"
+          calcMode="spline" keySplines="0.16 1 0.3 1;0.16 1 0.3 1;0.16 1 0.3 1;0.16 1 0.3 1;0.16 1 0.3 1;0.16 1 0.3 1"/>
+        <line x1="-180" y1="0" x2="180" y2="0" stroke="#C8A96E" stroke-width="2.5"/>
+        <!-- Left pan -->
+        <line x1="-180" y1="0" x2="-180" y2="100" stroke="#C8A96E" stroke-width="1.5"/>
+        <ellipse cx="-180" cy="106" rx="60" ry="12" fill="none" stroke="#8B1A2E" stroke-width="2"/>
+        <!-- Right pan -->
+        <line x1="180" y1="0" x2="180" y2="100" stroke="#C8A96E" stroke-width="1.5"/>
+        <ellipse cx="180" cy="106" rx="60" ry="12" fill="none" stroke="#1A3A6E" stroke-width="2"/>
+      </g>
+      <!-- Incomplete orbit arcs -->
+      ${[0,1,2].map(i=>`
+        <circle cx="0" cy="0" r="${130+i*40}" fill="none" stroke="#C8A96E"
+          stroke-width="1" opacity="${0.3-i*0.08}"
+          stroke-dasharray="${(90+i*15)} ${(170+i*15)}">
+          <animateTransform attributeName="transform" type="rotate"
+            from="0" to="${i%2===0?360:-360}" dur="${8+i*3}s" repeatCount="indefinite"/>
+        </circle>`).join('')}
+    </g>
+  `);
+  showTypo(['آزادی','عدالت'],['110px','110px'],['#C8A96E','#E8E8F0'],[0.2,0.5],-80);
+  showSub('ترازوی قدرت — هیچ‌گاه متعادل نیست');
+}
+
+function beat7_enter(){
+  playImpact();
+  // Spiral of history
+  setSVG(`
+    <defs>
+      <linearGradient id="spiralG" x1="0%" y1="0%" x2="100%" y2="0%">
+        <stop offset="0%" stop-color="#1A3A6E"/>
+        <stop offset="100%" stop-color="#8B1A2E"/>
+      </linearGradient>
+      <filter id="glow7"><feGaussianBlur stdDeviation="3"/>
+        <feMerge><feMergeNode/><feMergeNode in="SourceGraphic"/></feMerge></filter>
+    </defs>
+    <g transform="translate(360,620)" filter="url(#glow7)">
+      <path d="${buildSpiral()}" fill="none" stroke="url(#spiralG)" stroke-width="2.5"
+        stroke-dasharray="2000 2000" stroke-dashoffset="2000">
+        <animate attributeName="stroke-dashoffset" from="2000" to="0" dur="3s" fill="freeze"
+          calcMode="spline" keySplines="0.16 1 0.3 1"/>
+      </path>
+      ${['1789','1917','1979','2011'].map((yr,i)=>{
+        const a = i*Math.PI*1.8 - Math.PI/2;
+        const r = 60+i*55;
+        const x = Math.cos(a)*r, y = Math.sin(a)*r;
+        return `<text x="${x}" y="${y}" fill="#C8A96E" font-size="22"
+          font-family="Vazirmatn,monospace" text-anchor="middle" opacity="0" font-weight="700">
+          ${yr}
+          <animate attributeName="opacity" from="0" to="0.85" dur="0.3s" begin="${0.5+i*0.7}s" fill="freeze"/>
+          <animate attributeName="opacity" from="0.85" to="0.2" dur="1s" begin="${1.5+i*0.7}s" fill="freeze"/>
+        </text>`;
+      }).join('')}
+    </g>
+  `);
+  showTypo(['تاریخ','تکرار'],['120px','140px'],['#E8E8F0','#C8A96E'],[0.2,0.6], -200);
+  showSub('چرخه تاریخ — انقلاب‌ها تکرار می‌شوند');
+}
+
+function buildSpiral(){
+  let d = 'M0,0';
+  const turns = 4, pts = 200;
+  for(let i=1;i<=pts;i++){
+    const t = i/pts;
+    const a = t*turns*Math.PI*2 - Math.PI/2;
+    const r = t*200;
+    d += ` L${Math.cos(a)*r},${Math.sin(a)*r}`;
+  }
+  return d;
+}
+
+function beat8_enter(){
+  playWhoosh(); playChime(523);
+  // Data / Algorithm: waveform lines
+  setSVG(`
+    <defs>
+      <filter id="glow8"><feGaussianBlur stdDeviation="4"/>
+        <feMerge><feMergeNode/><feMergeNode in="SourceGraphic"/></feMerge></filter>
+    </defs>
+    <g filter="url(#glow8)">
+      ${[0,1,2,3,4].map(i=>`
+        <path id="dwave${i}" fill="none"
+          stroke="${['#C8A96E','#4A7ADE','#E8E8F0','#8B1A2E','#C8A96E'][i]}"
+          stroke-width="${1.5-i*0.1}"
+          opacity="${0.9-i*0.1}"/>
+      `).join('')}
+    </g>
+  `);
+  showTypo(['داده','الگوریتم'],['120px','100px'],['#4A7ADE','#C8A96E'],[0.15,0.4],0);
+  showSub('جریان داده — قدرت نامرئی');
+}
+
+let dataWavePhase = 0;
+function updateDataWaves(t){
+  const rel = t - 28;
+  dataWavePhase += 0.04;
+  [0,1,2,3,4].forEach(i=>{
+    const el = document.getElementById(`dwave${i}`);
+    if(!el) return;
+    let d='';
+    const yCtr = 500+i*70;
+    const amp = 40+i*15;
+    const freq = 1.2+i*0.4;
+    for(let x=0;x<=720;x+=6){
+      const y = yCtr + Math.sin((x/120*freq + dataWavePhase + i*0.7)*Math.PI*2)*amp
+               + Math.sin((x/60*freq*0.5 + dataWavePhase*1.3)*Math.PI*2)*amp*0.4;
+      if(x===0) d=`M${x} ${y}`; else d+=`L${x} ${y}`;
+    }
+    el.setAttribute('d',d);
+  });
+}
+
+function beat9_enter(){
+  playChime(330);
+  // AI / Cognitive war: neural net SVG
+  setSVG(`
+    <defs>
+      <filter id="glow9"><feGaussianBlur stdDeviation="5"/>
+        <feMerge><feMergeNode/><feMergeNode in="SourceGraphic"/></feMerge></filter>
+    </defs>
+    <g transform="translate(0,0)" filter="url(#glow9)">
+      ${buildNeuralNet()}
+    </g>
+  `);
+  showTypo(['هوش','مصنوعی'],['130px','130px'],['#4A7ADE','#C8A96E'],[0.1,0.35],-100);
+  showSub('هوش مصنوعی — ابزار قدرت نوین');
+}
+
+function buildNeuralNet(){
+  const layers = [[180,3],[360,5],[540,4],[620,2]];
+  const yBase = 380, gap = 120;
+  let nodes = [];
+  layers.forEach(([x,cnt])=>{
+    for(let i=0;i<cnt;i++){
+      const y = yBase + (i-(cnt-1)/2)*gap;
+      nodes.push({x,y,layer:x});
+    }
+  });
+  let out = '';
+  // Connections
+  const layerXs = [...new Set(layers.map(l=>l[0]))];
+  for(let li=0;li<layerXs.length-1;li++){
+    const from = nodes.filter(n=>n.layer===layerXs[li]);
+    const to = nodes.filter(n=>n.layer===layerXs[li+1]);
+    from.forEach(f=>{
+      to.forEach(t=>{
+        const len = Math.hypot(t.x-f.x,t.y-f.y);
+        out += `<line x1="${f.x}" y1="${f.y}" x2="${t.x}" y2="${t.y}"
+          stroke="#C8A96E" stroke-width="0.8" opacity="0.25"
+          stroke-dasharray="${len} ${len}" stroke-dashoffset="${len}">
+          <animate attributeName="stroke-dashoffset" from="${len}" to="0"
+            dur="${0.6+Math.random()*0.4}s" begin="${Math.random()*0.5}s" fill="freeze"/>
+          <animate attributeName="opacity" values="0.25;0.6;0.25" dur="${1+Math.random()}s"
+            begin="${Math.random()}s" repeatCount="indefinite"/>
+        </line>`;
       });
     });
-  });
-  // Audio
-  if(audioStarted && audioCtx){
-    beat.audio.forEach((type, i)=>{
-      const delay = i*0.15;
-      if(type==='bass') bassImpact(delay);
-      else if(type==='chime') chime(delay);
-      else if(type==='whoosh') whoosh(delay);
-    });
   }
-  // Glitch flash on beat in
-  triggerGlitch();
-}
-
-function animateBeatOut(el, idx){
-  if(!el) return;
-  const lines = el.querySelectorAll('.typo-line, .typo-sub, .typo-sm');
-  lines.forEach((line, i)=>{
-    line.style.transition = `transform 280ms cubic-bezier(0.7,0,0.84,0) ${i*30}ms, opacity 280ms ease ${i*30}ms`;
-    line.style.transform = 'translateY(-110%)';
-    line.style.opacity = '0';
+  // Nodes
+  nodes.forEach((n,i)=>{
+    out += `<circle cx="${n.x}" cy="${n.y}" r="10" fill="#1A3A6E"
+      stroke="#C8A96E" stroke-width="1.5" opacity="0">
+      <animate attributeName="opacity" from="0" to="0.9" dur="0.3s"
+        begin="${i*0.05}s" fill="freeze"/>
+      <animate attributeName="r" values="10;13;10" dur="${1.2+i%3*0.4}s"
+        begin="${i*0.05}s" repeatCount="indefinite"/>
+    </circle>`;
   });
-  setTimeout(()=>{
-    el.style.opacity = '0';
-    // Reset for next loop
-    lines.forEach(line=>{
-      line.style.transition = 'none';
-      line.style.transform = 'translateY(115%)';
-      line.style.opacity = '1';
-    });
-  }, 350);
+  return out;
 }
 
-function triggerGlitch(){
-  const g = document.getElementById('glitch-overlay');
-  g.style.transition = 'none';
-  g.style.opacity = '0.6';
-  g.style.transform = `translateX(${(Math.random()-0.5)*8}px)`;
-  setTimeout(()=>{
-    g.style.transition = 'opacity 150ms ease, transform 150ms ease';
-    g.style.opacity = '0';
-    g.style.transform = 'translateX(0)';
-  }, 60);
+function beat10_enter(){
+  playImpact(); playWhoosh();
+  // Geopolitics: globe-like meridians
+  setSVG(`
+    <defs>
+      <filter id="glow10"><feGaussianBlur stdDeviation="4"/>
+        <feMerge><feMergeNode/><feMergeNode in="SourceGraphic"/></feMerge></filter>
+      <radialGradient id="globeG" cx="50%" cy="50%" r="50%">
+        <stop offset="0%" stop-color="#1A3A6E" stop-opacity="0.4"/>
+        <stop offset="100%" stop-color="#1A3A6E" stop-opacity="0"/>
+      </radialGradient>
+    </defs>
+    <g transform="translate(360,580)" filter="url(#glow10)">
+      <circle cx="0" cy="0" r="220" fill="url(#globeG)" stroke="#1A3A6E" stroke-width="1.5"/>
+      ${buildGlobe()}
+      <!-- Laser sweep -->
+      <line x1="-220" y1="0" x2="220" y2="0" stroke="#C8A96E" stroke-width="1" opacity="0.5">
+        <animateTransform attributeName="transform" type="rotate" from="0" to="360"
+          dur="2s" repeatCount="indefinite"/>
+      </line>
+    </g>
+  `);
+  showTypo(['ژئوپلیتیک'],['120px'],['#C8A96E'],[0.3], -200);
+  showSub('ژئوپلیتیک — نقشه قدرت جهانی');
+  spawnBurst(360,580,50,'#4A7ADE');
 }
 
-// ══════════════════════════════════════════
-// MAIN LOOP
-// ══════════════════════════════════════════
-let startTime = null;
-let paused = false;
-let pauseTime = 0;
-let pauseStart = 0;
-let filmStarted = false;
-let restartTimer = null;
-
-const progressBar = document.getElementById('progress-bar');
-const timeCounter = document.getElementById('time-counter');
-const scanLine = document.getElementById('scan-line');
-
-function fmt(s){
-  const m = Math.floor(s/60);
-  const sec = Math.floor(s%60);
-  return `${String(m).padStart(2,'0')}:${String(sec).padStart(2,'0')}`;
-}
-
-let rafId;
-function tick(now){
-  if(paused){ rafId = requestAnimationFrame(tick); return; }
-  if(!startTime) startTime = now;
-  const elapsed = Math.min((now - startTime - pauseTime) / 1000, TOTAL);
-
-  // BG canvas
-  drawBG(elapsed);
-
-  // Transistor / neural / surge canvases if active
-  const bi = getBeatAtTime(elapsed);
-  if(bi === 4) drawTransistorCanvas(elapsed);
-  if(bi === 9) drawNeuralCanvas(elapsed);
-  if(bi === 13) drawSurgeCanvas(elapsed);
-
-  // Scan line
-  const scanY = (elapsed * 150) % 1280;
-  scanLine.style.transform = `translateY(${scanY}px)`;
-
-  // Beat transitions
-  if(bi !== currentBeat){
-    if(currentBeat >= 0) hideBeat(currentBeat);
-    currentBeat = bi;
-    animateBeatIn(bi);
+function buildGlobe(){
+  let out='';
+  // Meridians (vertical ellipses)
+  for(let i=0;i<6;i++){
+    const rx = Math.sin(i*Math.PI/6)*220;
+    out += `<ellipse cx="0" cy="0" rx="${Math.abs(rx)||10}" ry="220"
+      fill="none" stroke="#4A7ADE" stroke-width="1" opacity="0.4">
+      <animate attributeName="opacity" values="0.4;0.7;0.4" dur="${2+i*0.3}s"
+        repeatCount="indefinite"/>
+    </ellipse>`;
   }
+  // Parallels (horizontal ellipses)
+  for(let i=1;i<4;i++){
+    const ry = i*55 - 110;
+    const rx2 = Math.sqrt(220*220-ry*ry);
+    out += `<ellipse cx="0" cy="${ry}" rx="${rx2}" ry="${rx2*0.25}"
+      fill="none" stroke="#4A7ADE" stroke-width="1" opacity="0.35"/>`;
+  }
+  return out;
+}
 
-  // Progress
-  const pct = (elapsed / TOTAL) * 100;
-  progressBar.style.width = pct + '%';
-  timeCounter.textContent = fmt(elapsed) + ' / 60s';
+function beat11_enter(){
+  playChime(440); playChime(659);
+  // Cyber / digital: binary rain + reticle
+  setSVG(`
+    <defs>
+      <filter id="glow11"><feGaussianBlur stdDeviation="3"/>
+        <feMerge><feMergeNode/><feMergeNode in="SourceGraphic"/></feMerge></filter>
+    </defs>
+    <g filter="url(#glow11)">
+      ${buildReticle(360,580)}
+    </g>
+  `);
+  showTypo(['جنگ','شناختی'],['120px','120px'],['#8B1A2E','#E8E8F0'],[0.2,0.45],-80);
+  showSub('جنگ شناختی — نبرد در اذهان');
+  spawnBurst(360,580,80,'#8B1A2E');
+}
 
-  // Hold finale + restart
-  if(elapsed >= TOTAL){
-    if(!restartTimer){
-      restartTimer = setTimeout(()=>{
-        restartFilm();
-      }, 2500);
+function buildReticle(cx,cy){
+  let out = '';
+  // Outer rings
+  [160,120,80,40].forEach((r,i)=>{
+    out += `<circle cx="${cx}" cy="${cy}" r="${r}" fill="none"
+      stroke="#C8A96E" stroke-width="${1.5-i*0.2}" opacity="${0.6-i*0.1}"
+      stroke-dasharray="${i%2===0?'full':'8,4'}">
+      <animateTransform attributeName="transform" type="rotate"
+        from="${i%2===0?0:360}" to="${i%2===0?360:0}"
+        dur="${3+i*1.5}s" repeatCount="indefinite" additive="sum"
+        calcMode="linear"/>
+    </circle>`;
+  });
+  // Crosshairs
+  out += `<line x1="${cx-180}" y1="${cy}" x2="${cx+180}" y2="${cy}"
+    stroke="#C8A96E" stroke-width="1" opacity="0.5"/>
+  <line x1="${cx}" y1="${cy-180}" x2="${cx}" y2="${cy+180}"
+    stroke="#C8A96E" stroke-width="1" opacity="0.5"/>`;
+  // Tick marks
+  for(let a=0;a<360;a+=10){
+    const rad = a*Math.PI/180;
+    const r1=155, r2=a%30===0?140:150;
+    out += `<line x1="${cx+Math.cos(rad)*r2}" y1="${cy+Math.sin(rad)*r2}"
+      x2="${cx+Math.cos(rad)*r1}" y2="${cy+Math.sin(rad)*r1}"
+      stroke="#C8A96E" stroke-width="${a%30===0?2:1}" opacity="0.7"/>`;
+  }
+  // Center dot
+  out += `<circle cx="${cx}" cy="${cy}" r="6" fill="#C8A96E" opacity="0.9">
+    <animate attributeName="r" values="6;10;6" dur="1s" repeatCount="indefinite"/>
+    <animate attributeName="opacity" values="0.9;0.4;0.9" dur="1s" repeatCount="indefinite"/>
+  </circle>`;
+  return out;
+}
+
+function beat12_enter(){
+  playImpact();
+  // Democracy / Vote: ballot morphing
+  setSVG(`
+    <defs>
+      <filter id="glow12"><feGaussianBlur stdDeviation="3"/>
+        <feMerge><feMergeNode/><feMergeNode in="SourceGraphic"/></feMerge></filter>
+    </defs>
+    <g transform="translate(360,560)" filter="url(#glow12)">
+      <!-- Concentric isometric rings 3D -->
+      ${[0,1,2,3].map(i=>`
+        <g style="transform-origin:0 0;">
+          <animateTransform attributeName="transform" type="rotate"
+            from="${i%2===0?0:360}" to="${i%2===0?360:0}" dur="${5+i*2}s"
+            repeatCount="indefinite"/>
+          <ellipse cx="0" cy="0" rx="${80+i*50}" ry="${(80+i*50)*0.4}"
+            fill="none" stroke="#C8A96E" stroke-width="${2-i*0.3}"
+            stroke-dasharray="${i%2===0?'full':'6,3'}"
+            opacity="${0.8-i*0.15}"/>
+        </g>`).join('')}
+      <!-- Vertical axis -->
+      <line x1="0" y1="-250" x2="0" y2="250" stroke="#C8A96E" stroke-width="1" opacity="0.4"/>
+    </g>
+  `);
+  showTypo(['دموکراسی'],['130px'],['#E8E8F0'],[0.3],-180);
+  showSub('دموکراسی — هنوز ناتمام');
+}
+
+function beat13_enter(){
+  playWhoosh(); playChime(523);
+  // Transparency / algorithm: binary grid
+  setSVG(`
+    <defs>
+      <filter id="glow13"><feGaussianBlur stdDeviation="2"/>
+        <feMerge><feMergeNode/><feMergeNode in="SourceGraphic"/></feMerge></filter>
+    </defs>
+    <g filter="url(#glow13)">
+      ${buildBinaryGrid()}
+    </g>
+    ${buildReticle(360,580)}
+  `);
+  showTypo(['شفافیت','الگوریتم'],['110px','95px'],['#4A7ADE','#C8A96E'],[0.1,0.35],-60);
+  showSub('شفافیت الگوریتم — مطالبه عصر داده');
+}
+
+function buildBinaryGrid(){
+  let out='';
+  const cols=18, rows=30;
+  for(let r=0;r<rows;r++){
+    for(let c=0;c<cols;c++){
+      const x=20+c*38, y=20+r*42;
+      const bit = Math.random()>0.5?'1':'0';
+      const delay = (r*cols+c)*0.003;
+      out += `<text x="${x}" y="${y}" font-size="14"
+        font-family="Courier New,monospace" fill="#4A7ADE"
+        opacity="${Math.random()*0.25+0.03}"
+        style="animation:flicker ${0.5+Math.random()*2}s ${delay}s infinite alternate">
+        ${bit}</text>`;
     }
-    rafId = requestAnimationFrame(tick);
+  }
+  return out;
+}
+
+function beat14_enter(){
+  playImpact(); playChime(880);
+  // Max velocity: particle tornado
+  fgParticles = [];
+  for(let i=0;i<200;i++){
+    const a = Math.random()*Math.PI*2;
+    const r = Math.random()*300+50;
+    const speed = Math.random()*3+1;
+    fgParticles.push({
+      x: 360+Math.cos(a)*r, y: 640+Math.sin(a)*r,
+      vx: Math.cos(a+Math.PI/2)*speed,
+      vy: Math.sin(a+Math.PI/2)*speed,
+      r:2, life:1, decay:0.004,
+      color:'#C8A96E', orbital:true,
+      cx:360, cy:640, dist:r, angle:a, angV:speed/r
+    });
+  }
+  setSVG(`
+    <defs>
+      <filter id="glow14"><feGaussianBlur stdDeviation="6"/>
+        <feMerge><feMergeNode/><feMergeNode in="SourceGraphic"/></feMerge></filter>
+    </defs>
+    <g transform="translate(360,640)" filter="url(#glow14)">
+      <circle cx="0" cy="0" r="80" fill="none" stroke="#C8A96E" stroke-width="3">
+        <animate attributeName="r" values="80;100;80" dur="0.5s" repeatCount="indefinite"/>
+        <animate attributeName="opacity" values="1;0.4;1" dur="0.5s" repeatCount="indefinite"/>
+      </circle>
+      <text x="0" y="20" font-size="80" font-weight="900" font-family="Vazirmatn,sans-serif"
+        fill="#C8A96E" text-anchor="middle" opacity="0.9">؟</text>
+    </g>
+  `);
+  showTypo(['عدالت','صلح','انسان'],['110px','100px','130px'],
+    ['#C8A96E','#E8E8F0','#8B1A2E'],[0.1,0.3,0.55],-150);
+  showSub('هدف نهایی قدرت: عدالت، صلح، انسان');
+}
+
+function beat15_enter(){
+  playChime(659); playChime(987);
+  // Final: Question mark + all ghost layers
+  fgParticles = [];
+  for(let i=0;i<80;i++){
+    fgParticles.push({
+      x:Math.random()*720, y:1280+Math.random()*100,
+      vx:(Math.random()-0.5)*0.5, vy:-(Math.random()*1.5+0.5),
+      r:Math.random()*3+1, life:1, decay:0.003,
+      color:'#C8A96E', orbital:false
+    });
+  }
+  setSVG(`
+    <defs>
+      <filter id="glow15"><feGaussianBlur stdDeviation="8"/>
+        <feMerge><feMergeNode/><feMergeNode in="SourceGraphic"/></feMerge></filter>
+      <radialGradient id="finG" cx="50%" cy="45%" r="50%">
+        <stop offset="0%" stop-color="#C8A96E" stop-opacity="0.18"/>
+        <stop offset="100%" stop-color="#C8A96E" stop-opacity="0"/>
+      </radialGradient>
+    </defs>
+    <rect width="720" height="1280" fill="url(#finG)"/>
+    <!-- Ghost: rings from beat1 -->
+    <g transform="translate(360,560)" opacity="0.05" filter="url(#glow15)">
+      ${[0,1,2,3,4,5].map(i=>`<circle r="${30+i*60}" fill="none" stroke="#C8A96E" stroke-width="2"/>`).join('')}
+    </g>
+    <!-- Ghost: triangle from beat2 -->
+    <polygon points="360,380 180,700 540,700" fill="none" stroke="#C8A96E" stroke-width="1" opacity="0.06"/>
+    <!-- Ghost: spiral from beat7 -->
+    <g transform="translate(360,620)" opacity="0.06">
+      <path d="${buildSpiral()}" fill="none" stroke="#8B1A2E" stroke-width="1.5"/>
+    </g>
+    <!-- Giant question mark -->
+    <g filter="url(#glow15)">
+      <text x="360" y="700" font-size="300" font-weight="900"
+        font-family="Vazirmatn,sans-serif" fill="#C8A96E"
+        text-anchor="middle" opacity="0.9">
+        ؟
+        <animate attributeName="opacity" values="0.9;0.7;0.9" dur="3s" repeatCount="indefinite"/>
+        <animateTransform attributeName="transform" type="scale"
+          values="1;1.02;1" dur="3s" repeatCount="indefinite"
+          additive="sum" calcMode="spline" keySplines="0.5 0 0.5 1;0.5 0 0.5 1"/>
+      </text>
+    </g>
+  `);
+  // Letter stagger
+  const letters = 'علوم سیاسی'.split('');
+  let html = '<div style="display:flex;flex-direction:row-reverse;justify-content:center;margin-top:30px;">';
+  letters.forEach((ch,i)=>{
+    html += `<span class="typo-mask" style="display:inline-block;">
+      <span class="typo-inner" style="font-size:52px;font-weight:900;color:#C8A96E;
+        letter-spacing:0;display:inline-block;
+        animation:letterSpace 1.5s ${0.7+i*0.06}s forwards cubic-bezier(0.16,1,0.3,1)">
+        ${ch==' '?'&nbsp;':ch}
+      </span>
+    </span>`;
+  });
+  html += '</div>';
+  typoLayer.innerHTML = html;
+  setTimeout(()=>{
+    typoLayer.querySelectorAll('.typo-inner').forEach(el=>el.classList.add('revealed'));
+  },100);
+  showSub('علوم سیاسی — قطب‌نمای آشفتگی داده‌ها', 4000);
+}
+
+// ─── BEAT EXIT / TRANSITIONS ──────────────────────────────────
+function transitionOut(nextBeatFn){
+  // Glitch flash
+  VP.style.filter = 'brightness(2) saturate(0)';
+  setTimeout(()=>{ VP.style.filter=''; nextBeatFn(); }, 80);
+}
+
+// ─── MAIN RAF LOOP ────────────────────────────────────────────
+let prevBeatId = 0;
+
+function tick(now){
+  if(paused){ animId=requestAnimationFrame(tick); return; }
+  if(!startTime) startTime = now;
+  elapsed = (now - startTime) / 1000;
+
+  if(elapsed >= TOTAL){
+    // Hold final, restart after 2.5s
+    elapsed = TOTAL;
+    updateUI();
+    setTimeout(replay, 2500);
     return;
   }
 
-  rafId = requestAnimationFrame(tick);
+  // Determine current beat
+  const curBeat = BEATS.find(b=> elapsed>=b.start && elapsed<b.end);
+  if(curBeat && curBeat.id !== prevBeatId){
+    prevBeatId = curBeat.id;
+    beatEnter(curBeat.id);
+  }
+
+  // Per-frame updates
+  updateBgCanvas(elapsed);
+  updateFgParticles();
+
+  // Beat-specific per-frame
+  if(curBeat){
+    if(curBeat.id===4) updateWaves(elapsed);
+    if(curBeat.id===5) updateBoids(elapsed);
+    if(curBeat.id===8) updateDataWaves(elapsed);
+  }
+
+  updateUI();
+  animId=requestAnimationFrame(tick);
 }
 
-function startFilm(){
-  document.getElementById('audio-gate').style.display = 'none';
-  filmStarted = true;
-  initAudio();
-  // Hide all beats
-  document.querySelectorAll('.beat').forEach(b=>{ b.style.opacity='0'; });
-  currentBeat = -1;
-  startTime = null;
-  pauseTime = 0;
-  restartTimer = null;
-  Object.keys(beatStates).forEach(k=>beatStates[k]=false);
-  rafId = requestAnimationFrame(tick);
+function beatEnter(id){
+  clearSVG();
+  clearTypo();
+  const fn = [null,beat1_enter,beat2_enter,beat3_enter,beat4_enter,
+    beat5_enter,beat6_enter,beat7_enter,beat8_enter,beat9_enter,
+    beat10_enter,beat11_enter,beat12_enter,beat13_enter,beat14_enter,beat15_enter][id];
+  if(fn) fn();
+  // Screen flash transition
+  VP.style.transition='filter 0.08s';
+  VP.style.filter='brightness(1.5)';
+  setTimeout(()=>{ VP.style.filter=''; },80);
 }
 
-function restartFilm(){
-  cancelAnimationFrame(rafId);
-  restartTimer = null;
-  currentBeat = -1;
-  startTime = null;
-  pauseTime = 0;
-  document.querySelectorAll('.beat').forEach(b=>{
-    b.style.opacity='0';
-    b.querySelectorAll('.typo-line,.typo-sub,.typo-sm').forEach(l=>{
-      l.style.transition='none';
-      l.style.transform='translateY(115%)';
-      l.style.opacity='1';
-    });
+// ─── BACKGROUND CANVAS ────────────────────────────────────────
+function updateBgCanvas(t){
+  bgCtx.clearRect(0,0,720,1280);
+  // Deep space gradient
+  const grd = bgCtx.createRadialGradient(360,480,0,360,480,500);
+  grd.addColorStop(0,`rgba(26,58,110,${0.12+Math.sin(t*0.3)*0.04})`);
+  grd.addColorStop(0.5,`rgba(139,26,46,${0.04+Math.sin(t*0.2+1)*0.02})`);
+  grd.addColorStop(1,'rgba(5,5,8,0)');
+  bgCtx.fillStyle=grd; bgCtx.fillRect(0,0,720,1280);
+
+  // Ambient particles
+  particles.forEach(p=>{
+    p.x += p.vx; p.y += p.vy;
+    if(p.y<-5) p.y=1285;
+    if(p.x<0) p.x=720; if(p.x>720) p.x=0;
+    bgCtx.beginPath();
+    bgCtx.arc(p.x,p.y,p.r,0,Math.PI*2);
+    const col = p.gold ? `rgba(200,169,110,${p.a*0.6})` : `rgba(232,232,240,${p.a*0.3})`;
+    bgCtx.fillStyle=col;
+    bgCtx.fill();
   });
-  progressBar.style.width = '0%';
-  timeCounter.textContent = '00:00 / 60s';
-  rafId = requestAnimationFrame(tick);
+
+  // Travelling light ray
+  const rayX = ((t*60)%820)-50;
+  const rayGrd = bgCtx.createLinearGradient(rayX-80,0,rayX+80,0);
+  rayGrd.addColorStop(0,'rgba(200,169,110,0)');
+  rayGrd.addColorStop(0.5,`rgba(200,169,110,${0.03+Math.sin(t)*0.01})`);
+  rayGrd.addColorStop(1,'rgba(200,169,110,0)');
+  bgCtx.fillStyle=rayGrd;
+  bgCtx.fillRect(rayX-80,0,160,1280);
+
+  // fg particles
+  fgParticles.forEach((p,i)=>{
+    if(p.orbital){
+      p.angle += p.angV * 0.016;
+      p.x = p.cx + Math.cos(p.angle)*p.dist;
+      p.y = p.cy + Math.sin(p.angle)*p.dist;
+    } else {
+      p.x += p.vx; p.y += p.vy;
+    }
+    p.life -= p.decay;
+    bgCtx.beginPath();
+    bgCtx.arc(p.x,p.y,p.r,0,Math.PI*2);
+    bgCtx.fillStyle = p.color.startsWith('#')
+      ? hexAlpha(p.color, p.life*0.8)
+      : p.color;
+    bgCtx.fill();
+  });
+  fgParticles = fgParticles.filter(p=>p.life>0);
 }
 
-// ══════════════════════════════════════════
-// CONTROLS
-// ══════════════════════════════════════════
-document.getElementById('audio-gate').addEventListener('click', startFilm);
-document.getElementById('audio-gate').addEventListener('keydown', e=>{ if(e.key==='Enter'||e.key===' ') startFilm(); });
+function hexAlpha(hex,a){
+  const r=parseInt(hex.slice(1,3),16);
+  const g=parseInt(hex.slice(3,5),16);
+  const b=parseInt(hex.slice(5,7),16);
+  return `rgba(${r},${g},${b},${Math.max(0,Math.min(1,a))})`;
+}
 
+function updateFgParticles(){
+  // handled in bg canvas
+}
+
+// ─── UI ───────────────────────────────────────────────────────
+const progressBar = document.getElementById('progress-bar');
+const timerEl = document.getElementById('timer');
+
+function updateUI(){
+  const pct = Math.min(elapsed/TOTAL*100,100);
+  progressBar.style.width = pct+'%';
+  timerEl.textContent = fmt(elapsed)+' / 60s';
+}
+
+function fmt(s){
+  const m=Math.floor(s/60);
+  const sec=Math.floor(s%60);
+  return String(m).padStart(2,'0')+':'+String(sec).padStart(2,'0');
+}
+
+// ─── START / REPLAY / CONTROLS ────────────────────────────────
+function start(){
+  document.getElementById('start-hud').style.display='none';
+  initAudio();
+  if(audioCtx && audioCtx.state==='suspended') audioCtx.resume();
+  soundOn = true;
+  if(masterGain) masterGain.gain.value=0.7;
+  startTTS();
+  startTime = null;
+  elapsed = 0;
+  prevBeatId = 0;
+  fgParticles = [];
+  boidsActive = false;
+  if(animId) cancelAnimationFrame(animId);
+  animId = requestAnimationFrame(tick);
+}
+
+function replay(){
+  startTime = null;
+  elapsed = 0;
+  prevBeatId = 0;
+  fgParticles = [];
+  boidsActive = false;
+  clearSVG();
+  clearTypo();
+  if(window.speechSynthesis) window.speechSynthesis.cancel();
+  startTTS();
+  if(animId) cancelAnimationFrame(animId);
+  animId = requestAnimationFrame(tick);
+}
+
+document.getElementById('start-btn').addEventListener('click', start);
 document.getElementById('btn-replay').addEventListener('click', ()=>{
-  if(!filmStarted) return;
-  cancelAnimationFrame(rafId);
-  clearTimeout(restartTimer);
-  restartFilm();
+  if(!startTime) { start(); return; }
+  replay();
 });
 
-let soundOn = true;
 document.getElementById('btn-sound').addEventListener('click', ()=>{
-  if(!audioCtx) return;
+  if(!audioCtx){ initAudio(); soundOn=true; }
   soundOn = !soundOn;
-  masterGain.gain.setTargetAtTime(soundOn ? 1 : 0, audioCtx.currentTime, 0.3);
-  document.getElementById('btn-sound').textContent = soundOn ? '♪' : '✕';
+  if(masterGain) masterGain.gain.value = soundOn ? 0.7 : 0;
+  document.getElementById('btn-sound').textContent = soundOn ? '♪' : '♪̶';
+  if(audioCtx && audioCtx.state==='suspended') audioCtx.resume();
 });
 
+// Keyboard
 document.addEventListener('keydown', e=>{
-  if(e.code === 'Space'){
-    e.preventDefault();
-    if(!filmStarted) return;
-    paused = !paused;
-    if(paused) pauseStart = performance.now();
-    else pauseTime += (performance.now() - pauseStart);
+  if(e.code==='Space'){ e.preventDefault();
+    if(!startTime){ start(); return; }
+    paused=!paused;
+    if(paused) pauseAt=elapsed;
+    else startTime = performance.now() - elapsed*1000;
+    if(window.speechSynthesis){
+      paused ? window.speechSynthesis.pause() : window.speechSynthesis.resume();
+    }
   }
-  if(e.code === 'KeyR'){
-    if(!filmStarted) return;
-    cancelAnimationFrame(rafId);
-    clearTimeout(restartTimer);
-    restartFilm();
-  }
+  if(e.code==='KeyR') replay();
 });
 
-// Preload – draw initial BG
-drawBG(0);
+// prefers-reduced-motion
+if(window.matchMedia('(prefers-reduced-motion: reduce)').matches){
+  document.getElementById('start-hud').style.display='none';
+  beat15_enter();
+}
+
+// Inject flicker keyframe
+const style = document.createElement('style');
+style.textContent=`
+@keyframes flicker {
+  from { opacity: var(--from-op, 0.05); }
+  to { opacity: var(--to-op, 0.3); }
+}
+@keyframes letterSpace {
+  from { letter-spacing: 0.8em; }
+  to { letter-spacing: 0.05em; }
+}
+`;
+document.head.appendChild(style);
 </script>
 </body>
 </html>

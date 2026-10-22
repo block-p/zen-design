@@ -235,7 +235,7 @@ pub fn PreviewPanel(
         el.classList.add('zd-text-editable');
     });
 
-    // 3. Listen for Ctrl+S / Cmd+S inside iframe
+    // 3. Listen for Ctrl+S / Cmd+S inside iframe, and stop slide navigation when typing
     if (!window.__zd_key_listener) {
         window.__zd_key_listener = function(e) {
             if ((e.ctrlKey || e.metaKey) && (e.key === 's' || e.key === 'S')) {
@@ -244,6 +244,20 @@ pub fn PreviewPanel(
             }
         };
         document.addEventListener('keydown', window.__zd_key_listener);
+    }
+
+    // Capture-phase keyboard shield: completely prevent slide navigation hooks from intercepting typing keys
+    if (!window.__zd_edit_guard) {
+        window.__zd_edit_guard = function(e) {
+            const el = e.target;
+            if (el && (el.isContentEditable || el.getAttribute('contenteditable') === 'true' || el.tagName === 'INPUT' || el.tagName === 'TEXTAREA')) {
+                // If the user is editing text, do NOT let arrows, space, enter, or backspace bubble to slide listeners
+                if (['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown', ' ', 'Spacebar', 'Enter', 'Backspace', 'Delete', 'PageUp', 'PageDown', 'Home', 'End', 'f', 'F'].includes(e.key)) {
+                    e.stopPropagation();
+                }
+            }
+        };
+        window.addEventListener('keydown', window.__zd_edit_guard, true); // capture = true
     }
 
     // 4. Slide navigation helpers
@@ -486,12 +500,35 @@ pub fn PreviewPanel(
         .forget();
     });
 
+    let sync_mode_from_doc = move || {
+        if let Some(frame) = iframe_ref.get_untracked() {
+            if let Some(doc) = frame.content_document() {
+                let has_slides = doc
+                    .query_selector(".slide, section[id^='s'], [data-slide-id], .deck-controls, .slides-deck")
+                    .ok()
+                    .flatten()
+                    .is_some();
+                let has_motion = doc
+                    .query_selector(".motion-artboard, .motion-canvas, [data-motion]")
+                    .ok()
+                    .flatten()
+                    .is_some();
+                if has_slides && mode.get_untracked() != ModeId::Slides {
+                    mode.set(ModeId::Slides);
+                } else if has_motion && mode.get_untracked() != ModeId::Motion {
+                    mode.set(ModeId::Motion);
+                }
+            }
+        }
+    };
+
     // Self-healing: if the status says "not ready" but the iframe visibly has
     // a document, trust the document. This covers a load event that fires
     // before the document commits (it reads the old blank document and would
     // otherwise leave the fallback covering real content).
     gloo_timers::callback::Interval::new(2_000, move || {
         if frame_status.get_untracked() == FrameStatus::Ready {
+            sync_mode_from_doc();
             return;
         }
         let Some(frame) = iframe_ref.get_untracked() else {
@@ -509,6 +546,7 @@ pub fn PreviewPanel(
             EMPTY_RETRIES.with(|counter| counter.set(0));
             frame_status.set(FrameStatus::Ready);
             has_loaded.set(true);
+            sync_mode_from_doc();
         }
     })
     .forget();
@@ -574,6 +612,7 @@ pub fn PreviewPanel(
                     EMPTY_RETRIES.with(|counter| counter.set(0));
                     frame_status.set(FrameStatus::Ready);
                     has_loaded.set(true);
+                    sync_mode_from_doc();
                 }
             })
             .forget();
@@ -583,6 +622,7 @@ pub fn PreviewPanel(
         EMPTY_RETRIES.with(|counter| counter.set(0));
         frame_status.set(FrameStatus::Ready);
         has_loaded.set(true);
+        sync_mode_from_doc();
     };
 
     // A manual reload starts a fresh retry budget.

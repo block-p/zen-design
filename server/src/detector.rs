@@ -152,15 +152,19 @@ fn find_opencode_ag_provider() -> Option<AgProviderInfo> {
                 .get("models")
                 .and_then(|m| m.as_object())
                 .and_then(|m| {
-                    if m.contains_key("ag/gemini-3.8-flash-high") {
+                    if m.contains_key("kr/auto") {
+                        Some("kr/auto".to_string())
+                    } else if m.contains_key("kr/claude-sonnet-4.5") {
+                        Some("kr/claude-sonnet-4.5".to_string())
+                    } else if m.contains_key("ag/gemini-3.8-flash-high") {
                         Some("ag/gemini-3.8-flash-high".to_string())
                     } else if m.contains_key("ag/gemini-3.8-flash") {
                         Some("ag/gemini-3.8-flash".to_string())
                     } else {
-                        m.keys().find(|k| k.starts_with("ag/")).cloned()
+                        m.keys().find(|k| k.starts_with("ag/") || k.starts_with("kr/")).cloned()
                     }
                 })
-                .or_else(|| Some("ag/gemini-3.8-flash-high".to_string()));
+                .or_else(|| Some("kr/auto".to_string()));
 
             return Some(AgProviderInfo {
                 base_url,
@@ -190,6 +194,8 @@ fn scan_antigravity() -> Option<DetectedSource> {
     let env_url = std::env::var("ANTIGRAVITY_BASE_URL").ok();
 
     let ag_models = vec![
+        "kr/auto".to_string(),
+        "kr/claude-sonnet-4.5".to_string(),
         "ag/gemini-3.8-flash-high".to_string(),
         "ag/gemini-3.8-flash".to_string(),
         "ag/gemini-3.8-flash-medium".to_string(),
@@ -538,11 +544,19 @@ fn scan_opencode() -> Option<DetectedSource> {
         .map(|m| m.keys().cloned().collect())
         .unwrap_or_default();
 
-    let models = if !detected_models.is_empty() {
+    let mut models = if !detected_models.is_empty() {
         detected_models
     } else {
         vec!["opencode/glm-5.3-flash-free".to_string()]
     };
+    if base_url.contains("20130") || base_url.contains("9router") {
+        if !models.contains(&"kr/auto".to_string()) {
+            models.insert(0, "kr/auto".to_string());
+        }
+        if !models.contains(&"kr/claude-sonnet-4.5".to_string()) {
+            models.insert(1, "kr/claude-sonnet-4.5".to_string());
+        }
+    }
     let first_model = models.first().cloned();
 
     Some(DetectedSource {

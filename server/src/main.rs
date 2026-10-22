@@ -917,74 +917,78 @@ async fn generate_llm_theme(
         font_guide
     );
 
-    let raw_text = match settings.provider.as_str() {
-        PROVIDER_OPENAI => {
-            let base = settings.openai.base_url.trim().trim_end_matches('/');
-            let model = settings.openai.model.trim();
-            if base.is_empty() || model.is_empty() {
-                return Err("OpenAI provider unconfigured".to_string());
-            }
-            let key = settings.openai_key();
+    let candidates = providers::resolve_candidates(settings);
+    let mut raw_text = String::new();
+
+    for candidate in &candidates {
+        if candidate.provider == PROVIDER_OPENAI && !candidate.base_url.is_empty() {
             let body = json!({
-                "model": model,
+                "model": candidate.model,
                 "temperature": 0.5,
                 "messages": [
                     { "role": "system", "content": system_instructions },
                     { "role": "user", "content": format!("Theme Prompt: {prompt}") }
                 ]
             });
-            let mut req = client.post(format!("{base}/chat/completions")).json(&body);
-            if !key.is_empty() {
-                req = req.bearer_auth(key);
+            let mut req = client
+                .post(format!("{}/chat/completions", candidate.base_url))
+                .json(&body);
+            if !candidate.api_key.is_empty() {
+                req = req.bearer_auth(&candidate.api_key);
             }
-            let resp = req.send().await.map_err(|e| e.to_string())?;
-            if !resp.status().is_success() {
-                return Err(format!("OpenAI returned status {}", resp.status()));
+            if let Ok(resp) = req.send().await {
+                if resp.status().is_success() {
+                    if let Ok(res_json) = resp.json::<serde_json::Value>().await {
+                        let content = res_json["choices"][0]["message"]["content"]
+                            .as_str()
+                            .unwrap_or_default()
+                            .to_string();
+                        if !content.trim().is_empty() {
+                            raw_text = content;
+                            break;
+                        }
+                    }
+                }
             }
-            let res_json: serde_json::Value = resp.json().await.map_err(|e| e.to_string())?;
-            res_json["choices"][0]["message"]["content"]
-                .as_str()
-                .unwrap_or_default()
-                .to_string()
-        }
-        PROVIDER_ANTHROPIC => {
-            let base = settings.anthropic.base_url.trim().trim_end_matches('/');
-            let model = if settings.anthropic.model.trim().is_empty() {
-                "claude-opus-4-6"
-            } else {
-                settings.anthropic.model.trim()
-            };
-            let key = settings.anthropic_key();
-            if key.is_empty() {
-                return Err("Anthropic API key missing".to_string());
-            }
+        } else if candidate.provider == PROVIDER_ANTHROPIC
+            && !candidate.base_url.is_empty()
+            && !candidate.api_key.is_empty()
+        {
             let body = json!({
-                "model": model,
+                "model": candidate.model,
                 "max_tokens": 1024,
                 "system": system_instructions,
                 "messages": [
                     { "role": "user", "content": format!("Theme Prompt: {prompt}") }
                 ]
             });
-            let resp = client
-                .post(format!("{base}/v1/messages"))
-                .header("x-api-key", key.trim())
+            if let Ok(resp) = client
+                .post(format!("{}/v1/messages", candidate.base_url))
+                .header("x-api-key", candidate.api_key.trim())
                 .header("anthropic-version", "2023-06-01")
                 .json(&body)
                 .send()
                 .await
-                .map_err(|e| e.to_string())?;
-            if !resp.status().is_success() {
-                return Err(format!("Anthropic returned status {}", resp.status()));
+            {
+                if resp.status().is_success() {
+                    if let Ok(res_json) = resp.json::<serde_json::Value>().await {
+                        let text = res_json["content"][0]["text"]
+                            .as_str()
+                            .unwrap_or_default()
+                            .to_string();
+                        if !text.trim().is_empty() {
+                            raw_text = text;
+                            break;
+                        }
+                    }
+                }
             }
-            let res_json: serde_json::Value = resp.json().await.map_err(|e| e.to_string())?;
-            res_json["content"][0]["text"]
-                .as_str()
-                .unwrap_or_default()
-                .to_string()
         }
-        _ => return Err("Unsupported provider for theme generation".to_string()),
-    };
+    }
+
+    if raw_text.is_empty() {
+        return Err("No LLM provider available for theme generation".to_string());
+    }
 
     // Clean any markdown code blocks if the model wrapped it
     let clean_json = raw_text
@@ -1275,6 +1279,23 @@ fn html_escape(s: &str) -> String {
         .replace('\'', "&#39;")
 }
 
+fn slide_header_html(badge: &str, title: &str, subtitle: &str) -> String {
+    let sub_html = if !subtitle.trim().is_empty() {
+        format!("\n            <p class=\"s-sub body-text\">{}</p>", html_escape(subtitle))
+    } else {
+        String::new()
+    };
+    format!(
+        r#"        <header class="s-head">
+            <div class="s-kicker category-badge"><span class="k-dot"></span><span class="k-txt">{}</span></div>
+            <h2 class="s-title display-title">{}</h2>{}
+        </header>"#,
+        html_escape(badge),
+        html_escape(title),
+        sub_html
+    )
+}
+
 fn render_slide_html(
     badge: &str,
     title: &str,
@@ -1288,6 +1309,7 @@ fn render_slide_html(
     } else {
         String::new()
     };
+    let head = slide_header_html(badge, title, subtitle);
 
     match layout {
         "bento" => {
@@ -1295,26 +1317,18 @@ fn render_slide_html(
             for (i, item) in items.iter().enumerate() {
                 let extra_cls = if i == 0 { " bento-hero" } else { "" };
                 cards_html.push_str(&format!(
-                    "        <div class=\"card{}\"><p>{}</p></div>\n",
-                    extra_cls,
+                    "                <div class=\"card{extra_cls}\"><p>{}</p></div>\n",
                     html_escape(item)
                 ));
             }
             format!(
                 r#"    <section class="slide" data-layout="bento"{notes_attr}>
-        <div class="slide-content">
-            <span class="category-badge">{badge}</span>
-            <h2 class="display-title">{title}</h2>
-            <p class="body-text">{subtitle}</p>
+        <div class="s-wrap slide-content">
+{head}
             <div class="cards-grid bento-grid">
 {cards_html}            </div>
         </div>
-    </section>"#,
-                badge = html_escape(badge),
-                title = html_escape(title),
-                subtitle = html_escape(subtitle),
-                notes_attr = notes_attr,
-                cards_html = cards_html
+    </section>"#
             )
         }
         "stats" => {
@@ -1329,7 +1343,8 @@ fn render_slide_html(
                     if parts.len() >= 2
                         && (parts[0].starts_with('+')
                             || parts[0].ends_with('%')
-                            || parts[0].chars().any(|c| c.is_ascii_digit()))
+                            || parts[0].contains('٪')
+                            || parts[0].chars().any(|c| c.is_ascii_digit() || ('\u{06F0}'..='\u{06F9}').contains(&c)))
                     {
                         (parts[0], item[parts[0].len()..].trim())
                     } else {
@@ -1347,87 +1362,64 @@ fn render_slide_html(
                     label.trim().to_string()
                 };
                 stats_html.push_str(&format!(
-                    r#"        <div class="card stat-card">
-            <div class="stat-val">{}</div>
-            <div class="stat-label">{}</div>
-        </div>
-"#,
+                    r#"                <div class="card stat-card">
+                    <div class="stat-val">{}</div>
+                    <div class="stat-label">{}</div>
+                </div>\n"#,
                     html_escape(&display_val),
                     html_escape(&display_lbl)
                 ));
             }
             format!(
                 r#"    <section class="slide" data-layout="stats"{notes_attr}>
-        <div class="slide-content">
-            <span class="category-badge">{badge}</span>
-            <h2 class="display-title">{title}</h2>
-            <p class="body-text">{subtitle}</p>
-            <div class="stats-grid">
+        <div class="s-wrap slide-content">
+{head}
+            <div class="cards-grid stats-grid">
 {stats_html}            </div>
         </div>
-    </section>"#,
-                badge = html_escape(badge),
-                title = html_escape(title),
-                subtitle = html_escape(subtitle),
-                notes_attr = notes_attr,
-                stats_html = stats_html
+    </section>"#
             )
         }
         "split" => {
             let mut cards_html = String::new();
             for item in items {
                 cards_html.push_str(&format!(
-                    "            <div class=\"card\"><p>{}</p></div>\n",
+                    "                <div class=\"card\"><p>{}</p></div>\n",
                     html_escape(item)
                 ));
             }
             format!(
                 r#"    <section class="slide" data-layout="split"{notes_attr}>
-        <div class="slide-content split-grid">
+        <div class="s-wrap slide-content split-grid split-2">
             <div class="split-col-text">
-                <span class="category-badge">{badge}</span>
-                <h2 class="display-title">{title}</h2>
-                <p class="body-text">{subtitle}</p>
+{head}
             </div>
-            <div class="split-col-cards">
+            <div class="split-col-cards cards-grid">
 {cards_html}            </div>
         </div>
-    </section>"#,
-                badge = html_escape(badge),
-                title = html_escape(title),
-                subtitle = html_escape(subtitle),
-                notes_attr = notes_attr,
-                cards_html = cards_html
+    </section>"#
             )
         }
         "timeline" => {
             let mut steps_html = String::new();
             for (i, item) in items.iter().enumerate() {
                 steps_html.push_str(&format!(
-                    r#"        <div class="timeline-step">
-            <div class="step-num">{:02}</div>
-            <div class="step-body"><p>{}</p></div>
-        </div>
-"#,
+                    r#"                <div class="timeline-step">
+                    <div class="step-num">{:02}</div>
+                    <div class="step-body"><p>{}</p></div>
+                </div>\n"#,
                     i + 1,
                     html_escape(item)
                 ));
             }
             format!(
                 r#"    <section class="slide" data-layout="timeline"{notes_attr}>
-        <div class="slide-content">
-            <span class="category-badge">{badge}</span>
-            <h2 class="display-title">{title}</h2>
-            <p class="body-text">{subtitle}</p>
+        <div class="s-wrap slide-content">
+{head}
             <div class="timeline-steps">
 {steps_html}            </div>
         </div>
-    </section>"#,
-                badge = html_escape(badge),
-                title = html_escape(title),
-                subtitle = html_escape(subtitle),
-                notes_attr = notes_attr,
-                steps_html = steps_html
+    </section>"#
             )
         }
         "comparison" => {
@@ -1439,55 +1431,232 @@ fn render_slide_html(
                     "گزینه دوم / After"
                 };
                 cards_html.push_str(&format!(
-                    r#"        <div class="card comparison-col">
-            <div class="comparison-tag">{}</div>
-            <p>{}</p>
-        </div>
-"#,
+                    r#"                <div class="card comparison-col">
+                    <div class="comparison-tag">{}</div>
+                    <p>{}</p>
+                </div>\n"#,
                     tag,
                     html_escape(item)
                 ));
             }
             format!(
                 r#"    <section class="slide" data-layout="comparison"{notes_attr}>
-        <div class="slide-content">
-            <span class="category-badge">{badge}</span>
-            <h2 class="display-title">{title}</h2>
-            <p class="body-text">{subtitle}</p>
-            <div class="comparison-grid">
+        <div class="s-wrap slide-content">
+{head}
+            <div class="cards-grid split-grid split-2">
 {cards_html}            </div>
         </div>
-    </section>"#,
-                badge = html_escape(badge),
-                title = html_escape(title),
-                subtitle = html_escape(subtitle),
-                notes_attr = notes_attr,
-                cards_html = cards_html
+    </section>"#
+            )
+        }
+        "chart_bar" => {
+            let default_data = [
+                ("فاز اول / تحول معماری", 85, "+85%"),
+                ("فاز دوم / مقیاس‌پذیری", 65, "65k req/s"),
+                ("فاز سوم / یکپارچگی AI", 95, "99.4%"),
+                ("فاز چهارم / توسعه بازار", 45, "4.8x"),
+            ];
+            let mut bars_html = String::new();
+            for (i, item) in items.iter().enumerate() {
+                let (label, pct, val) = if let Some(def) = default_data.get(i) {
+                    let lbl = if item.trim().is_empty() { def.0 } else { item.as_str() };
+                    (lbl, def.1, def.2)
+                } else {
+                    (item.as_str(), 60 + (i as i32 * 10) % 35, "+40%")
+                };
+                let delay = i as f64 * 0.12;
+                bars_html.push_str(&format!(
+                    r#"                <div class="zd-bar-item" style="animation-delay: {delay:.2}s">
+                    <span class="zd-bar-val">{val}</span>
+                    <div class="zd-bar-track">
+                        <div class="zd-bar-fill" style="height: {pct}%;"></div>
+                    </div>
+                    <div class="zd-bar-label">{label}</div>
+                </div>\n"#,
+                    delay = delay,
+                    pct = pct,
+                    val = val,
+                    label = html_escape(label)
+                ));
+            }
+            if bars_html.is_empty() {
+                for (i, def) in default_data.iter().enumerate() {
+                    let delay = i as f64 * 0.12;
+                    bars_html.push_str(&format!(
+                        r#"                <div class="zd-bar-item" style="animation-delay: {delay:.2}s">
+                    <span class="zd-bar-val">{val}</span>
+                    <div class="zd-bar-track">
+                        <div class="zd-bar-fill" style="height: {pct}%;"></div>
+                    </div>
+                    <div class="zd-bar-label">{label}</div>
+                </div>\n"#,
+                        delay = delay,
+                        pct = def.1,
+                        val = def.2,
+                        label = def.0
+                    ));
+                }
+            }
+            format!(
+                r#"    <section class="slide" data-layout="chart_bar"{notes_attr}>
+        <div class="s-wrap slide-content">
+{head}
+            <div class="zd-chart-container zd-chart-bar-wrap">
+                <div class="zd-bars-grid">
+{bars_html}                </div>
+            </div>
+        </div>
+    </section>"#
+            )
+        }
+        "chart_donut" => {
+            let default_slices = [
+                ("سهم فناوری‌های نوین", "45%", "#6366f1", "141.3 172.7", "0"),
+                ("بهینه‌سازی هزینه و انرژی", "30%", "#10b981", "94.2 219.8", "-141.3"),
+                ("سرعت و چابکی تیم", "25%", "#f59e0b", "78.5 235.5", "-235.5"),
+            ];
+            let mut legend_html = String::new();
+            for (i, def) in default_slices.iter().enumerate() {
+                let lbl = items.get(i).map(|s| s.as_str()).unwrap_or(def.0);
+                legend_html.push_str(&format!(
+                    r#"                    <div class="zd-donut-legend-item">
+                        <span class="zd-donut-dot" style="background: {color};"></span>
+                        <span class="zd-donut-legend-lbl">{lbl}</span>
+                        <span class="zd-donut-legend-val">{val}</span>
+                    </div>\n"#,
+                    color = def.2,
+                    lbl = html_escape(lbl),
+                    val = def.1
+                ));
+            }
+            format!(
+                r##"    <section class="slide" data-layout="chart_donut"{notes_attr}>
+        <div class="s-wrap slide-content split-grid split-2">
+            <div class="split-col-text">
+{head}
+                <div class="zd-donut-legend">
+{legend_html}                </div>
+            </div>
+            <div class="zd-donut-chart-col">
+                <div class="zd-donut-svg-wrap">
+                    <svg viewBox="0 0 120 120" class="zd-donut-svg">
+                        <circle cx="60" cy="60" r="50" class="track-c"></circle>
+                        <circle cx="60" cy="60" r="50" class="seg-a" stroke="#6366f1" stroke-dasharray="141.3 172.7" stroke-dashoffset="0"></circle>
+                        <circle cx="60" cy="60" r="50" class="seg-b" stroke="#10b981" stroke-dasharray="94.2 219.8" stroke-dashoffset="-141.3"></circle>
+                    </svg>
+                    <div class="zd-donut-center-stat">
+                        <div class="zd-donut-center-num">100%</div>
+                        <div class="zd-donut-center-lbl">توزیع منابع</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>"##
+            )
+        }
+        "chart_trend" => {
+            let mut cards_html = String::new();
+            for (i, item) in items.iter().take(3).enumerate() {
+                let delta = if i == 0 { "+140%" } else if i == 1 { "+85%" } else { "3.2x" };
+                cards_html.push_str(&format!(
+                    r#"                <div class="card zd-trend-mini-stat">
+                    <div class="stat-val">{}</div>
+                    <div class="stat-label">{}</div>
+                </div>\n"#,
+                    delta,
+                    html_escape(item)
+                ));
+            }
+            if cards_html.is_empty() {
+                cards_html = r#"                <div class="card zd-trend-mini-stat"><div class="stat-val">+140%</div><div class="stat-label">شتاب در بازدهی</div></div>
+                <div class="card zd-trend-mini-stat"><div class="stat-val">< 12ms</div><div class="stat-label">کاهش تاخیر پاسخ</div></div>
+                <div class="card zd-trend-mini-stat"><div class="stat-val">99.9%</div><div class="stat-label">قابلیت اتکا</div></div>\n"#.to_string();
+            }
+            format!(
+                r##"    <section class="slide" data-layout="chart_trend"{notes_attr}>
+        <div class="s-wrap slide-content">
+{head}
+            <div class="zd-trend-hero">
+                <div class="zd-trend-svg-wrap">
+                    <svg viewBox="0 0 600 180" class="zd-trend-svg" preserveAspectRatio="none">
+                        <defs>
+                            <linearGradient id="trendGrad" x1="0" y1="0" x2="0" y2="1">
+                                <stop offset="0%" stop-color="#06b6d4" stop-opacity="0.45"/>
+                                <stop offset="100%" stop-color="#06b6d4" stop-opacity="0.0"/>
+                            </linearGradient>
+                        </defs>
+                        <path d="M 0 160 Q 150 140 250 80 T 450 40 T 600 20 L 600 180 L 0 180 Z" fill="url(#trendGrad)" />
+                        <path d="M 0 160 Q 150 140 250 80 T 450 40 T 600 20" fill="none" stroke="#06b6d4" stroke-width="4" stroke-linecap="round" class="zd-trend-line" />
+                        <circle cx="250" cy="80" r="5" fill="#fff" stroke="#06b6d4" stroke-width="3" class="zd-trend-dot" />
+                        <circle cx="450" cy="40" r="5" fill="#fff" stroke="#10b981" stroke-width="3" class="zd-trend-dot" />
+                        <circle cx="600" cy="20" r="6" fill="#10b981" stroke="#fff" stroke-width="3" class="zd-trend-dot" />
+                    </svg>
+                </div>
+                <div class="zd-trend-stats-row cards-grid">
+{cards_html}                </div>
+            </div>
+        </div>
+    </section>"##
+            )
+        }
+        "roadmap" => {
+            let mut steps_html = String::new();
+            for (i, item) in items.iter().enumerate() {
+                let num = i + 1;
+                steps_html.push_str(&format!(
+                    r#"            <div class="zd-roadmap-node">
+                <div class="zd-roadmap-badge">Q0{}</div>
+                <div class="zd-roadmap-dot"></div>
+                <div class="card zd-roadmap-card"><div class="zd-roadmap-step-num">مرحله 0{}</div><p>{}</p></div>
+            </div>\n"#,
+                    num,
+                    num,
+                    html_escape(item)
+                ));
+            }
+            if steps_html.is_empty() {
+                steps_html = r#"            <div class="zd-roadmap-node">
+                <div class="zd-roadmap-badge">Q01</div>
+                <div class="zd-roadmap-dot"></div>
+                <div class="card zd-roadmap-card"><div class="zd-roadmap-step-num">مرحله 01</div><p>طراحی ساختار پایه و تدوین استانداردهای تجربه کاربری</p></div>
+            </div>
+            <div class="zd-roadmap-node">
+                <div class="zd-roadmap-badge">Q02</div>
+                <div class="zd-roadmap-dot"></div>
+                <div class="card zd-roadmap-card"><div class="zd-roadmap-step-num">مرحله 02</div><p>یکپارچه‌سازی ابزارهای هوش مصنوعی و خودکارسازی</p></div>
+            </div>
+            <div class="zd-roadmap-node">
+                <div class="zd-roadmap-badge">Q03</div>
+                <div class="zd-roadmap-dot"></div>
+                <div class="card zd-roadmap-card"><div class="zd-roadmap-step-num">مرحله 03</div><p>بهینه‌سازی تجربه کاربری و پرفورمنس موتور رندر</p></div>
+            </div>\n"#.to_string();
+            }
+            format!(
+                r#"    <section class="slide" data-layout="roadmap"{notes_attr}>
+        <div class="s-wrap slide-content">
+{head}
+            <div class="zd-roadmap-track">
+{steps_html}            </div>
+        </div>
+    </section>"#
             )
         }
         _ => {
             let mut cards_html = String::new();
             for item in items {
                 cards_html.push_str(&format!(
-                    "            <div class=\"card\"><p>{}</p></div>\n",
+                    "                <div class=\"card\"><p>{}</p></div>\n",
                     html_escape(item)
                 ));
             }
             format!(
                 r#"    <section class="slide" data-layout="grid"{notes_attr}>
-        <div class="slide-content">
-            <span class="category-badge">{badge}</span>
-            <h2 class="display-title">{title}</h2>
-            <p class="body-text">{subtitle}</p>
+        <div class="s-wrap slide-content">
+{head}
             <div class="cards-grid">
 {cards_html}            </div>
         </div>
-    </section>"#,
-                badge = html_escape(badge),
-                title = html_escape(title),
-                subtitle = html_escape(subtitle),
-                notes_attr = notes_attr,
-                cards_html = cards_html
+    </section>"#
             )
         }
     }
@@ -1609,9 +1778,9 @@ fn generate_algorithmic_slide_action(
                 }
             }
             let notes = if is_persian {
-                "هنگام ارائه این اسلاید، روی اعداد بزرگ مکث کنید تا بزرگی دستاورد در ذهن مخاطب نقش ببندد.".to_string()
+                "در این اسلاید، آمار و سنجه‌های عددی کلیدی را به زبان ساده برای حاضرین تشریح کنید.".to_string()
             } else {
-                "Pause on the big metrics to let the scale sink in before moving to the next topic.".to_string()
+                "Present these key metric data points to highlight measurable performance gains.".to_string()
             };
             (b, t, sub, list, notes)
         }
@@ -1703,10 +1872,9 @@ fn generate_algorithmic_slide_action(
             } else {
                 "CORE ARCHITECTURE".to_string()
             };
-            let t = if !instruction.is_empty() {
-                instruction.to_string()
-            } else if !curr_title.is_empty() {
-                format!("{} ✨", curr_title.trim_end_matches('✨').trim())
+            // CRITICAL: Never overwrite title with instruction text!
+            let t = if !curr_title.is_empty() {
+                curr_title.to_string()
             } else if is_persian {
                 "تحول و پایداری در مقیاس وسیع".to_string()
             } else {
@@ -1772,6 +1940,16 @@ fn generate_algorithmic_slide_action(
     }
 }
 
+fn extract_json_object(text: &str) -> Option<&str> {
+    let start = text.find('{')?;
+    let end = text.rfind('}')?;
+    if end >= start {
+        Some(&text[start..=end])
+    } else {
+        None
+    }
+}
+
 async fn generate_llm_slide_action(
     client: &reqwest::Client,
     settings: &Settings,
@@ -1790,111 +1968,109 @@ async fn generate_llm_slide_action(
         .any(|c| ('\u{0600}'..='\u{06FF}').contains(&c));
 
     let lang_guide = if is_persian {
-        "All generated output (badge, title, subtitle, items, speaker_notes) MUST be in natural, elegant Persian (فارسی)."
+        "All generated output (badge, title, subtitle, items, speaker_notes) MUST be in natural, fluent, elegant Persian (فارسی). Maintain professional tone and high readability."
     } else {
         "Write in concise, professional, keynote-ready English."
     };
 
     let system_instructions = format!(
-        "You are ZenSlides AI, an elite executive presentation designer and speech coach.\n\
-        {lang_guide}\n\
-        You transform or generate slide content based on user instructions and actions.\n\
-        You MUST respond with valid JSON ONLY (no markdown formatting, no code fences, no chat text).\n\
-        The JSON schema MUST be:\n\
-        {{\n\
-          \"badge\": \"short uppercase category or tag (2-4 words)\",\n\
-          \"title\": \"punchy, memorable slide title\",\n\
-          \"subtitle\": \"crisp 1-2 sentence explanatory text\",\n\
-          \"items\": [\"Key card or bullet point 1\", \"Key card or bullet point 2\", ...],\n\
-          \"speaker_notes\": \"Conversational, natural talking points for the presenter to say out loud while showing this slide\"\n\
-        }}"
+        "You are ZenSlides AI, an elite keynote presentation designer and speech coach.\n        {lang_guide}\n        The user wants to revise or generate a slide based on an instruction or action.\n        RULES:\n        1. CRITICAL: NEVER set the user's instruction text itself as the slide title! The instruction is a prompt command (e.g. \"summarize this\", \"make it punchy\", \"convert to numbers\"). The title must always be an actual meaningful headline for the slide topic.\n        2. Intelligently apply the user's instruction to rewrite/update the title, badge, subtitle, items, and speaker_notes.\n        3. You MUST reply with valid JSON ONLY. No markdown fences, no explanatory text, no greeting.\n        JSON schema:\n        {{\n          \"badge\": \"short uppercase category or kicker (1-3 words)\",\n          \"title\": \"concise, impactful slide title (5-10 words)\",\n          \"subtitle\": \"crisp 1-2 sentence explanatory subheadline\",\n          \"items\": [\"Key card or bullet point 1\", \"Key card or bullet point 2\", \"Key card or bullet point 3\"],\n          \"speaker_notes\": \"Natural speech talking points for the presenter to say out loud while showing this slide\"\n        }}"
     );
 
     let user_msg = format!(
-        "Action: {action}\n\
-        User Instruction: {instruction}\n\
-        Current Badge: {badge}\n\
-        Current Title: {title}\n\
-        Current Subtitle: {subtitle}\n\
-        Current Items: {items:?}\n\
-        Target Layout: {target_layout}"
+        "Action: {action}\n        User Instruction: {instruction}\n        Current Badge: {badge}\n        Current Title: {title}\n        Current Subtitle: {subtitle}\n        Current Items: {items:?}\n        Target Layout: {target_layout}"
     );
 
-    let raw_text = match settings.provider.as_str() {
-        PROVIDER_OPENAI => {
-            let base = settings.openai.base_url.trim().trim_end_matches('/');
-            let model = settings.openai.model.trim();
-            if base.is_empty() || model.is_empty() {
-                return Err("OpenAI provider unconfigured".to_string());
-            }
-            let key = settings.openai_key();
+    // Try all candidates dynamically (handles active model, router failover, detected sources)
+    let candidates = providers::resolve_candidates(settings);
+    let mut raw_text = String::new();
+
+    for candidate in &candidates {
+        if candidate.provider == PROVIDER_OPENAI && !candidate.base_url.is_empty() {
             let body = json!({
-                "model": model,
-                "temperature": 0.6,
+                "model": candidate.model,
+                "temperature": 0.5,
                 "messages": [
-                    { "role": "system", "content": system_instructions },
-                    { "role": "user", "content": user_msg }
+                    { "role": "system", "content": &system_instructions },
+                    { "role": "user", "content": &user_msg }
                 ]
             });
-            let mut req = client.post(format!("{base}/chat/completions")).json(&body);
-            if !key.is_empty() {
-                req = req.bearer_auth(key);
+            let mut req = client
+                .post(format!("{}/chat/completions", candidate.base_url))
+                .json(&body);
+            if !candidate.api_key.is_empty() {
+                req = req.bearer_auth(&candidate.api_key);
             }
-            let resp = req.send().await.map_err(|e| e.to_string())?;
-            if !resp.status().is_success() {
-                return Err(format!("OpenAI returned status {}", resp.status()));
+            if let Ok(resp) = req.send().await {
+                if resp.status().is_success() {
+                    if let Ok(res_json) = resp.json::<serde_json::Value>().await {
+                        let content = res_json["choices"][0]["message"]["content"]
+                            .as_str()
+                            .unwrap_or_default()
+                            .to_string();
+                        if !content.trim().is_empty() {
+                            info!(
+                                "Slide action succeeded with candidate {} ({})",
+                                candidate.model, candidate.description
+                            );
+                            raw_text = content;
+                            break;
+                        }
+                    }
+                } else {
+                    warn!(
+                        "Slide action candidate {} returned status {}",
+                        candidate.model,
+                        resp.status()
+                    );
+                }
             }
-            let res_json: serde_json::Value = resp.json().await.map_err(|e| e.to_string())?;
-            res_json["choices"][0]["message"]["content"]
-                .as_str()
-                .unwrap_or_default()
-                .to_string()
-        }
-        PROVIDER_ANTHROPIC => {
-            let base = settings.anthropic.base_url.trim().trim_end_matches('/');
-            let model = if settings.anthropic.model.trim().is_empty() {
-                "claude-opus-4-6"
-            } else {
-                settings.anthropic.model.trim()
-            };
-            let key = settings.anthropic_key();
-            if key.is_empty() {
-                return Err("Anthropic API key missing".to_string());
-            }
+        } else if candidate.provider == PROVIDER_ANTHROPIC
+            && !candidate.base_url.is_empty()
+            && !candidate.api_key.is_empty()
+        {
             let body = json!({
-                "model": model,
+                "model": candidate.model,
                 "max_tokens": 1500,
-                "system": system_instructions,
+                "system": &system_instructions,
                 "messages": [
-                    { "role": "user", "content": user_msg }
+                    { "role": "user", "content": &user_msg }
                 ]
             });
-            let resp = client
-                .post(format!("{base}/v1/messages"))
-                .header("x-api-key", key.trim())
+            if let Ok(resp) = client
+                .post(format!("{}/v1/messages", candidate.base_url))
+                .header("x-api-key", candidate.api_key.trim())
                 .header("anthropic-version", "2023-06-01")
                 .json(&body)
                 .send()
                 .await
-                .map_err(|e| e.to_string())?;
-            if !resp.status().is_success() {
-                return Err(format!("Anthropic returned status {}", resp.status()));
+            {
+                if resp.status().is_success() {
+                    if let Ok(res_json) = resp.json::<serde_json::Value>().await {
+                        let text = res_json["content"][0]["text"]
+                            .as_str()
+                            .unwrap_or_default()
+                            .to_string();
+                        if !text.trim().is_empty() {
+                            info!(
+                                "Slide action succeeded with Anthropic candidate {}",
+                                candidate.model
+                            );
+                            raw_text = text;
+                            break;
+                        }
+                    }
+                }
             }
-            let res_json: serde_json::Value = resp.json().await.map_err(|e| e.to_string())?;
-            res_json["content"][0]["text"]
-                .as_str()
-                .unwrap_or_default()
-                .to_string()
         }
-        _ => return Err("Unsupported provider for slide AI".to_string()),
-    };
+    }
 
-    let clean_json = raw_text
-        .trim()
-        .trim_start_matches("```json")
-        .trim_start_matches("```")
-        .trim_end_matches("```")
-        .trim();
+    if raw_text.is_empty() {
+        return Err("No response received from any available LLM provider".to_string());
+    }
+
+    let json_str = extract_json_object(&raw_text)
+        .ok_or_else(|| "Failed to locate JSON object in model response".to_string())?;
 
     #[derive(Deserialize)]
     struct LlmSlideOut {
@@ -1910,7 +2086,7 @@ async fn generate_llm_slide_action(
         speaker_notes: String,
     }
 
-    let parsed: LlmSlideOut = serde_json::from_str(clean_json).map_err(|e| e.to_string())?;
+    let parsed: LlmSlideOut = serde_json::from_str(json_str).map_err(|e| format!("JSON parse error: {e}"))?;
     let layout = if !target_layout.is_empty() {
         target_layout.to_string()
     } else {
@@ -1943,14 +2119,17 @@ async fn slide_ai_action(
 ) -> impl IntoResponse {
     let settings = state.settings.read().await.clone();
 
-    // If an LLM provider is configured, try calling it
-    if settings.provider == PROVIDER_OPENAI || settings.provider == PROVIDER_ANTHROPIC {
-        if let Ok(result) = generate_llm_slide_action(&state.http, &settings, &payload).await {
+    // Try calling LLM first
+    match generate_llm_slide_action(&state.http, &settings, &payload).await {
+        Ok(result) => {
             info!(
-                "Processed slide AI action '{}' via LLM ({})",
-                payload.action, settings.provider
+                "Successfully processed slide AI action '{}' via LLM",
+                payload.action
             );
             return Json(result).into_response();
+        }
+        Err(err) => {
+            warn!("LLM slide action fell back to algorithmic: {err}");
         }
     }
 
@@ -1967,9 +2146,38 @@ async fn slide_ai_action(
     Json(result).into_response()
 }
 
+
+
+fn detect_artifact_mode(html: &str) -> &'static str {
+    if html.contains("class=\"slide")
+        || html.contains("class='slide")
+        || html.contains("<section class=\"slide")
+        || html.contains("deck-controls")
+        || html.contains("Mode: slides")
+        || html.contains("slides-deck")
+    {
+        "slides"
+    } else if html.contains("motion-canvas")
+        || html.contains("motion-artboard")
+        || html.contains("Mode: motion")
+    {
+        "motion"
+    } else {
+        "prototype"
+    }
+}
+
 async fn get_history(State(state): State<AppState>) -> impl IntoResponse {
     let items = history::load_history(&state.workspace);
-    Json(json!({ "items": items })).into_response()
+    let index_path = state.workspace.join("index.html");
+    let current_mode = if let Ok(html) = std::fs::read_to_string(&index_path) {
+        detect_artifact_mode(&html)
+    } else if let Some(first) = items.first() {
+        &first.mode
+    } else {
+        "slides"
+    };
+    Json(json!({ "items": items, "current_mode": current_mode })).into_response()
 }
 
 #[derive(Deserialize)]
@@ -2065,11 +2273,14 @@ struct SaveArtifactPayload {
 async fn get_artifact(State(state): State<AppState>) -> impl IntoResponse {
     let index_path = state.workspace.join("index.html");
     match std::fs::read_to_string(&index_path) {
-        Ok(html) => (
-            StatusCode::OK,
-            Json(json!({ "status": "ok", "html": html })),
-        )
-            .into_response(),
+        Ok(html) => {
+            let mode = detect_artifact_mode(&html);
+            (
+                StatusCode::OK,
+                Json(json!({ "status": "ok", "html": html, "mode": mode })),
+            )
+                .into_response()
+        }
         Err(err) => (
             StatusCode::NOT_FOUND,
             Json(json!({ "status": "error", "message": err.to_string() })),
