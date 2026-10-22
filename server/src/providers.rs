@@ -7,13 +7,16 @@
 //!   streaming. This covers 9Router (`ag/*` Antigravity models, `kr/*` Claude,
 //!   DeepSeek, GLM…), OpenRouter, Ollama, LM Studio, vLLM and OpenAI itself.
 //! * `anthropic` — the native Messages API with SSE streaming.
-//! * `opencode`  — drives the local `opencode` CLI in `workspace/`, so the
-//!   agent, its tools and its configured models (including 9Router) do the work.
+//! * `opencode`  — reads `opencode.json` and calls its OpenAI-compatible
+//!   endpoint directly (the 9Router approach), or uses OpenCode's public free
+//!   lane. No OpenCode app or CLI is required; the CLI is only an optional
+//!   fallback when no endpoint exists.
 
 use std::collections::HashMap;
 use std::path::Path;
 use std::process::Stdio;
-use std::time::{Duration, Instant, SystemTime};
+use std::sync::OnceLock;
+use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
 use futures_util::StreamExt;
 use serde_json::{json, Value};
@@ -25,6 +28,7 @@ use tracing::{info, warn};
 use crate::agent::AgentEvent;
 use crate::settings::{
     Settings, PROVIDER_ANTHROPIC, PROVIDER_AUTO, PROVIDER_OPENAI, PROVIDER_OPENCODE,
+    PROVIDER_OPENCODE_FREE,
 };
 
 /// Result of a provider run: either raw model text (the orchestrator extracts
@@ -73,18 +77,16 @@ pub fn resolve_candidates(settings: &Settings) -> Vec<ModelCandidate> {
         let key = settings.openai_key();
         let model = settings.openai.model.trim();
         if !base.is_empty() {
-            let m = if model.is_empty() || model == "auto" {
+            let m = if crate::detector::is_opencode_free_endpoint(base)
+                && (model.is_empty() || model == "auto")
+            {
+                crate::detector::OPENCODE_FREE_DEFAULT_MODEL
+            } else if model.is_empty() || model == "auto" {
                 "kr/auto"
             } else {
                 model
             };
             add(PROVIDER_OPENAI, base, m, &key, "Active OpenAI Profile");
-            if base.contains("20130") || base.contains("9router") || base.contains("antigravity") {
-                add(PROVIDER_OPENAI, base, "kr/auto", &key, "Router Auto-Model");
-                add(PROVIDER_OPENAI, base, "kr/claude-sonnet-4.5", &key, "Router Claude Sonnet 4.5");
-                add(PROVIDER_OPENAI, base, "ag/gemini-3.8-flash-high", &key, "Router Gemini 3.8 Flash High");
-                add(PROVIDER_OPENAI, base, "kr/deepseek-3.2", &key, "Router DeepSeek 3.2");
-            }
         }
     } else if prov == PROVIDER_ANTHROPIC {
         let base = settings.anthropic.base_url.trim();
@@ -95,8 +97,81 @@ pub fn resolve_candidates(settings: &Settings) -> Vec<ModelCandidate> {
             settings.anthropic.model.trim()
         };
         if !base.is_empty() && !key.is_empty() {
-            add(PROVIDER_ANTHROPIC, base, model, &key, "Active Anthropic Profile");
+            add(
+                PROVIDER_ANTHROPIC,
+                base,
+                model,
+                &key,
+                "Active Anthropic Profile",
+            );
         }
+    } else if prov == PROVIDER_OPENCODE {
+        // OpenCode is a config/HTTP client, not a required binary. Use the
+        // endpoint + model from Settings, falling back to opencode.json.
+        let config = crate::detector::read_opencode_endpoint().ok();
+        let profile = &settings.opencode;
+        let mut base = if !profile.base_url.trim().is_empty() {
+            profile.base_url.trim().to_string()
+        } else {
+            config
+                .as_ref()
+                .map(|endpoint| endpoint.base_url.clone())
+                .unwrap_or_default()
+        };
+        let mut key = if !profile.api_key.trim().is_empty() {
+            profile.api_key.clone()
+        } else {
+            config
+                .as_ref()
+                .map(|endpoint| endpoint.api_key.clone())
+                .unwrap_or_default()
+        };
+        let mut model = if !profile.model.trim().is_empty() && profile.model != "auto" {
+            profile.model.trim().to_string()
+        } else {
+            config
+                .as_ref()
+                .and_then(|endpoint| endpoint.models.first().cloned())
+                .unwrap_or_default()
+        };
+
+        // No local opencode.json? Use the public free lane, which needs no
+        // app, CLI, or API key. This mirrors 9Router's "OpenCode Free".
+        if base.is_empty() {
+            base = crate::detector::OPENCODE_FREE_BASE_URL.to_string();
+            key.clear();
+            if model.is_empty() {
+                model = crate::detector::OPENCODE_FREE_DEFAULT_MODEL.to_string();
+            }
+        }
+
+        if !base.is_empty() && !model.is_empty() {
+            let description = if crate::detector::is_opencode_free_endpoint(&base) {
+                "OpenCode Free (public, no key)"
+            } else {
+                "OpenCode config (HTTP)"
+            };
+            add(PROVIDER_OPENAI, &base, &model, &key, description);
+        }
+    }
+
+    // The free lane is a self-contained public provider. If the user picked it,
+    // fail over between its own models instead of silently sending the prompt
+    // to unrelated local agents/configs on the machine (which may be offline or
+    // rate-limited). The selected model stays first.
+    let free_lane = prov == PROVIDER_OPENAI
+        && crate::detector::is_opencode_free_endpoint(&settings.openai.base_url);
+    if free_lane {
+        for model in crate::detector::OPENCODE_FREE_FALLBACK_MODELS {
+            add(
+                PROVIDER_OPENAI,
+                crate::detector::OPENCODE_FREE_BASE_URL,
+                model,
+                "",
+                "OpenCode Free fallback",
+            );
+        }
+        return candidates;
     }
 
     // 2. Scan all locally detected tools and credentials
@@ -107,29 +182,35 @@ pub fn resolve_candidates(settings: &Settings) -> Vec<ModelCandidate> {
         }
         if let Ok(res) = crate::detector::resolve_source(&src.id) {
             let desc = format!("Detected: {}", src.name);
-            let first_m = res.model.as_deref().unwrap_or("kr/auto");
-            add(&res.provider, &res.base_url, first_m, &res.api_key, &desc);
-
-            for m in &src.models {
-                add(&res.provider, &res.base_url, m, &res.api_key, &format!("{} ({})", src.name, m));
+            if let Some(first_m) = res.model.as_deref() {
+                add(&res.provider, &res.base_url, first_m, &res.api_key, &desc);
             }
 
-            if res.base_url.contains("20130") || res.base_url.contains("9router") {
-                add(&res.provider, &res.base_url, "kr/auto", &res.api_key, "Router Auto-Model");
-                add(&res.provider, &res.base_url, "kr/claude-sonnet-4.5", &res.api_key, "Router Claude Sonnet 4.5");
-                add(&res.provider, &res.base_url, "ag/gemini-3.8-flash-high", &res.api_key, "Router Gemini 3.8 Flash High");
+            for m in &src.models {
+                add(
+                    &res.provider,
+                    &res.base_url,
+                    m,
+                    &res.api_key,
+                    &format!("{} ({})", src.name, m),
+                );
             }
         }
     }
 
-    // 3. Fallback OpenCode CLI
-    candidates.push(ModelCandidate {
-        provider: PROVIDER_OPENCODE.to_string(),
-        base_url: String::new(),
-        model: settings.opencode.model.clone(),
-        api_key: String::new(),
-        description: "OpenCode CLI local agent".to_string(),
-    });
+    // 3. Optional OpenCode CLI fallback. The config/HTTP path above is always
+    // preferred; the CLI is only considered when it is actually installed.
+    if (prov == PROVIDER_OPENCODE || prov == PROVIDER_AUTO)
+        && crate::detector::opencode_cli_available()
+    {
+        candidates.push(ModelCandidate {
+            provider: PROVIDER_OPENCODE.to_string(),
+            base_url: String::new(),
+            model: settings.opencode.model.clone(),
+            api_key: String::new(),
+            description: "OpenCode CLI local agent".to_string(),
+        });
+    }
 
     candidates
 }
@@ -244,10 +325,17 @@ pub async fn generate_with_images(
                     .map(Generated::Text)
             }
             PROVIDER_OPENCODE => {
-                if !images.is_empty() {
+                if !candidate.base_url.trim().is_empty() {
+                    // OpenCode config points at an OpenAI-compatible endpoint.
+                    // Talk to it directly: no CLI/app required.
+                    openai_generate_candidate(client, candidate, system, user, images, sender)
+                        .await
+                        .map(Generated::Text)
+                } else if !images.is_empty() {
                     continue;
+                } else {
+                    opencode_generate_candidate(candidate, system, user, sender, workspace).await
                 }
-                opencode_generate_candidate(candidate, system, user, sender, workspace).await
             }
             _ => continue,
         };
@@ -269,8 +357,33 @@ pub async fn generate_with_images(
     ))
 }
 
-/// List models for the settings dialog. OpenAI-compatible endpoints expose
-/// `/models`; Anthropic is a fixed list; OpenCode is asked directly.
+/// Run one non-agent completion for an already-resolved candidate. Used by the
+/// research/expansion pass so it follows the same URL, auth, streaming, and
+/// OpenCode Free fingerprint rules as normal generation instead of hard-coding
+/// an OpenAI `/chat/completions` path.
+pub(crate) async fn generate_text_once(
+    client: &reqwest::Client,
+    candidate: &ModelCandidate,
+    system: &str,
+    user: &str,
+) -> Result<String, String> {
+    let (sender, _receiver) = broadcast::channel(8);
+    match candidate.provider.as_str() {
+        PROVIDER_OPENAI if !candidate.base_url.trim().is_empty() => {
+            openai_generate_candidate(client, candidate, system, user, &[], &sender).await
+        }
+        PROVIDER_ANTHROPIC if !candidate.base_url.trim().is_empty() => {
+            anthropic_generate_candidate(client, candidate, system, user, &[], &sender).await
+        }
+        _ => Err("This candidate cannot run a plain HTTP completion.".to_string()),
+    }
+}
+
+/// List models for the settings dialog.
+///
+/// OpenAI-compatible endpoints expose `/models`; Anthropic is a fixed list.
+/// OpenCode is resolved from its config first (the 9Router/Ollama style
+/// endpoint), and only falls back to the CLI if no HTTP endpoint exists.
 pub async fn list_models(
     client: &reqwest::Client,
     settings: &Settings,
@@ -282,34 +395,13 @@ pub async fn list_models(
             if base.is_empty() {
                 return Err("Set a base URL first.".to_string());
             }
+            if crate::detector::is_opencode_free_endpoint(base) {
+                return fetch_opencode_free_models(client).await;
+            }
             let key = settings.openai_key();
-            let mut request = client.get(format!("{base}/models"));
-            if !key.is_empty() {
-                request = request.bearer_auth(&key);
-            }
-            let response = request.send().await;
-            let mut models: Vec<String> = Vec::new();
-
-            if let Ok(resp) = response {
-                if resp.status().is_success() {
-                    if let Ok(value) = resp.json::<Value>().await {
-                        if let Some(items) = value.get("data").and_then(Value::as_array) {
-                            for item in items {
-                                if let Some(id) = item.get("id").and_then(Value::as_str) {
-                                    models.push(id.to_string());
-                                }
-                            }
-                        } else if let Some(items) = value.get("models").and_then(Value::as_array) {
-                            for item in items {
-                                if let Some(name) = item.get("name").and_then(Value::as_str) {
-                                    let id = name.strip_prefix("models/").unwrap_or(name);
-                                    models.push(id.to_string());
-                                }
-                            }
-                        }
-                    }
-                }
-            }
+            let mut models = fetch_openai_models(client, base, &key)
+                .await
+                .unwrap_or_default();
 
             // Fallback for Google Gemini or Antigravity endpoints if endpoint didn't list models
             if models.is_empty() {
@@ -345,72 +437,383 @@ pub async fn list_models(
             "claude-haiku-4-5".to_string(),
         ]),
         PROVIDER_OPENCODE => {
-            let mut cmd = create_opencode_command();
-            cmd.arg("models");
-            let output = cmd.output().await;
-            let mut models: Vec<String> = match output {
-                Ok(out) if out.status.success() => {
-                    let stdout = String::from_utf8_lossy(&out.stdout);
-                    stdout
+            let config = crate::detector::read_opencode_endpoint().ok();
+            let explicit_base = settings.opencode.base_url.trim().trim_end_matches('/');
+            let base = if explicit_base.is_empty() {
+                config
+                    .as_ref()
+                    .map(|endpoint| endpoint.base_url.clone())
+                    .unwrap_or_default()
+            } else {
+                explicit_base.to_string()
+            };
+
+            // No local config means the public free lane is the default.
+            // A 9Router/Ollama config still wins when present.
+            if base.is_empty() || crate::detector::is_opencode_free_endpoint(&base) {
+                return fetch_opencode_free_models(client).await;
+            }
+
+            if !base.is_empty() {
+                let key = if !settings.opencode.api_key.trim().is_empty() {
+                    settings.opencode.api_key.trim().to_string()
+                } else {
+                    config
+                        .as_ref()
+                        .map(|endpoint| endpoint.api_key.clone())
+                        .unwrap_or_default()
+                };
+
+                // The config is authoritative and works even if /models is
+                // unavailable. Merge live model ids when the endpoint has them.
+                let mut models = config
+                    .as_ref()
+                    .map(|endpoint| endpoint.models.clone())
+                    .unwrap_or_default();
+                let live_error = match fetch_openai_models(client, &base, &key).await {
+                    Ok(mut live) => {
+                        models.append(&mut live);
+                        None
+                    }
+                    Err(error) => Some(error),
+                };
+                models.sort();
+                models.dedup();
+                prefer_opencode_model(&mut models);
+                if !models.is_empty() {
+                    return Ok(models);
+                }
+
+                let config_hint = config
+                    .as_ref()
+                    .map(|endpoint| endpoint.config_path.display().to_string())
+                    .unwrap_or_else(|| "~/.config/opencode/opencode.json".to_string());
+                return Err(format!(
+                    "OpenCode points at {base}, but no models were found. Check options.apiKey in {config_hint}.{}",
+                    live_error
+                        .map(|error| format!(" Endpoint error: {error}"))
+                        .unwrap_or_default()
+                ));
+            }
+
+            // No HTTP endpoint. The CLI is an optional last resort, never a
+            // prerequisite for the 9Router-style config path.
+            if crate::detector::find_opencode_binary().is_some() {
+                let mut command = create_opencode_command();
+                let output = command
+                    .arg("models")
+                    .output()
+                    .await
+                    .map_err(|error| format!("Could not run the OpenCode CLI: {error}"))?;
+                if output.status.success() {
+                    let stdout = String::from_utf8_lossy(&output.stdout);
+                    let mut models: Vec<String> = stdout
                         .lines()
                         .map(str::trim)
                         .filter(|line| !line.is_empty())
                         .map(str::to_string)
-                        .collect()
+                        .collect();
+                    models.sort();
+                    models.dedup();
+                    if !models.is_empty() {
+                        return Ok(models);
+                    }
                 }
-                _ => Vec::new(),
-            };
-            if models.is_empty() {
-                // If opencode models output is empty or failed to run, supply standard defaults
-                models = vec![
-                    "opencode/glm-5.3-flash-free".to_string(),
-                    "opencode/claude-3-5-sonnet".to_string(),
-                    "opencode/gpt-4o".to_string(),
-                    "opencode/deepseek-v3".to_string(),
-                ];
+                let stderr = String::from_utf8_lossy(&output.stderr);
+                return Err(format!(
+                    "OpenCode CLI listed no models. {}",
+                    truncate(stderr.trim(), 300)
+                ));
             }
-            models.sort();
-            models.dedup();
-            Ok(models)
+
+            Err(
+                "No OpenCode endpoint found. Add options.baseURL and options.apiKey to ~/.config/opencode/opencode.json (for example a 9Router endpoint), or paste the Base URL manually. The OpenCode app/CLI is not required for HTTP endpoints."
+                    .to_string(),
+            )
         }
+        PROVIDER_OPENCODE_FREE => fetch_opencode_free_models(client).await,
         _ => Ok(Vec::new()),
     }
 }
 
-fn create_opencode_command() -> Command {
-    let custom = std::env::var("ZEN_OPENCODE_BIN").ok();
-    #[cfg(windows)]
-    {
-        if let Some(bin) = custom {
-            Command::new(bin)
-        } else {
-            let mut found_exe = None;
-            if let Ok(local) = std::env::var("LOCALAPPDATA") {
-                let p1 = std::path::PathBuf::from(&local).join("Programs").join("OpenCode").join("OpenCode.exe");
-                let p2 = std::path::PathBuf::from(&local).join("Programs").join("opencode").join("opencode.exe");
-                let p3 = std::path::PathBuf::from(&local).join("Programs").join("OpenCode").join("resources").join("bin").join("opencode.exe");
-                if p1.is_file() {
-                    found_exe = Some(p1);
-                } else if p2.is_file() {
-                    found_exe = Some(p2);
-                } else if p3.is_file() {
-                    found_exe = Some(p3);
+/// Fetch `/models` from an OpenAI-compatible endpoint. Tries both `base/models`
+/// and `base/v1/models` (unless base already ends in `/v1`).
+async fn fetch_openai_models(
+    client: &reqwest::Client,
+    base: &str,
+    key: &str,
+) -> Result<Vec<String>, String> {
+    let base = base.trim().trim_end_matches('/');
+    if base.is_empty() {
+        return Err("Set a base URL first.".to_string());
+    }
+
+    let mut urls = vec![format!("{base}/models")];
+    if !base.ends_with("/v1") {
+        urls.push(format!("{base}/v1/models"));
+    }
+
+    let mut last_error = String::new();
+    for url in urls {
+        let mut request = client.get(&url);
+        if !key.trim().is_empty() {
+            request = request.bearer_auth(key.trim());
+        }
+        let response = match request.send().await {
+            Ok(response) => response,
+            Err(error) => {
+                last_error = format!("Could not reach {url}: {error}");
+                continue;
+            }
+        };
+        if !response.status().is_success() {
+            last_error = format!("{url} returned {}", response.status());
+            continue;
+        }
+        let value = match response.json::<Value>().await {
+            Ok(value) => value,
+            Err(error) => {
+                last_error = format!("{url} returned invalid JSON: {error}");
+                continue;
+            }
+        };
+
+        let mut models = Vec::new();
+        if let Some(items) = value.get("data").and_then(Value::as_array) {
+            for item in items {
+                if let Some(id) = item.get("id").and_then(Value::as_str) {
+                    models.push(id.to_string());
                 }
             }
-            if let Some(exe) = found_exe {
-                Command::new(exe)
-            } else {
-                let mut cmd = Command::new("cmd");
-                cmd.args(["/C", "opencode"]);
-                cmd
+        } else if let Some(items) = value.get("models").and_then(Value::as_array) {
+            for item in items {
+                if let Some(name) = item.get("name").and_then(Value::as_str) {
+                    let id = name.strip_prefix("models/").unwrap_or(name);
+                    models.push(id.to_string());
+                } else if let Some(id) = item.get("id").and_then(Value::as_str) {
+                    models.push(id.to_string());
+                }
             }
+        } else if let Some(items) = value.get("models").and_then(Value::as_object) {
+            // Some OpenCode-compatible gateways return an object map instead of
+            // the OpenAI `{ data: [...] }` shape.
+            models.extend(items.keys().cloned());
+        }
+
+        models.sort();
+        models.dedup();
+        if !models.is_empty() {
+            return Ok(models);
         }
     }
-    #[cfg(not(windows))]
-    {
-        let bin = custom.unwrap_or_else(|| "opencode".to_string());
-        Command::new(bin)
+
+    if last_error.is_empty() {
+        Err(format!("{base} did not expose a /models list."))
+    } else {
+        Err(last_error)
     }
+}
+
+/// Fetch the public OpenCode free catalogue. The live list changes often, so
+/// unknown `-free` ids are kept and the known-good ids are placed first.
+async fn fetch_opencode_free_models(client: &reqwest::Client) -> Result<Vec<String>, String> {
+    let fallback: Vec<String> = crate::detector::OPENCODE_FREE_FALLBACK_MODELS
+        .iter()
+        .map(|model| model.to_string())
+        .collect();
+
+    let response = client
+        .get(crate::detector::OPENCODE_FREE_MODELS_URL)
+        .header("x-opencode-client", "desktop")
+        .header("Accept", "application/json")
+        .send()
+        .await;
+
+    let value = match response {
+        Ok(response) if response.status().is_success() => match response.json::<Value>().await {
+            Ok(value) => value,
+            Err(error) => {
+                warn!("OpenCode Free model list was not JSON: {error}");
+                return Ok(fallback);
+            }
+        },
+        Ok(response) => {
+            warn!(
+                "OpenCode Free model list returned HTTP {}; using known models",
+                response.status()
+            );
+            return Ok(fallback);
+        }
+        Err(error) => {
+            warn!("Could not reach the OpenCode Free model list: {error}");
+            return Ok(fallback);
+        }
+    };
+
+    let ids = value
+        .get("data")
+        .and_then(Value::as_array)
+        .map(|items| {
+            items
+                .iter()
+                .filter_map(|item| item.get("id").and_then(Value::as_str))
+                .map(str::to_string)
+                .collect::<Vec<_>>()
+        })
+        .unwrap_or_default();
+
+    Ok(filter_opencode_free_models(ids))
+}
+
+/// Keep only models that actually run on the free chat lane. `jev-*` is a
+/// System-One model and `flint-*` currently reports "endpoint unavailable",
+/// so both are excluded instead of letting the picker offer a dead end.
+fn filter_opencode_free_models(ids: impl IntoIterator<Item = String>) -> Vec<String> {
+    let mut models: Vec<String> = ids
+        .into_iter()
+        .filter(|id| {
+            let id = id.trim();
+            (id.ends_with("-free") || id == "big-pickle")
+                && id != "jev-1.13-free"
+                && id != "flint-40b-free"
+        })
+        .collect();
+
+    models.sort();
+    models.dedup();
+
+    let mut ordered = Vec::with_capacity(models.len());
+    for wanted in crate::detector::OPENCODE_FREE_FALLBACK_MODELS {
+        if let Some(index) = models.iter().position(|model| model == wanted) {
+            ordered.push(models.remove(index));
+        }
+    }
+    ordered.extend(models);
+    if ordered.is_empty() {
+        crate::detector::OPENCODE_FREE_FALLBACK_MODELS
+            .iter()
+            .map(|model| model.to_string())
+            .collect()
+    } else {
+        ordered
+    }
+}
+
+/// Put a sensible general-purpose model at the top of the OpenCode list so
+/// the settings dialog does not default to whichever id sorts first.
+fn prefer_opencode_model(models: &mut Vec<String>) {
+    for wanted in [
+        "ag/gemini-3.8-flash-high",
+        "ag/gemini-3.8-flash",
+        "kr/minimax-m2.1",
+        "kr/glm-5",
+        "gemini-2.5-flash",
+        "gpt-4o",
+    ] {
+        if let Some(index) = models.iter().position(|model| model == wanted) {
+            let model = models.remove(index);
+            models.insert(0, model);
+            return;
+        }
+    }
+}
+
+fn create_opencode_command() -> Command {
+    let mut command = if let Some(binary) = crate::detector::find_opencode_binary() {
+        #[cfg(windows)]
+        {
+            let extension = binary
+                .extension()
+                .and_then(|extension| extension.to_str())
+                .unwrap_or_default()
+                .to_ascii_lowercase();
+            if extension == "cmd" || extension == "bat" {
+                let mut cmd = Command::new("cmd");
+                crate::platform::configure_tokio_command(&mut cmd);
+                cmd.arg("/C").arg(binary);
+                return cmd;
+            }
+        }
+        Command::new(binary)
+    } else {
+        // Preserve `Command::new("opencode")` so the eventual spawn error has
+        // the normal OS message; callers add the actionable OpenCode hint.
+        Command::new("opencode")
+    };
+    crate::platform::configure_tokio_command(&mut command);
+    command
+}
+
+/// The exact `read` and `shell` declarations OpenCode v2 sends. The free-tier
+/// gate compares descriptions and schemas byte-for-byte, so these strings must
+/// not be edited or reformatted.
+fn opencode_fingerprint_tools() -> Value {
+    json!([
+        {
+            "type": "function",
+            "function": {
+                "name": "read",
+                "description": "Read the contents of a file or directory. Supports text files, images, and PDFs. Images and PDFs are presented directly to the model. Each text line is prefixed by its 1-based line number as <line>: <content>. The prefix is for reference and is not part of the file content. Directory entries are returned one per line. Use offset and limit to read large files or directories in sections. Prefer one larger read over many small slices, and use grep to find specific content in large files.",
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "path": { "type": "string", "description": "File or directory to read" },
+                        "offset": { "type": "integer", "minimum": 0, "description": "The line or directory entry to start reading from (1-based)" },
+                        "limit": { "type": "integer", "minimum": 0, "description": "The maximum number of lines or directory entries to read (defaults to and capped at 2000)" }
+                    },
+                    "required": ["path"],
+                    "additionalProperties": false
+                }
+            }
+        },
+        {
+            "type": "function",
+            "function": {
+                "name": "shell",
+                "description": "Execute a shell command and return its output. Commands run on Linux using bash. Quote file paths containing spaces or special characters. Prefer dedicated tools over shell commands when possible. When output is large, the full result is saved to a file and a truncated preview is returned. Rely on automatic truncation unless filtering the output is more useful. Commands accept an optional timeout, background commands have no timeout by default. Background commands return immediately, and you will be notified when they complete.",
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "command": { "type": "string", "description": "Shell command string to execute" },
+                        "workdir": { "type": "string", "description": "Working directory to execute the command in. Defaults to the current working directory. When possible, avoid changing directories in the command and set the working directory here instead." },
+                        "timeout": { "type": "integer", "minimum": 0, "description": "Timeout in milliseconds. Set to 0 to disable the timeout. Defaults to 120000 for foreground commands. Background commands have no timeout by default." },
+                        "background": { "type": "boolean", "description": "Run the command in the background and return immediately (useful for dev servers and long-running builds). You do not need to use '&' at the end of the command when using this parameter. You will be notified when it completes. DO NOT poll for completion." }
+                    },
+                    "required": ["command"],
+                    "additionalProperties": false
+                }
+            }
+        }
+    ])
+}
+
+/// One stable OpenCode session per process. The upstream free-tier quota is
+/// accounted per session; minting a new id per request burns quota quickly.
+fn opencode_free_session() -> &'static str {
+    static SESSION: OnceLock<String> = OnceLock::new();
+    SESSION.get_or_init(|| {
+        let now = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap_or_default();
+        let millis = now.as_millis() as u64;
+        // Mirrors the OpenCode CLI: complement of (timeMs * 4096 + counter),
+        // truncated to 48 bits, hex-encoded. Counter 1 is a real client value.
+        let prefix = (!(millis.wrapping_mul(0x1000).wrapping_add(1))) & ((1u64 << 48) - 1);
+        let mut seed =
+            (now.as_nanos() as u64) ^ ((std::process::id() as u64) << 32) ^ 0x9E37_79B9_7F4A_7C15;
+        if seed == 0 {
+            seed = 0x1234_5678_9ABC_DEF0;
+        }
+        const CHARS: &[u8] = b"0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz";
+        let mut suffix = String::with_capacity(14);
+        for _ in 0..14 {
+            seed ^= seed << 13;
+            seed ^= seed >> 7;
+            seed ^= seed << 17;
+            suffix.push(CHARS[(seed % 62) as usize] as char);
+        }
+        format!("ses_{prefix:012x}{suffix}")
+    })
 }
 
 async fn openai_generate_candidate(
@@ -430,12 +833,19 @@ async fn openai_generate_candidate(
         return Err("No model selected.".to_string());
     }
 
-    let url = format!("{base}/chat/completions");
+    let free = crate::detector::is_opencode_free_endpoint(base);
+    let url = if free {
+        crate::detector::OPENCODE_FREE_CHAT_URL.to_string()
+    } else {
+        format!("{base}/chat/completions")
+    };
     emit_event(
         sender,
         "status",
         format!(
-            "Connecting to {base} · {model}{} ({})…",
+            "Connecting to {}{} · {model}{} ({})…",
+            if free { "OpenCode Free" } else { base },
+            if free { " (public lane, no key)" } else { "" },
             if images.is_empty() {
                 String::new()
             } else {
@@ -445,22 +855,50 @@ async fn openai_generate_candidate(
         ),
     );
 
-    let body = json!({
+    let system_content = if free {
+        format!(
+            "{system}\n\nIMPORTANT: You have no usable tools in this request. Do not call any tool. The `read` and `shell` declarations are required by the gateway but are non-functional placeholders. Return the complete artifact as text."
+        )
+    } else {
+        system.to_string()
+    };
+
+    let mut body = json!({
         "model": model,
         "stream": true,
         "temperature": if images.is_empty() { 0.6 } else { 0.45 },
-        "max_tokens": MAX_OUTPUT_TOKENS,
+        // Free reasoning models count their reasoning against max_tokens. A
+        // 16k cap can be consumed before the first content token, producing a
+        // valid but empty stream. 64k leaves room for both.
+        "max_tokens": if free { 65_536 } else { MAX_OUTPUT_TOKENS },
         "messages": [
-            { "role": "system", "content": system },
+            { "role": "system", "content": system_content },
             { "role": "user", "content": openai_user_content(user, images) },
         ],
     });
+    if free {
+        // OpenCode Free gates requests on the exact OpenCode v2 tool
+        // fingerprint. These are intentional placeholders, not callable tools;
+        // the system note tells the model not to use them.
+        body["tools"] = opencode_fingerprint_tools();
+    }
 
     let mut request = client
         .post(&url)
         .header("Accept", "text/event-stream")
         .json(&body);
-    if !candidate.api_key.is_empty() {
+    if free {
+        let session = opencode_free_session();
+        request = request
+            .header("Authorization", "Bearer public")
+            .header("User-Agent", "opencode/latest/2.0.26/cli")
+            .header("x-opencode-client", "cli")
+            .header("x-opencode-session", session)
+            .header("x-opencode-session-id", session)
+            .header("x-session-affinity", session)
+            .header("x-session-id", session)
+            .header("x-opencode-project", "global");
+    } else if !candidate.api_key.is_empty() {
         request = request.bearer_auth(&candidate.api_key);
     }
 
@@ -562,9 +1000,7 @@ async fn anthropic_generate_candidate(
     };
     let key = candidate.api_key.trim();
     if key.is_empty() {
-        return Err(
-            "Anthropic API key is not configured.".to_string(),
-        );
+        return Err("Anthropic API key is not configured.".to_string());
     }
 
     emit_event(
@@ -719,10 +1155,16 @@ async fn opencode_generate_candidate(
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())
         .kill_on_drop(true);
+    crate::platform::detach_process_group(&mut command);
 
-    let mut child = command
-        .spawn()
-        .map_err(|error| format!("Could not start OpenCode CLI agent: {error}"))?;
+    let mut child = command.spawn().map_err(|error| {
+        format!(
+            "Could not start the OpenCode CLI agent: {error}. \
+             ZenDesign can use an OpenCode HTTP endpoint without the app: \
+             set a Base URL in Settings, or add options.baseURL/options.apiKey \
+             to your opencode.json."
+        )
+    })?;
 
     let stdout = child
         .stdout
@@ -963,6 +1405,85 @@ mod tests {
         let error = r#"{"type":"error","error":{"message":"bad key"}}"#;
         assert!(anthropic_delta(error).unwrap_err().contains("bad key"));
         assert_eq!(anthropic_delta(r#"{"type":"message_stop"}"#).unwrap(), None);
+    }
+
+    #[test]
+    fn opencode_provider_uses_config_without_cli() {
+        if crate::detector::read_opencode_endpoint().is_err() {
+            return;
+        }
+        let mut settings = Settings::default();
+        settings.provider = PROVIDER_OPENCODE.to_string();
+        settings.opencode.model = "ag/gemini-3.8-flash-high".to_string();
+
+        let candidates = resolve_candidates(&settings);
+        let candidate = candidates
+            .iter()
+            .find(|candidate| candidate.model == "ag/gemini-3.8-flash-high")
+            .expect("OpenCode config should produce an HTTP candidate");
+        assert_eq!(candidate.provider, PROVIDER_OPENAI);
+        assert!(!candidate.base_url.is_empty());
+        assert!(!candidate.api_key.is_empty());
+    }
+
+    #[test]
+    fn opencode_free_models_are_filtered_and_ordered() {
+        let models = filter_opencode_free_models(vec![
+            "jev-1.13-free".to_string(),
+            "flint-40b-free".to_string(),
+            "z-new-free".to_string(),
+            "nemotron-3.5-lightning-free".to_string(),
+            "beam-free".to_string(),
+            "big-pickle".to_string(),
+            "glm-5.3-flash-free".to_string(),
+            "deepseek-v4.1-flash-free".to_string(),
+            "claude-opus-5".to_string(),
+        ]);
+        assert_eq!(
+            models.first().map(String::as_str),
+            Some("nemotron-3.5-lightning-free")
+        );
+        assert!(models.iter().any(|model| model == "big-pickle"));
+        assert!(models.iter().any(|model| model == "z-new-free"));
+        assert!(!models.iter().any(|model| model == "jev-1.13-free"));
+        assert!(!models.iter().any(|model| model == "flint-40b-free"));
+        assert!(!models.iter().any(|model| model == "claude-opus-5"));
+    }
+
+    #[test]
+    fn free_lane_stays_on_the_public_provider() {
+        let mut settings = Settings::default();
+        settings.provider = PROVIDER_OPENAI.to_string();
+        settings.openai.base_url = crate::detector::OPENCODE_FREE_BASE_URL.to_string();
+        settings.openai.model = crate::detector::OPENCODE_FREE_DEFAULT_MODEL.to_string();
+
+        let candidates = resolve_candidates(&settings);
+        assert!(!candidates.is_empty());
+        assert_eq!(
+            candidates[0].model,
+            crate::detector::OPENCODE_FREE_DEFAULT_MODEL
+        );
+        assert!(candidates
+            .iter()
+            .all(|candidate| { crate::detector::is_opencode_free_endpoint(&candidate.base_url) }));
+    }
+
+    #[test]
+    fn opencode_free_session_matches_the_client_shape() {
+        let session = opencode_free_session();
+        assert_eq!(session.len(), 30);
+        assert!(session.starts_with("ses_"));
+        assert!(session[4..16].chars().all(|ch| ch.is_ascii_hexdigit()));
+        assert!(session[16..].chars().all(|ch| ch.is_ascii_alphanumeric()));
+    }
+
+    #[test]
+    fn fingerprint_tools_match_the_free_tier_gate() {
+        let tools = opencode_fingerprint_tools();
+        assert_eq!(tools[0]["function"]["name"], "read");
+        assert_eq!(tools[1]["function"]["name"], "shell");
+        assert_eq!(tools[0]["function"]["parameters"]["required"][0], "path");
+        assert_eq!(tools[1]["function"]["parameters"]["required"][0], "command");
     }
 
     #[test]

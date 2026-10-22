@@ -14,6 +14,7 @@ use tokio::process::{Child, Command};
 use tracing::warn;
 
 use crate::export;
+use crate::platform;
 
 /// The holding page waits this long before showing the artifact. Recording
 /// starts once the browser window exists, so this leaves a short black lead-in
@@ -71,6 +72,13 @@ white type on a white field will read near zero.",
 /// Captures four stills of `html`. The work directory and browser processes
 /// are cleaned up even if the run is cancelled.
 pub async fn capture(html: &str, pass: usize) -> Result<CapturedFrames, String> {
+    if !cfg!(target_os = "linux") {
+        return Err(
+            "Deep review needs Linux/X11 video capture (Xvfb + x11grab). The one-shot design will be kept on this platform."
+                .to_string(),
+        );
+    }
+
     let chrome = export::chrome_binary().ok_or_else(|| {
         "Google Chrome was not found. Set ZEN_CHROME_BIN to its path.".to_string()
     })?;
@@ -99,7 +107,7 @@ pub async fn capture(html: &str, pass: usize) -> Result<CapturedFrames, String> 
         .await
         .map_err(|error| format!("Could not write the review candidate: {error}"))?;
 
-    let candidate_url = format!("file://{}", candidate.display());
+    let candidate_url = platform::file_url(&candidate)?;
     let stage = work.join("stage.html");
     tokio::fs::write(&stage, stage_html(&candidate_url))
         .await
@@ -113,7 +121,7 @@ pub async fn capture(html: &str, pass: usize) -> Result<CapturedFrames, String> 
     let (display, display_child) = export::start_display(&xvfb).await?;
     guard.display = Some(display_child);
 
-    let stage_url = format!("file://{}", stage.display());
+    let stage_url = platform::file_url(&stage)?;
     let chrome_child = export::start_chrome(&chrome, &display, &profile, &stage_url)?;
     guard.chrome = Some(chrome_child);
 
@@ -164,7 +172,9 @@ async fn extract_frame(
     output: &Path,
 ) -> Result<(), String> {
     let seek = format!("{seconds:.2}");
-    let result = Command::new(ffmpeg)
+    let mut cmd = Command::new(ffmpeg);
+    crate::platform::configure_tokio_command(&mut cmd);
+    let result = cmd
         .args([
             "-hide_banner",
             "-loglevel",
@@ -197,7 +207,9 @@ async fn extract_frame(
 /// first stops one hairline from dominating the contrast reading, while still
 /// catching a large title that has faded into the background.
 async fn analyze_frame(ffmpeg: &str, png: &Path) -> Result<FrameStats, String> {
-    let output = Command::new(ffmpeg)
+    let mut cmd = Command::new(ffmpeg);
+    crate::platform::configure_tokio_command(&mut cmd);
+    let output = cmd
         .args(["-v", "error", "-i"])
         .arg(png)
         .args(["-vf", "scale=144:90,format=gray", "-f", "rawvideo", "-"])
@@ -243,20 +255,13 @@ struct CaptureGuard {
 impl Drop for CaptureGuard {
     fn drop(&mut self) {
         if let Some(chrome) = self.chrome.as_mut() {
-            let _ = chrome.start_kill();
+            platform::kill_process_tree_blocking(chrome);
         }
         if let Some(display) = self.display.as_mut() {
-            let _ = display.start_kill();
+            platform::kill_process_tree_blocking(display);
         }
         let profile = self.work.join("profile");
-        if profile.exists() {
-            // The launcher exits quickly but leaves renderer children behind;
-            // match them by the unique profile path before removing it.
-            let _ = std::process::Command::new("pkill")
-                .arg("-f")
-                .arg(&profile)
-                .status();
-        }
+        platform::kill_chrome_profile(&profile);
         if let Err(error) = std::fs::remove_dir_all(&self.work) {
             warn!("Could not remove review workspace {:?}: {error}", self.work);
         }

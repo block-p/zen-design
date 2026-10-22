@@ -925,7 +925,7 @@ pub fn PreviewPanel(
                             on:load=move |_| handle_frame_load()
                             on:error=move |_| retry_or_stall()
                             sandbox="allow-scripts allow-same-origin allow-forms allow-modals allow-popups allow-downloads"
-                            allow="autoplay; speaker"
+                            allow="autoplay *; fullscreen *"
                             class="zd-device-iframe"
                         ></iframe>
 

@@ -381,19 +381,49 @@ pub fn load_settings(settings: RwSignal<Option<SettingsView>>, error: RwSignal<O
 
 /// Loads model suggestions for the picker. Failures are silent: the model
 /// field also accepts free text.
-pub fn load_models(provider: &'static str, models: RwSignal<Vec<String>>) {
+pub fn load_models(
+    provider: &'static str,
+    models: RwSignal<Vec<String>>,
+    error: RwSignal<Option<String>>,
+) {
+    error.set(None);
     spawn_local(async move {
         if provider == "template" {
             models.set(Vec::new());
             return;
         }
         let url = format!("/api/models?provider={provider}");
-        let Ok(response) = Request::get(&url).send().await else {
-            return;
+        let response = match Request::get(&url).send().await {
+            Ok(response) => response,
+            Err(cause) => {
+                models.set(Vec::new());
+                error.set(Some(format!("Could not reach the local daemon: {cause}")));
+                return;
+            }
         };
         let body = response.text().await.unwrap_or_default();
+        if !response.ok() {
+            let message = serde_json::from_str::<serde_json::Value>(&body)
+                .ok()
+                .and_then(|value| {
+                    value
+                        .get("error")
+                        .and_then(|error| error.as_str())
+                        .map(str::to_string)
+                })
+                .unwrap_or_else(|| format!("Could not load models (HTTP {}).", response.status()));
+            models.set(Vec::new());
+            error.set(Some(message));
+            return;
+        }
         if let Ok(parsed) = serde_json::from_str::<ModelsResponse>(&body) {
             models.set(parsed.models);
+            error.set(None);
+        } else {
+            models.set(Vec::new());
+            error.set(Some(
+                "The daemon returned an invalid model list.".to_string(),
+            ));
         }
     });
 }
@@ -645,13 +675,19 @@ pub fn save_model_choice(
     entries: RwSignal<Vec<ActivityEntry>>,
     lang: Language,
 ) {
-    let current_provider = settings.get_untracked().map(|s| s.provider).unwrap_or_else(|| "openai".to_string());
+    let current_provider = settings
+        .get_untracked()
+        .map(|s| s.provider)
+        .unwrap_or_else(|| "openai".to_string());
     spawn_local(async move {
         let payload = json!({
             "provider": current_provider,
             "model": model,
         });
-        if let Ok(req) = Request::put("/api/settings").header("Content-Type", "application/json").body(payload.to_string()) {
+        if let Ok(req) = Request::put("/api/settings")
+            .header("Content-Type", "application/json")
+            .body(payload.to_string())
+        {
             if let Ok(resp) = req.send().await {
                 if resp.ok() {
                     if let Ok(body) = resp.text().await {
@@ -745,7 +781,11 @@ pub fn activate_project(
                 push_activity(
                     entries,
                     ActivityKind::Done,
-                    t(lang, "Project restored to preview", "طرح پروژه در پیش‌نمایش بارگذاری شد"),
+                    t(
+                        lang,
+                        "Project restored to preview",
+                        "طرح پروژه در پیش‌نمایش بارگذاری شد",
+                    ),
                 );
             }
             Ok(resp) => {
@@ -802,6 +842,3 @@ pub fn create_new_project(
         }
     });
 }
-
-
-

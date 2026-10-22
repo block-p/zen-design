@@ -1990,11 +1990,12 @@ dependencies = [
 
 [[package]]
 name = "zen-design-server"
-version = "2.3.0"
+version = "2.4.0"
 dependencies = [
  "axum",
  "base64 0.22.1",
  "futures-util",
+ "libc",
  "mime_guess",
  "notify",
  "reqwest",
@@ -2007,6 +2008,7 @@ dependencies = [
  "tower-http 0.5.2",
  "tracing",
  "tracing-subscriber",
+ "url",
 ]
 
 [[package]]

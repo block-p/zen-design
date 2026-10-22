@@ -15,6 +15,7 @@ use tokio::process::{Child, Command};
 use tokio::sync::broadcast;
 use tokio::time::{sleep, timeout, Instant};
 
+use crate::platform;
 use crate::providers::emit_event;
 
 const RECORD_WIDTH: u32 = 1440;
@@ -25,9 +26,6 @@ const RECORD_FPS: u32 = 60;
 /// in two stages: a black holding page first, then the artifact itself once
 /// ffmpeg is already recording (see `export_armed`). That keeps the recorded
 /// video aligned with the artifact's first frame instead of its third second.
-/// This fixed delay is only used when `xwininfo` is unavailable.
-const WARMUP_MS: u64 = 2_400;
-
 pub struct ExportOutcome {
     pub bytes: u64,
 }
@@ -41,6 +39,13 @@ pub async fn record_preview(
     sender: &broadcast::Sender<String>,
     armed: &AtomicBool,
 ) -> Result<ExportOutcome, String> {
+    if !cfg!(target_os = "linux") {
+        return Err(
+            "MP4 export currently requires Linux/X11 (Xvfb + x11grab). Use PowerPoint or PDF export on this platform."
+                .to_string(),
+        );
+    }
+
     let chrome = chrome_binary().ok_or_else(|| {
         "Google Chrome was not found. Set ZEN_CHROME_BIN to its path.".to_string()
     })?;
@@ -70,7 +75,14 @@ pub async fn record_preview(
     armed.store(false, Ordering::SeqCst);
     let url = format!("{base_url}/api/export/stage?t={}", unix_millis());
     emit_event(sender, "export_status", "Opening the artifact in Chrome…");
-    let mut chrome_child = start_chrome(&chrome, &display, &profile, &url)?;
+    let mut chrome_child = match start_chrome(&chrome, &display, &profile, &url) {
+        Ok(child) => child,
+        Err(error) => {
+            platform::kill_process_tree(&mut display_child).await;
+            let _ = tokio::fs::remove_dir_all(&profile).await;
+            return Err(error);
+        }
+    };
 
     // Wait until Chrome has actually mapped a window on the virtual display.
     // Without this check, a browser that opens elsewhere (for example on the
@@ -87,17 +99,11 @@ pub async fn record_preview(
         Err(error) => Err(error),
     };
 
-    // Kill Chrome by profile as well: the launcher exits quickly but leaves
+    // Kill Chrome's whole process tree: the launcher exits quickly but leaves
     // renderer children behind, and they keep the display busy.
-    let _ = chrome_child.start_kill();
-    let _ = chrome_child.wait().await;
-    let _ = Command::new("pkill")
-        .arg("-f")
-        .arg(profile.as_os_str())
-        .status()
-        .await;
-    let _ = display_child.start_kill();
-    let _ = display_child.wait().await;
+    platform::kill_process_tree(&mut chrome_child).await;
+    platform::kill_chrome_profile(&profile);
+    platform::kill_process_tree(&mut display_child).await;
     let _ = tokio::fs::remove_dir_all(&profile).await;
 
     capture?;
@@ -123,15 +129,16 @@ pub async fn record_preview(
 /// Wait until a browser window is mapped on the virtual display, then let the
 /// holding page paint. Returns an error instead of recording a black screen.
 pub(crate) async fn wait_for_browser(display: &str) -> Result<(), String> {
-    if !find_in_path("xwininfo") {
-        // Geometry inspection is unavailable; fall back to a fixed warmup.
-        sleep(Duration::from_millis(WARMUP_MS)).await;
-        return Ok(());
-    }
+    let Some(xwininfo) = platform::find_in_path("xwininfo") else {
+        return Err(
+            "xwininfo was not found, so the recorder cannot verify that Chrome opened on the virtual display. Install x11-utils/xwininfo and try again."
+                .to_string(),
+        );
+    };
 
     let deadline = Instant::now() + Duration::from_secs(8);
     while Instant::now() < deadline {
-        if let Ok(output) = Command::new("xwininfo")
+        if let Ok(output) = Command::new(&xwininfo)
             .env("DISPLAY", display)
             .args(["-root", "-tree"])
             .output()
@@ -221,7 +228,9 @@ pub(crate) fn start_chrome(
     profile: &Path,
     url: &str,
 ) -> Result<Child, String> {
-    Command::new(chrome)
+    let mut command = Command::new(chrome);
+    platform::configure_tokio_command(&mut command);
+    command
         .env("DISPLAY", display)
         // The user's desktop may be Wayland; Chrome would otherwise open its
         // window there instead of on the virtual X display being recorded.
@@ -251,7 +260,9 @@ pub(crate) fn start_chrome(
         .stdin(Stdio::null())
         .stdout(Stdio::null())
         .stderr(Stdio::null())
-        .kill_on_drop(true)
+        .kill_on_drop(true);
+    platform::detach_process_group(&mut command);
+    command
         .spawn()
         .map_err(|error| format!("Could not start Chrome: {error}"))
 }
@@ -280,7 +291,9 @@ pub(crate) async fn record_display(
     let size = format!("{RECORD_WIDTH}x{RECORD_HEIGHT}");
     let duration = seconds.to_string();
 
-    let child = Command::new(ffmpeg)
+    let mut cmd = Command::new(ffmpeg);
+    platform::configure_tokio_command(&mut cmd);
+    let child = cmd
         .env("DISPLAY", display)
         .args(["-hide_banner", "-loglevel", "error", "-y"])
         .args([
@@ -357,33 +370,11 @@ pub(crate) fn binary_or_env(env_name: &str, fallback: &str) -> Option<String> {
             return Some(value.to_string());
         }
     }
-    find_in_path(fallback).then(|| fallback.to_string())
+    platform::find_in_path(fallback).map(|path| path.to_string_lossy().to_string())
 }
 
 pub(crate) fn chrome_binary() -> Option<String> {
-    if let Ok(value) = std::env::var("ZEN_CHROME_BIN") {
-        let value = value.trim();
-        if !value.is_empty() {
-            return Some(value.to_string());
-        }
-    }
-
-    [
-        "google-chrome",
-        "google-chrome-stable",
-        "chromium",
-        "chromium-browser",
-        "brave-browser",
-    ]
-    .into_iter()
-    .find(|candidate| find_in_path(candidate))
-    .map(str::to_string)
-}
-
-fn find_in_path(binary: &str) -> bool {
-    std::env::var_os("PATH")
-        .map(|paths| std::env::split_paths(&paths).any(|dir| dir.join(binary).is_file()))
-        .unwrap_or(false)
+    platform::chrome_binary()
 }
 
 fn unix_millis() -> u128 {

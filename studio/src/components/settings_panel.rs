@@ -15,7 +15,10 @@ use crate::actions::{
 use crate::data::ActivityEntry;
 use crate::i18n::{t, Language};
 use crate::icons::Icon;
-use crate::settings::{DetectedSource, ProviderId, SettingsView, PROVIDERS};
+use crate::settings::{
+    DetectedSource, ProviderId, SettingsView, OPENCODE_FREE_BASE_URL, OPENCODE_FREE_DEFAULT_MODEL,
+    PROVIDERS,
+};
 
 #[component]
 pub fn SettingsPanel(
@@ -31,6 +34,7 @@ pub fn SettingsPanel(
     let api_key = RwSignal::new(String::new());
     let clear_key = RwSignal::new(false);
     let models = RwSignal::new(Vec::<String>::new());
+    let models_error = RwSignal::new(None::<String>);
     let saving = RwSignal::new(false);
     let importing = RwSignal::new(false);
     let warning = RwSignal::new(None::<String>);
@@ -67,7 +71,7 @@ pub fn SettingsPanel(
             apply_profile(id, &view);
             api_key.set(String::new());
             clear_key.set(false);
-            load_models(id.as_str(), models);
+            load_models(id.as_str(), models, models_error);
         }
     });
 
@@ -84,15 +88,38 @@ pub fn SettingsPanel(
         apply_profile(id, &view);
     });
 
+    // OpenCode's config is enough: mirror its endpoint/model into the form so
+    // the user can see what will be called. No OpenCode app is required.
+    Effect::new(move |_| {
+        if provider.get() != ProviderId::OpenCode {
+            return;
+        }
+        if base_url.get().trim().is_empty() {
+            if let Some(source) = detected_sources
+                .get()
+                .into_iter()
+                .find(|source| source.id == "opencode")
+            {
+                base_url.set(source.base_url);
+            }
+        }
+        if model.get().trim().is_empty() {
+            if let Some(first) = models.get().first() {
+                model.set(first.clone());
+            }
+        }
+    });
+
     let choose_provider = move |id: ProviderId| {
         provider.set(id);
         api_key.set(String::new());
         clear_key.set(false);
         warning.set(None);
+        models_error.set(None);
         if let Some(view) = settings.get_untracked() {
             apply_profile(id, &view);
         }
-        load_models(id.as_str(), models);
+        load_models(id.as_str(), models, models_error);
     };
 
     let start_import = move |_| {
@@ -211,6 +238,7 @@ pub fn SettingsPanel(
                                                         "codex" => LuTerminal,
                                                         "claude_code" => LuBot,
                                                         "opencode" => LuServer,
+                                                        "opencode_free" => LuSparkles,
                                                         _ => LuKey,
                                                     };
                                                     let s_id = source.id.clone();
@@ -226,7 +254,9 @@ pub fn SettingsPanel(
                                                             } else if s_id == "claude_code" {
                                                                  view.provider == "anthropic" || (view.provider == "openai" && view.openai.base_url.contains("claude"))
                                                             } else if s_id == "opencode" {
-                                                                 view.provider == "opencode" || (view.provider == "openai" && (view.openai.model.starts_with("opencode/") || view.openai.base_url.contains("4096") || view.openai.base_url.contains("opencode")))
+                                                                 view.provider == "opencode" || (view.provider == "openai" && (view.openai.model.starts_with("opencode/") || view.openai.base_url.contains("4096") || (view.openai.base_url.contains("opencode") && !view.openai.base_url.contains("opencode.ai"))))
+                                                            } else if s_id == "opencode_free" {
+                                                                 view.provider == "openai" && (view.openai.base_url.contains("opencode.ai") || view.openai.model.ends_with("-free"))
                                                             } else {
                                                                  false
                                                             }
@@ -302,7 +332,11 @@ pub fn SettingsPanel(
                                                                         </div>
                                                                         {
                                                                             let cur_model = model.get();
-                                                                            let c_models = card_models.clone();
+                                                                            let c_models = if card_models.is_empty() {
+                                                                                models.get()
+                                                                            } else {
+                                                                                card_models.clone()
+                                                                            };
                                                                             (!c_models.is_empty()).then(|| view! {
                                                                                 <select
                                                                                     class="zd-select--compact"
@@ -377,30 +411,62 @@ pub fn SettingsPanel(
                                         .collect_view()}
                                 </div>
 
-                                <Show when=move || provider.get() == ProviderId::OpenAi>
+                                <Show when=move || {
+                                    provider.get() == ProviderId::OpenAi
+                                        || provider.get() == ProviderId::OpenCode
+                                }>
                                     <div class="zd-form-section">
-                                        <div class="zd-form-row-between">
-                                            <span class="zd-form-label">
-                                                {move || t(language.get(), "Import from OpenCode", "دریافت از OpenCode")}
-                                            </span>
-                                            <button
-                                                type="button"
-                                                disabled=move || importing.get()
-                                                on:click=start_import
-                                                class="zd-btn-soft"
-                                            >
-                                                <Show
-                                                    when=move || importing.get()
-                                                    fallback=move || view! {
-                                                        <Icon data=LuRefreshCw size=11 />
-                                                        <span>{move || t(language.get(), "Import 9Router", "دریافت 9Router")}</span>
+                                        <Show when=move || provider.get() == ProviderId::OpenAi>
+                                            <div class="zd-form-row-between">
+                                                <span class="zd-form-label">
+                                                    {move || t(language.get(), "Import from OpenCode", "دریافت از OpenCode")}
+                                                </span>
+                                                <button
+                                                    type="button"
+                                                    disabled=move || importing.get()
+                                                    on:click=start_import
+                                                    class="zd-btn-soft"
+                                                >
+                                                    <Show
+                                                        when=move || importing.get()
+                                                        fallback=move || view! {
+                                                            <Icon data=LuRefreshCw size=11 />
+                                                            <span>{move || t(language.get(), "Import 9Router", "دریافت 9Router")}</span>
+                                                        }
+                                                    >
+                                                        <Icon data=LuLoaderCircle size=11 class="zd-spin" />
+                                                        <span>{move || t(language.get(), "Importing…", "در حال دریافت…")}</span>
+                                                    </Show>
+                                                </button>
+                                            </div>
+                                        </Show>
+                                        <Show when=move || provider.get() == ProviderId::OpenCode>
+                                            <div class="zd-form-row-between zd-free-lane">
+                                                <span class="zd-form-hint">
+                                                    {move || t(
+                                                        language.get(),
+                                                        "No OpenCode install or API key? Use the public free lane.",
+                                                        "بدون نصب OpenCode یا کلید API؟ از مسیر عمومی رایگان استفاده کنید.",
+                                                    )}
+                                                </span>
+                                                <button
+                                                    type="button"
+                                                    class="zd-btn-soft"
+                                                    on:click=move |_| {
+                                                        base_url.set(OPENCODE_FREE_BASE_URL.to_string());
+                                                        model.set(OPENCODE_FREE_DEFAULT_MODEL.to_string());
+                                                        api_key.set(String::new());
+                                                        clear_key.set(true);
+                                                        warning.set(None);
+                                                        models_error.set(None);
+                                                        load_models("opencode_free", models, models_error);
                                                     }
                                                 >
-                                                    <Icon data=LuLoaderCircle size=11 class="zd-spin" />
-                                                    <span>{move || t(language.get(), "Importing…", "در حال دریافت…")}</span>
-                                                </Show>
-                                            </button>
-                                        </div>
+                                                    <Icon data=LuSparkles size=11 />
+                                                    <span>{move || t(language.get(), "Use OpenCode Free", "استفاده از OpenCode رایگان")}</span>
+                                                </button>
+                                            </div>
+                                        </Show>
                                         <label class="zd-field">
                                             <span class="zd-form-label">
                                                 {move || t(language.get(), "Base URL", "آدرس پایه (Base URL)")}
@@ -415,6 +481,17 @@ pub fn SettingsPanel(
                                                 prop:value=move || base_url.get()
                                                 on:input=move |event| base_url.set(event_target_value(&event))
                                             />
+                                            <span class="zd-form-hint">
+                                                {move || if provider.get() == ProviderId::OpenCode {
+                                                    t(
+                                                        language.get(),
+                                                        "Leave empty to read options.baseURL from opencode.json; if none exists, OpenCode Free is used automatically.",
+                                                        "خالی بگذارید تا options.baseURL از opencode.json خوانده شود؛ اگر وجود نداشت، OpenCode رایگان به‌طور خودکار استفاده می‌شود.",
+                                                    ).to_string()
+                                                } else {
+                                                    String::new()
+                                                }}
+                                            </span>
                                         </label>
                                     </div>
                                 </Show>
@@ -475,12 +552,19 @@ pub fn SettingsPanel(
                                                 }}
                                             </select>
                                         </Show>
+
+                                        <Show when=move || models_error.get().is_some()>
+                                            <p class="zd-form-error">
+                                                {move || models_error.get().unwrap_or_default()}
+                                            </p>
+                                        </Show>
                                     </div>
                                 </Show>
 
                                 <Show when=move || {
                                     provider.get() == ProviderId::OpenAi
                                         || provider.get() == ProviderId::Anthropic
+                                        || provider.get() == ProviderId::OpenCode
                                 }>
                                     <label class="zd-field">
                                         <span class="zd-form-label">
@@ -492,6 +576,16 @@ pub fn SettingsPanel(
                                                 class="zd-input zd-input--flex"
                                                 placeholder=move || {
                                                     let lang = language.get();
+                                                    if provider.get() == ProviderId::OpenCode
+                                                        && base_url.get().contains("opencode.ai")
+                                                    {
+                                                        return t(
+                                                            lang,
+                                                            "Not needed for OpenCode Free",
+                                                            "برای OpenCode رایگان لازم نیست",
+                                                        )
+                                                        .to_string();
+                                                    }
                                                     let view = settings.get();
                                                     let set = view
                                                         .as_ref()
@@ -541,6 +635,18 @@ pub fn SettingsPanel(
                                                 </button>
                                             </Show>
                                         </div>
+                                        <Show when=move || {
+                                            provider.get() == ProviderId::OpenCode
+                                                && base_url.get().contains("opencode.ai")
+                                        }>
+                                            <span class="zd-form-hint">
+                                                {move || t(
+                                                    language.get(),
+                                                    "The public free lane needs no API key. Requests still go to opencode.ai.",
+                                                    "مسیر عمومی رایگان به کلید API نیاز ندارد. درخواست‌ها همچنان به opencode.ai ارسال می‌شوند.",
+                                                )}
+                                            </span>
+                                        </Show>
                                     </label>
                                 </Show>
 
@@ -590,4 +696,3 @@ pub fn SettingsPanel(
         </Show>
     }
 }
-

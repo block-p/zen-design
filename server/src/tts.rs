@@ -9,11 +9,11 @@
 //! Provides ultra-high-quality, natural speech with automatic fallback to Edge Neural.
 //! Thread-safe in-memory cache prevents re-synthesizing repeated slides.
 
-use std::collections::HashMap;
-use std::sync::OnceLock;
 use base64::Engine;
 use reqwest::Client;
 use serde_json::json;
+use std::collections::HashMap;
+use std::sync::OnceLock;
 use tokio::process::Command;
 use tokio::sync::Mutex;
 use tracing::{info, warn};
@@ -63,7 +63,11 @@ pub fn default_voice_for_text(text: &str, provider: &str) -> &'static str {
 
 /// Synthesize using Microsoft Edge Neural TTS (Free, 0 keys needed, high quality Persian).
 async fn synthesize_edge(text: &str, voice: &str, rate: &str) -> Result<Vec<u8>, String> {
-    info!("Synthesizing TTS via edge-tts with voice '{}' ({} chars)…", voice, text.chars().count());
+    info!(
+        "Synthesizing TTS via edge-tts with voice '{}' ({} chars)…",
+        voice,
+        text.chars().count()
+    );
 
     let py_script = r#"
 import sys, asyncio, aiohttp, edge_tts
@@ -82,9 +86,16 @@ if __name__ == '__main__':
     asyncio.run(run())
 "#;
 
-    let python_cmd = if cfg!(windows) { "python" } else { "python3" };
+    let Some(python_cmd) = crate::platform::python_binary() else {
+        return Err(
+            "Python 3 was not found. Install Python 3 and the edge-tts package for free neural TTS."
+                .to_string(),
+        );
+    };
 
-    let mut child = Command::new(python_cmd)
+    let mut cmd = Command::new(&python_cmd);
+    crate::platform::configure_tokio_command(&mut cmd);
+    let mut child = cmd
         .arg("-c")
         .arg(py_script)
         .arg(voice)
@@ -93,7 +104,7 @@ if __name__ == '__main__':
         .stdout(std::process::Stdio::piped())
         .stderr(std::process::Stdio::piped())
         .spawn()
-        .map_err(|e| format!("Failed to spawn {python_cmd} for TTS: {e}"))?;
+        .map_err(|e| format!("Failed to spawn {} for TTS: {e}", python_cmd.display()))?;
 
     if let Some(mut stdin) = child.stdin.take() {
         use tokio::io::AsyncWriteExt;
@@ -155,19 +166,29 @@ async fn synthesize_elevenlabs(text: &str, voice: &str, api_key: &str) -> Result
         return Err(format!("ElevenLabs returned error: {err_body}"));
     }
 
-    let bytes = res.bytes().await.map_err(|e| format!("Failed to read ElevenLabs audio bytes: {e}"))?;
+    let bytes = res
+        .bytes()
+        .await
+        .map_err(|e| format!("Failed to read ElevenLabs audio bytes: {e}"))?;
     Ok(bytes.to_vec())
 }
 
 /// Synthesize using OpenAI TTS-1 / TTS-1-HD.
 async fn synthesize_openai(text: &str, voice: &str, api_key: &str) -> Result<Vec<u8>, String> {
     let clean_voice = if voice.trim().is_empty() {
-        if is_persian_text(text) { "nova" } else { "alloy" }
+        if is_persian_text(text) {
+            "nova"
+        } else {
+            "alloy"
+        }
     } else {
         voice
     };
 
-    info!("Synthesizing TTS via OpenAI TTS with voice '{}'…", clean_voice);
+    info!(
+        "Synthesizing TTS via OpenAI TTS with voice '{}'…",
+        clean_voice
+    );
 
     let url = "https://api.openai.com/v1/audio/speech";
     let payload = json!({
@@ -190,22 +211,33 @@ async fn synthesize_openai(text: &str, voice: &str, api_key: &str) -> Result<Vec
         return Err(format!("OpenAI TTS returned error: {err_body}"));
     }
 
-    let bytes = res.bytes().await.map_err(|e| format!("Failed to read OpenAI audio bytes: {e}"))?;
+    let bytes = res
+        .bytes()
+        .await
+        .map_err(|e| format!("Failed to read OpenAI audio bytes: {e}"))?;
     Ok(bytes.to_vec())
 }
 
 /// Synthesize using Google Gemini 2.0 Native Audio Output.
 async fn synthesize_gemini(text: &str, voice: &str, api_key: &str) -> Result<Vec<u8>, String> {
-    let clean_voice = if voice.trim().is_empty() { "Puck" } else { voice };
+    let clean_voice = if voice.trim().is_empty() {
+        "Puck"
+    } else {
+        voice
+    };
 
-    info!("Synthesizing TTS via Gemini Audio with voice '{}'…", clean_voice);
+    info!(
+        "Synthesizing TTS via Gemini Audio with voice '{}'…",
+        clean_voice
+    );
 
     let url = format!(
         "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key={}",
         api_key
     );
 
-    let prompt_msg = format!("Please speak the following text out loud with a clear, engaging tone:\n\n{text}");
+    let prompt_msg =
+        format!("Please speak the following text out loud with a clear, engaging tone:\n\n{text}");
     let payload = json!({
         "contents": [{
             "parts": [{ "text": prompt_msg }]
@@ -235,8 +267,11 @@ async fn synthesize_gemini(text: &str, voice: &str, api_key: &str) -> Result<Vec
         return Err(format!("Gemini Audio returned error: {err_body}"));
     }
 
-    let json_resp: serde_json::Value = res.json().await.map_err(|e| format!("Failed to parse Gemini json: {e}"))?;
-    
+    let json_resp: serde_json::Value = res
+        .json()
+        .await
+        .map_err(|e| format!("Failed to parse Gemini json: {e}"))?;
+
     // Extract base64 inline audio data
     let base64_audio = json_resp
         .pointer("/candidates/0/content/parts/0/inlineData/data")
@@ -280,7 +315,12 @@ pub async fn synthesize(
     {
         let cache = get_audio_cache().lock().await;
         if let Some(cached_bytes) = cache.get(&cache_key) {
-            info!("TTS Cache hit for '{}:{}' ({} bytes)", provider, voice, cached_bytes.len());
+            info!(
+                "TTS Cache hit for '{}:{}' ({} bytes)",
+                provider,
+                voice,
+                cached_bytes.len()
+            );
             return Ok(cached_bytes.clone());
         }
     }
@@ -340,7 +380,11 @@ pub async fn synthesize(
 
     let audio_bytes = result?;
 
-    info!("TTS synthesis complete: {} bytes generated (provider: {})", audio_bytes.len(), provider);
+    info!(
+        "TTS synthesis complete: {} bytes generated (provider: {})",
+        audio_bytes.len(),
+        provider
+    );
 
     // Store in cache (limit to 100 entries to prevent memory leak)
     {
@@ -367,8 +411,14 @@ mod tests {
 
     #[test]
     fn chooses_appropriate_voice() {
-        assert_eq!(default_voice_for_text("توضیحات اسلاید", "edge"), "fa-IR-DilaraNeural");
-        assert_eq!(default_voice_for_text("Executive Overview", "edge"), "en-US-JennyNeural");
+        assert_eq!(
+            default_voice_for_text("توضیحات اسلاید", "edge"),
+            "fa-IR-DilaraNeural"
+        );
+        assert_eq!(
+            default_voice_for_text("Executive Overview", "edge"),
+            "en-US-JennyNeural"
+        );
         assert_eq!(default_voice_for_text("سلام", "openai"), "nova");
         assert_eq!(default_voice_for_text("Hello", "openai"), "alloy");
     }

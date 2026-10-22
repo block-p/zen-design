@@ -3,10 +3,12 @@
 //! Everything lives in a single TOML file owned by the user:
 //!
 //! * `ZEN_CONFIG_PATH` wins when set.
-//! * otherwise `$XDG_CONFIG_HOME/zen-design/config.toml`
-//! * otherwise `~/.config/zen-design/config.toml`
+//! * otherwise the platform config directory:
+//!   `%APPDATA%\zen-design` on Windows,
+//!   `~/Library/Application Support/zen-design` on macOS,
+//!   `$XDG_CONFIG_HOME/zen-design` (or `~/.config/zen-design`) on Linux.
 //!
-//! API keys are stored in that file with `0600` permissions and are never
+//! API keys are stored in that file with restricted permissions and are never
 //! returned to the browser: `/api/settings` exposes presence + source only.
 
 use std::fs;
@@ -16,11 +18,17 @@ use serde::{Deserialize, Serialize};
 use serde_json::json;
 use tracing::{info, warn};
 
+use crate::platform;
+
 pub const PROVIDER_AUTO: &str = "auto";
 pub const PROVIDER_TEMPLATE: &str = "template";
 pub const PROVIDER_OPENAI: &str = "openai";
 pub const PROVIDER_ANTHROPIC: &str = "anthropic";
 pub const PROVIDER_OPENCODE: &str = "opencode";
+/// Model-listing alias for the public OpenCode free lane. It is not a stored
+/// provider: the endpoint is saved under `opencode` (or `openai`) so the rest
+/// of the app keeps working normally.
+pub const PROVIDER_OPENCODE_FREE: &str = "opencode_free";
 
 pub const KNOWN_PROVIDERS: [&str; 5] = [
     PROVIDER_AUTO,
@@ -88,26 +96,7 @@ impl Settings {
             }
         }
 
-        let base = std::env::var("XDG_CONFIG_HOME")
-            .ok()
-            .filter(|value| !value.trim().is_empty())
-            .map(PathBuf::from)
-            .or_else(|| {
-                std::env::var("APPDATA")
-                    .ok()
-                    .filter(|value| !value.trim().is_empty())
-                    .map(PathBuf::from)
-            })
-            .or_else(|| {
-                std::env::var("HOME")
-                    .ok()
-                    .or_else(|| std::env::var("USERPROFILE").ok())
-                    .filter(|value| !value.trim().is_empty())
-                    .map(|home| Path::new(&home).join(".config"))
-            })
-            .unwrap_or_else(|| PathBuf::from(".config"));
-
-        base.join("zen-design").join("config.toml")
+        platform::app_config_file()
     }
 
     pub fn auto_detect_credentials(&mut self) -> bool {
@@ -125,7 +114,8 @@ impl Settings {
                         self.provider = PROVIDER_ANTHROPIC.to_string();
                         self.anthropic.base_url = res.base_url;
                         self.anthropic.api_key = res.api_key;
-                        self.anthropic.model = res.model.unwrap_or_else(|| "claude-opus-4-6".to_string());
+                        self.anthropic.model =
+                            res.model.unwrap_or_else(|| "claude-opus-4-6".to_string());
                     }
                     info!(
                         "Auto-detected AI credentials from '{}' (model: {})",
@@ -141,11 +131,24 @@ impl Settings {
 
     pub fn load() -> Self {
         let path = Self::config_path();
+        let mut parsed_ok = true;
         let mut settings = match fs::read_to_string(&path) {
             Ok(raw) => match toml::from_str::<Settings>(&raw) {
                 Ok(s) => s,
                 Err(error) => {
-                    warn!("Ignoring invalid settings at {}: {error}", path.display());
+                    parsed_ok = false;
+                    let backup = path.with_extension("toml.bak");
+                    match fs::copy(&path, &backup) {
+                        Ok(_) => warn!(
+                            "Invalid settings at {}: {error}. Kept a backup at {}",
+                            path.display(),
+                            backup.display()
+                        ),
+                        Err(copy_error) => warn!(
+                            "Invalid settings at {}: {error}. Could not create a backup: {copy_error}",
+                            path.display()
+                        ),
+                    }
                     Settings::default()
                 }
             },
@@ -157,7 +160,9 @@ impl Settings {
             || settings.provider.is_empty()
             || (settings.provider == PROVIDER_OPENAI && settings.openai.base_url.is_empty());
 
-        if needs_auto && settings.auto_detect_credentials() {
+        // Never replace a config we could not parse: the user may be able to
+        // fix one typo and keep keys that auto-detection knows nothing about.
+        if parsed_ok && needs_auto && settings.auto_detect_credentials() {
             let _ = settings.save();
         }
 
@@ -178,10 +183,34 @@ impl Settings {
         let temp = path.with_extension("toml.tmp");
         fs::write(&temp, body).map_err(|error| format!("Could not write settings: {error}"))?;
         restrict_file(&temp);
-        fs::rename(&temp, &path).map_err(|error| format!("Could not store settings: {error}"))?;
 
-        info!("Saved model settings to {}", path.display());
-        Ok(())
+        // Windows can briefly lock the destination (antivirus, indexer). Keep
+        // the previous config intact and retry the atomic replace instead of
+        // truncating it in place.
+        let mut last_error = None;
+        for attempt in 0..5 {
+            match fs::rename(&temp, &path) {
+                Ok(()) => {
+                    info!("Saved model settings to {}", path.display());
+                    return Ok(());
+                }
+                Err(error) => {
+                    last_error = Some(error);
+                    if attempt < 4 {
+                        std::thread::sleep(std::time::Duration::from_millis(60 * (attempt + 1)));
+                    }
+                }
+            }
+        }
+
+        let _ = fs::remove_file(&temp);
+        Err(format!(
+            "Could not store settings at {}: {}",
+            path.display(),
+            last_error
+                .map(|error| error.to_string())
+                .unwrap_or_else(|| "unknown error".to_string())
+        ))
     }
 
     pub fn active_profile(&self) -> &ProviderProfile {
@@ -222,7 +251,15 @@ impl Settings {
         match self.provider.as_str() {
             PROVIDER_AUTO => "Auto (خودکار / هوشمند)".to_string(),
             PROVIDER_OPENAI => {
-                let name = self.active_source.as_deref().unwrap_or("OpenAI-compatible");
+                let name = match self.active_source.as_deref() {
+                    Some("opencode_free") => "OpenCode Free",
+                    Some("opencode") => "OpenCode",
+                    Some("claude_code") => "Claude Code",
+                    Some("codex") => "Codex",
+                    Some("env_openai") => "OpenAI (environment)",
+                    Some(other) => other,
+                    None => "OpenAI-compatible",
+                };
                 format!("{name}")
             }
             PROVIDER_ANTHROPIC => "Anthropic".to_string(),

@@ -556,6 +556,9 @@ noscript {
 }
 
 .zd-picker-option-meta {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
   flex: 1;
   min-width: 0;
 }
@@ -1394,6 +1397,7 @@ noscript {
   place-items: center;
   background: rgba(248, 250, 252, 0.92);
   backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
 }
 
 .zd-preview-overlay-content {
@@ -1528,9 +1532,11 @@ noscript {
   display: grid;
   place-items: center;
   padding: 1rem;
-  background: rgba(15, 23, 42, 0.4);
-  backdrop-filter: blur(6px);
+  background: rgba(15, 23, 42, 0.62);
+  /* A full-screen blur forces a compositor repaint on every click in the
+     dialog and is the main source of the settings flicker on Linux/Wayland. */
   animation: zd-fade-in 0.15s var(--zd-ease);
+  contain: layout paint;
 }
 
 .zd-modal-window {
@@ -1702,6 +1708,17 @@ noscript {
   margin-top: 4px;
 }
 
+.zd-form-error {
+  font-size: 10px;
+  line-height: 1.5;
+  color: var(--zd-red);
+  background: var(--zd-red-soft);
+  border: 1px solid color-mix(in srgb, var(--zd-red) 35%, transparent);
+  border-radius: var(--zd-radius-sm);
+  padding: 6px 8px;
+  margin-top: 6px;
+}
+
 .zd-input,
 .zd-input--mono,
 .zd-input--flex,
@@ -1774,6 +1791,20 @@ noscript {
   align-items: center;
   justify-content: space-between;
   gap: 8px;
+}
+
+.zd-free-lane {
+  padding: 8px 10px;
+  margin-bottom: 10px;
+  border: 1px dashed var(--zd-border);
+  border-radius: var(--zd-radius-sm);
+  background: var(--zd-bg-muted);
+}
+
+.zd-free-lane .zd-form-hint {
+  margin-top: 0;
+  max-width: 72%;
+  line-height: 1.5;
 }
 
 .zd-info-box {
@@ -2087,12 +2118,12 @@ noscript {
 
 .zd-detected-desc {
   display: block;
-  font-size: 9px;
+  font-size: 10px;
   font-family: var(--zd-font-mono);
   color: var(--zd-text-muted);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
+  white-space: normal;
+  overflow-wrap: anywhere;
+  line-height: 1.45;
   margin-top: 2px;
 }
 
@@ -3087,13 +3118,17 @@ html[data-theme="dark"] .zd-ai-disconnected-text {
   flex-shrink: 0;
 }
 
+html[data-theme="dark"] .zd-ai-disconnected-icon {
+  color: #fbbf24;
+}
+
 .zd-btn-connect-ai {
   display: inline-flex;
   align-items: center;
   gap: 5px;
   padding: 4px 10px;
   border-radius: var(--zd-radius-sm);
-  background: #d97706;
+  background: #b45309;
   color: #ffffff;
   border: none;
   font-size: 11px;
@@ -3104,7 +3139,7 @@ html[data-theme="dark"] .zd-ai-disconnected-text {
 }
 
 .zd-btn-connect-ai:hover {
-  background: #b45309;
+  background: #92400e;
   transform: translateY(-1px);
 }
 
@@ -3661,6 +3696,7 @@ html[data-theme="dark"] .zd-ai-disconnected-text {
   inset: 0;
   background: rgba(0, 0, 0, 0.5);
   backdrop-filter: blur(2px);
+  -webkit-backdrop-filter: blur(2px);
   z-index: 100;
 }
 
@@ -4289,6 +4325,18 @@ body.dark {
   --zd-primary-hover: #ffffff !important;
   --zd-primary-soft: #27272a !important;
   --zd-primary-ghost: #1f1f22 !important;
+
+  /* Semantic tokens must stay dark-aware: the light overrides above use
+     !important, so without these the amber "AI not connected" banner keeps
+     a cream background in dark mode while its text turns light yellow. */
+  --zd-emerald: #34d399 !important;
+  --zd-emerald-soft: rgba(52, 211, 153, 0.15) !important;
+  --zd-amber: #fbbf24 !important;
+  --zd-amber-soft: rgba(245, 158, 11, 0.14) !important;
+  --zd-red: #f87171 !important;
+  --zd-red-soft: rgba(248, 113, 113, 0.15) !important;
+  --zd-violet: #a78bfa !important;
+  --zd-violet-soft: rgba(167, 139, 250, 0.15) !important;
 }
 
 html[dir="rtl"] *,
@@ -4301,6 +4349,7 @@ html[lang="fa"] * {
   border-bottom: 1px solid var(--zd-border) !important;
   box-shadow: none !important;
   backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
 }
 
 .zd-header-logo,

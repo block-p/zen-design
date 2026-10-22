@@ -5,6 +5,7 @@ mod detector;
 mod export;
 mod frames;
 mod history;
+mod platform;
 mod providers;
 mod settings;
 mod tts;
@@ -27,6 +28,7 @@ use axum::{
     Json, Router,
 };
 use futures_util::stream::{self, Stream, StreamExt};
+use rust_embed::RustEmbed;
 use serde::{Deserialize, Serialize};
 use serde_json::json;
 use tokio::sync::{broadcast, Mutex, RwLock};
@@ -34,13 +36,12 @@ use tokio_stream::wrappers::{BroadcastStream, IntervalStream};
 use tower_http::{services::ServeDir, trace::TraceLayer};
 use tracing::{info, warn};
 use tracing_subscriber::EnvFilter;
-use rust_embed::RustEmbed;
 
 #[derive(RustEmbed)]
 #[folder = "../studio/dist/"]
 struct StudioAssets;
 
-use agent::{AgentEvent, AgentOrchestrator, CustomThemeTokens, PromptRequest, truncate_words};
+use agent::{truncate_words, AgentEvent, AgentOrchestrator, CustomThemeTokens, PromptRequest};
 use settings::{Settings, KNOWN_PROVIDERS, PROVIDER_ANTHROPIC, PROVIDER_OPENAI};
 
 const DEFAULT_BIND_ADDR: &str = "127.0.0.1:7456";
@@ -79,8 +80,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .compact()
         .init();
 
-    let workspace = resolve_workspace();
-    std::fs::create_dir_all(&workspace)?;
+    let workspace = resolve_workspace()?;
     let studio = resolve_studio();
     let bind_addr =
         std::env::var("ZEN_BIND_ADDR").unwrap_or_else(|_| DEFAULT_BIND_ADDR.to_string());
@@ -160,13 +160,21 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             post(import_opencode_settings),
         )
         .route("/api/models", get(models))
-        .route("/api/history", get(get_history).post(post_history).delete(clear_all_history))
+        .route(
+            "/api/history",
+            get(get_history)
+                .post(post_history)
+                .delete(clear_all_history),
+        )
         .route("/api/history/:id", delete(delete_history_item))
         .route("/api/history/:id/activate", post(activate_history_item))
         .route("/api/history/new-project", post(new_project))
         .route("/api/themes/generate", post(generate_theme))
         .route("/api/slides/ai-action", post(slide_ai_action))
-        .route("/api/tts", get(tts_synthesize_get).post(tts_synthesize_post))
+        .route(
+            "/api/tts",
+            get(tts_synthesize_get).post(tts_synthesize_post),
+        )
         .route("/api/artifact", get(get_artifact).put(save_artifact))
         // Serve the agent's live output. ServeDir handles traversal protection
         // and content types; index.html is served for `/preview/`.
@@ -209,14 +217,16 @@ fn maybe_open_app_window(bind_addr: &str) {
         #[cfg(windows)]
         {
             // First try launching Edge in standalone application window mode (--app)
-            let launched = std::process::Command::new("cmd")
+            let mut cmd = std::process::Command::new("cmd");
+            crate::platform::configure_command(&mut cmd);
+            let launched = cmd
                 .args(["/C", "start", "msedge", &format!("--app={url}")])
                 .spawn();
             if launched.is_err() {
                 // Fallback to default browser
-                let _ = std::process::Command::new("cmd")
-                    .args(["/C", "start", &url])
-                    .spawn();
+                let mut cmd = std::process::Command::new("cmd");
+                crate::platform::configure_command(&mut cmd);
+                let _ = cmd.args(["/C", "start", &url]).spawn();
             }
         }
         #[cfg(target_os = "macos")]
@@ -231,14 +241,25 @@ fn maybe_open_app_window(bind_addr: &str) {
 }
 
 /// Resolve the workspace folder whether the binary is started from `server/`,
-/// from the repository root, or via an installed binary.
-fn resolve_workspace() -> PathBuf {
+/// from the repository root, or via an installed binary. A GUI launch (macOS
+/// Finder, Windows shortcut) often has `/` or `C:\Windows\System32` as its
+/// working directory, so a relative fallback must never be writable-by-luck.
+fn resolve_workspace() -> std::io::Result<PathBuf> {
     if let Ok(custom) = std::env::var("ZEN_WORKSPACE_DIR") {
-        let path = PathBuf::from(custom);
-        if let Err(error) = std::fs::create_dir_all(&path) {
-            warn!("Could not create ZEN_WORKSPACE_DIR {:?}: {error}", path);
+        let custom = custom.trim();
+        if !custom.is_empty() {
+            let path = PathBuf::from(custom);
+            std::fs::create_dir_all(&path).map_err(|error| {
+                std::io::Error::new(
+                    error.kind(),
+                    format!(
+                        "Could not create ZEN_WORKSPACE_DIR {}: {error}. Choose a writable folder.",
+                        path.display()
+                    ),
+                )
+            })?;
+            return Ok(std::fs::canonicalize(&path).unwrap_or(path));
         }
-        return std::fs::canonicalize(&path).unwrap_or(path);
     }
 
     if let Ok(exe) = std::env::current_exe() {
@@ -246,7 +267,7 @@ fn resolve_workspace() -> PathBuf {
         while let Some(parent) = curr {
             let ws = parent.join("workspace");
             if ws.is_dir() {
-                return std::fs::canonicalize(&ws).unwrap_or(ws);
+                return Ok(std::fs::canonicalize(&ws).unwrap_or(ws));
             }
             curr = parent.parent();
         }
@@ -254,7 +275,7 @@ fn resolve_workspace() -> PathBuf {
 
     let local = PathBuf::from("./workspace");
     if local.is_dir() {
-        return std::fs::canonicalize(&local).unwrap_or(local);
+        return Ok(std::fs::canonicalize(&local).unwrap_or(local));
     }
 
     let manifest_relative = Path::new(env!("CARGO_MANIFEST_DIR")).join("../workspace");
@@ -262,13 +283,33 @@ fn resolve_workspace() -> PathBuf {
 
     for candidate in candidates {
         if candidate.is_dir() {
-            return std::fs::canonicalize(&candidate).unwrap_or(candidate);
+            return Ok(std::fs::canonicalize(&candidate).unwrap_or(candidate));
         }
     }
 
-    let fallback = PathBuf::from("./workspace");
-    let _ = std::fs::create_dir_all(&fallback);
-    std::fs::canonicalize(&fallback).unwrap_or(fallback)
+    // Installed/GUI launch: use a per-user data directory, never `./workspace`
+    // relative to a read-only working directory.
+    let fallback = platform::default_workspace();
+    if let Err(error) = std::fs::create_dir_all(&fallback) {
+        warn!(
+            "Could not create the user workspace {}: {error}; trying a temporary folder",
+            fallback.display()
+        );
+        let temporary = std::env::temp_dir().join("zen-design-workspace");
+        std::fs::create_dir_all(&temporary).map_err(|second| {
+            std::io::Error::new(
+                second.kind(),
+                format!(
+                    "No writable workspace. Could not create {} ({error}) or {} ({second}). Set ZEN_WORKSPACE_DIR to a writable folder.",
+                    fallback.display(),
+                    temporary.display()
+                ),
+            )
+        })?;
+        return Ok(std::fs::canonicalize(&temporary).unwrap_or(temporary));
+    }
+
+    Ok(std::fs::canonicalize(&fallback).unwrap_or(fallback))
 }
 
 /// Locate the Trunk output regardless of the process working directory.
@@ -334,10 +375,7 @@ fn resolve_export_dir() -> PathBuf {
         }
     }
 
-    let base = std::env::var_os("XDG_CACHE_HOME")
-        .map(PathBuf::from)
-        .or_else(|| std::env::var_os("HOME").map(|home| PathBuf::from(home).join(".cache")))
-        .unwrap_or_else(std::env::temp_dir);
+    let base = platform::cache_dir();
     base.join("zen-design").join("exports")
 }
 
@@ -452,17 +490,15 @@ async fn apply_detected_source(
 
     if resolved.provider == settings::PROVIDER_OPENAI {
         candidate.openai.base_url = resolved.base_url.clone();
-        if !resolved.api_key.is_empty() {
-            candidate.openai.api_key = resolved.api_key.clone();
-        }
+        // Replace, don't merge: applying a keyless source must not keep the
+        // previous provider's secret in the profile.
+        candidate.openai.api_key = resolved.api_key.clone();
         if let Some(m) = resolved.model.clone() {
             candidate.openai.model = m;
         }
     } else if resolved.provider == settings::PROVIDER_ANTHROPIC {
         candidate.anthropic.base_url = resolved.base_url.clone();
-        if !resolved.api_key.is_empty() {
-            candidate.anthropic.api_key = resolved.api_key.clone();
-        }
+        candidate.anthropic.api_key = resolved.api_key.clone();
         if let Some(m) = resolved.model.clone() {
             candidate.anthropic.model = m;
         }
@@ -483,7 +519,8 @@ async fn apply_detected_source(
         specific_models
     } else {
         let mut live_models = Vec::new();
-        if let Ok(live) = providers::list_models(&state.http, &candidate, &candidate.provider).await {
+        if let Ok(live) = providers::list_models(&state.http, &candidate, &candidate.provider).await
+        {
             if !live.is_empty() {
                 live_models = live;
             }
@@ -606,81 +643,13 @@ async fn import_opencode_settings(State(state): State<AppState>) -> impl IntoRes
 }
 
 fn read_opencode_provider() -> Result<ImportedProvider, String> {
-    let path = detector::find_opencode_config_file()
-        .ok_or_else(|| "Could not locate OpenCode configuration (checked ~/.config/opencode, %APPDATA%, %LOCALAPPDATA%, and workspace).".to_string())?;
-
-    let raw = std::fs::read_to_string(&path)
-        .map_err(|error| format!("Could not read {}: {error}", path.display()))?;
-    let cleaned = detector::strip_json_comments(&raw);
-    let value: serde_json::Value = serde_json::from_str(&cleaned)
-        .map_err(|error| format!("Could not parse {}: {error}", path.display()))?;
-
-    let providers = value
-        .get("provider")
-        .or_else(|| value.get("providers"))
-        .and_then(serde_json::Value::as_object)
-        .ok_or_else(|| format!("{} has no provider entries.", path.display()))?;
-
-    let chosen = providers
-        .get_key_value("9router")
-        .or_else(|| {
-            providers.iter().find(|(_, entry)| {
-                entry
-                    .pointer("/options/baseURL")
-                    .or_else(|| entry.pointer("/options/baseUrl"))
-                    .is_some()
-            })
-        })
-        .ok_or_else(|| "No OpenCode provider with options.baseURL was found.".to_string())?;
-
-    let (name, entry) = chosen;
-    let options = entry
-        .get("options")
-        .ok_or_else(|| format!("Provider '{name}' has no options."))?;
-
-    let base_url = options
-        .get("baseURL")
-        .or_else(|| options.get("baseUrl"))
-        .and_then(serde_json::Value::as_str)
-        .unwrap_or_default()
-        .trim()
-        .trim_end_matches('/')
-        .to_string();
-    if base_url.is_empty() {
-        return Err(format!("Provider '{name}' has an empty base URL."));
-    }
-
-    let api_key = options
-        .get("apiKey")
-        .and_then(serde_json::Value::as_str)
-        .map(resolve_secret)
-        .unwrap_or_default();
-
-    let mut models: Vec<String> = entry
-        .get("models")
-        .and_then(serde_json::Value::as_object)
-        .map(|models| models.keys().cloned().collect())
-        .unwrap_or_default();
-    models.sort();
-
+    let endpoint = detector::read_opencode_endpoint()?;
     Ok(ImportedProvider {
-        name: name.clone(),
-        base_url,
-        api_key,
-        models,
+        name: endpoint.provider_name,
+        base_url: endpoint.base_url,
+        api_key: endpoint.api_key,
+        models: endpoint.models,
     })
-}
-
-fn resolve_secret(raw: &str) -> String {
-    let trimmed = raw.trim();
-    if let Some(name) = trimmed
-        .strip_prefix("{env:")
-        .and_then(|rest| rest.strip_suffix('}'))
-    {
-        std::env::var(name).unwrap_or_default()
-    } else {
-        trimmed.to_string()
-    }
 }
 
 fn default_model(models: &[String]) -> String {
@@ -701,7 +670,10 @@ fn default_model(models: &[String]) -> String {
             return wanted.to_string();
         }
     }
-    models.first().cloned().unwrap_or_else(|| "ag/gemini-3.8-flash-high".to_string())
+    models
+        .first()
+        .cloned()
+        .unwrap_or_else(|| "ag/gemini-3.8-flash-high".to_string())
 }
 
 /// SSE endpoint. Unlike the old 800ms-fixed-timeout design this stream has no
@@ -899,14 +871,25 @@ async fn generate_theme(
     // If an LLM provider (OpenAI, 9Router, Anthropic) is configured, try calling it
     if settings.provider == PROVIDER_OPENAI || settings.provider == PROVIDER_ANTHROPIC {
         if let Ok(theme) = generate_llm_theme(&state.http, &settings, prompt).await {
-            info!("Generated theme via LLM provider ({}): {}", settings.provider, theme.name);
-            return (StatusCode::OK, Json(json!({ "theme": theme, "source": "llm" }))).into_response();
+            info!(
+                "Generated theme via LLM provider ({}): {}",
+                settings.provider, theme.name
+            );
+            return (
+                StatusCode::OK,
+                Json(json!({ "theme": theme, "source": "llm" })),
+            )
+                .into_response();
         }
     }
 
     // Fallback to high-speed built-in algorithmic engine
     let theme = generate_algorithmic_theme(prompt);
-    (StatusCode::OK, Json(json!({ "theme": theme, "source": "algorithmic" }))).into_response()
+    (
+        StatusCode::OK,
+        Json(json!({ "theme": theme, "source": "algorithmic" })),
+    )
+        .into_response()
 }
 
 async fn generate_llm_theme(
@@ -914,7 +897,9 @@ async fn generate_llm_theme(
     settings: &Settings,
     prompt: &str,
 ) -> Result<CustomThemeTokens, String> {
-    let is_persian = prompt.chars().any(|c| ('\u{0600}'..='\u{06FF}').contains(&c));
+    let is_persian = prompt
+        .chars()
+        .any(|c| ('\u{0600}'..='\u{06FF}').contains(&c));
     let font_guide = if is_persian {
         "For Persian text, use \"'Vazirmatn', system-ui, sans-serif\" as font_family."
     } else {
@@ -1034,7 +1019,10 @@ async fn generate_llm_theme(
 
     let parsed: PartialTheme = serde_json::from_str(clean_json).map_err(|e| e.to_string())?;
     let dot = parsed.accent.clone();
-    let swatch = format!("linear-gradient(135deg, {} 0%, {} 100%)", parsed.accent, parsed.bg);
+    let swatch = format!(
+        "linear-gradient(135deg, {} 0%, {} 100%)",
+        parsed.accent, parsed.bg
+    );
 
     Ok(CustomThemeTokens {
         name: parsed.name,
@@ -1052,7 +1040,9 @@ async fn generate_llm_theme(
 fn generate_algorithmic_theme(prompt: &str) -> CustomThemeTokens {
     let lower = prompt.to_lowercase();
 
-    let is_persian = prompt.chars().any(|c| ('\u{0600}'..='\u{06FF}').contains(&c));
+    let is_persian = prompt
+        .chars()
+        .any(|c| ('\u{0600}'..='\u{06FF}').contains(&c));
     let default_font = if is_persian {
         "'Vazirmatn', system-ui, sans-serif".to_string()
     } else {
@@ -1060,15 +1050,32 @@ fn generate_algorithmic_theme(prompt: &str) -> CustomThemeTokens {
     };
 
     // Insurance / Banking / Finance / سرمایه / بانک / بیمه / مالی / اعتباری (Corporate Trust Navy & Royal Blue)
-    if lower.contains("بیمه") || lower.contains("بانک") || lower.contains("مالی") || lower.contains("سرمایه") || lower.contains("اعتبار") || lower.contains("insurance") || lower.contains("bank") || lower.contains("finance") || lower.contains("fintech") {
+    if lower.contains("بیمه")
+        || lower.contains("بانک")
+        || lower.contains("مالی")
+        || lower.contains("سرمایه")
+        || lower.contains("اعتبار")
+        || lower.contains("insurance")
+        || lower.contains("bank")
+        || lower.contains("finance")
+        || lower.contains("fintech")
+    {
         let is_light = lower.contains("روشن") || lower.contains("سفید") || lower.contains("light");
         let (bg, card, border, text, accent, dot) = if is_light {
-            ("#f8fafc", "#ffffff", "#cbd5e1", "#0f172a", "#1d4ed8", "#2563eb")
+            (
+                "#f8fafc", "#ffffff", "#cbd5e1", "#0f172a", "#1d4ed8", "#2563eb",
+            )
         } else {
-            ("#0b1329", "#111c38", "#1e293b", "#f1f5f9", "#3b82f6", "#60a5fa")
+            (
+                "#0b1329", "#111c38", "#1e293b", "#f1f5f9", "#3b82f6", "#60a5fa",
+            )
         };
         CustomThemeTokens {
-            name: if is_persian { "بیمه و اعتماد سازمانی / Corporate Trust".to_string() } else { "Corporate Trust (Insurance & Finance)".to_string() },
+            name: if is_persian {
+                "بیمه و اعتماد سازمانی / Corporate Trust".to_string()
+            } else {
+                "Corporate Trust (Insurance & Finance)".to_string()
+            },
             bg: bg.to_string(),
             text: text.to_string(),
             accent: accent.to_string(),
@@ -1078,15 +1085,32 @@ fn generate_algorithmic_theme(prompt: &str) -> CustomThemeTokens {
             dot: dot.to_string(),
             swatch: format!("linear-gradient(135deg, {accent} 0%, {bg} 100%)"),
         }
-    } else if lower.contains("پزشکی") || lower.contains("درمان") || lower.contains("سلامت") || lower.contains("دارو") || lower.contains("بیمارستان") || lower.contains("medical") || lower.contains("health") || lower.contains("clinic") || lower.contains("pharma") {
+    } else if lower.contains("پزشکی")
+        || lower.contains("درمان")
+        || lower.contains("سلامت")
+        || lower.contains("دارو")
+        || lower.contains("بیمارستان")
+        || lower.contains("medical")
+        || lower.contains("health")
+        || lower.contains("clinic")
+        || lower.contains("pharma")
+    {
         let is_light = lower.contains("روشن") || lower.contains("سفید") || lower.contains("light");
         let (bg, card, border, text, accent, dot) = if is_light {
-            ("#f0fdfa", "#ffffff", "#99f6e4", "#134e4a", "#0d9488", "#14b8a6")
+            (
+                "#f0fdfa", "#ffffff", "#99f6e4", "#134e4a", "#0d9488", "#14b8a6",
+            )
         } else {
-            ("#041f1e", "#072e2d", "#115e59", "#f0fdfa", "#14b8a6", "#2dd4bf")
+            (
+                "#041f1e", "#072e2d", "#115e59", "#f0fdfa", "#14b8a6", "#2dd4bf",
+            )
         };
         CustomThemeTokens {
-            name: if is_persian { "پزشکی و سلامت / Clinical Teal".to_string() } else { "Clinical Teal (Health & Medical)".to_string() },
+            name: if is_persian {
+                "پزشکی و سلامت / Clinical Teal".to_string()
+            } else {
+                "Clinical Teal (Health & Medical)".to_string()
+            },
             bg: bg.to_string(),
             text: text.to_string(),
             accent: accent.to_string(),
@@ -1096,9 +1120,20 @@ fn generate_algorithmic_theme(prompt: &str) -> CustomThemeTokens {
             dot: dot.to_string(),
             swatch: format!("linear-gradient(135deg, {accent} 0%, {bg} 100%)"),
         }
-    } else if lower.contains("املاک") || lower.contains("ساختمان") || lower.contains("معماری") || lower.contains("سازه") || lower.contains("real estate") || lower.contains("architecture") || lower.contains("interior") {
+    } else if lower.contains("املاک")
+        || lower.contains("ساختمان")
+        || lower.contains("معماری")
+        || lower.contains("سازه")
+        || lower.contains("real estate")
+        || lower.contains("architecture")
+        || lower.contains("interior")
+    {
         CustomThemeTokens {
-            name: if is_persian { "معماری و املاک / Bronze Estate".to_string() } else { "Bronze Estate".to_string() },
+            name: if is_persian {
+                "معماری و املاک / Bronze Estate".to_string()
+            } else {
+                "Bronze Estate".to_string()
+            },
             bg: "#141210".to_string(),
             text: "#f5f5f4".to_string(),
             accent: "#d97706".to_string(),
@@ -1108,9 +1143,21 @@ fn generate_algorithmic_theme(prompt: &str) -> CustomThemeTokens {
             dot: "#f59e0b".to_string(),
             swatch: "linear-gradient(135deg, #d97706 0%, #141210 100%)".to_string(),
         }
-    } else if lower.contains("کافه") || lower.contains("قهوه") || lower.contains("رستوران") || lower.contains("غذا") || lower.contains("فود") || lower.contains("cafe") || lower.contains("coffee") || lower.contains("restaurant") {
+    } else if lower.contains("کافه")
+        || lower.contains("قهوه")
+        || lower.contains("رستوران")
+        || lower.contains("غذا")
+        || lower.contains("فود")
+        || lower.contains("cafe")
+        || lower.contains("coffee")
+        || lower.contains("restaurant")
+    {
         CustomThemeTokens {
-            name: if is_persian { "کافه و قهوه / Warm Espresso".to_string() } else { "Warm Espresso".to_string() },
+            name: if is_persian {
+                "کافه و قهوه / Warm Espresso".to_string()
+            } else {
+                "Warm Espresso".to_string()
+            },
             bg: "#180d09".to_string(),
             text: "#fed7aa".to_string(),
             accent: "#ea580c".to_string(),
@@ -1121,15 +1168,32 @@ fn generate_algorithmic_theme(prompt: &str) -> CustomThemeTokens {
             swatch: "linear-gradient(135deg, #ea580c 0%, #180d09 100%)".to_string(),
         }
     // Red / Crimson / Ruby / سرخ / قرمز / زرشکی
-    } else if lower.contains("قرمز") || lower.contains("سرخ") || lower.contains("زرشکی") || lower.contains("red") || lower.contains("crimson") || lower.contains("ruby") || lower.contains("blood") || lower.contains("scarlet") {
-        let is_dark = lower.contains("مشکی") || lower.contains("سیاه") || lower.contains("تیره") || lower.contains("dark") || lower.contains("black") || !lower.contains("سفید");
+    } else if lower.contains("قرمز")
+        || lower.contains("سرخ")
+        || lower.contains("زرشکی")
+        || lower.contains("red")
+        || lower.contains("crimson")
+        || lower.contains("ruby")
+        || lower.contains("blood")
+        || lower.contains("scarlet")
+    {
+        let is_dark = lower.contains("مشکی")
+            || lower.contains("سیاه")
+            || lower.contains("تیره")
+            || lower.contains("dark")
+            || lower.contains("black")
+            || !lower.contains("سفید");
         let (bg, card, border, text, accent) = if is_dark {
             ("#0a0a0c", "#161114", "#38171e", "#fce7f3", "#ef4444")
         } else {
             ("#fff5f5", "#ffffff", "#fed7d7", "#1a202c", "#e53e3e")
         };
         CustomThemeTokens {
-            name: if is_persian { "قرمز شفق / Crimson Dark".to_string() } else { "Crimson Void".to_string() },
+            name: if is_persian {
+                "قرمز شفق / Crimson Dark".to_string()
+            } else {
+                "Crimson Void".to_string()
+            },
             bg: bg.to_string(),
             text: text.to_string(),
             accent: accent.to_string(),
@@ -1139,7 +1203,13 @@ fn generate_algorithmic_theme(prompt: &str) -> CustomThemeTokens {
             dot: accent.to_string(),
             swatch: format!("linear-gradient(135deg, {accent} 0%, {bg} 100%)"),
         }
-    } else if lower.contains("cyber") || lower.contains("neon") || lower.contains("arcade") || lower.contains("matrix") || lower.contains("نئون") || lower.contains("سایبر") {
+    } else if lower.contains("cyber")
+        || lower.contains("neon")
+        || lower.contains("arcade")
+        || lower.contains("matrix")
+        || lower.contains("نئون")
+        || lower.contains("سایبر")
+    {
         CustomThemeTokens {
             name: "Neon Cyberpunk".to_string(),
             bg: "#090a0f".to_string(),
@@ -1151,9 +1221,21 @@ fn generate_algorithmic_theme(prompt: &str) -> CustomThemeTokens {
             dot: "#00f0ff".to_string(),
             swatch: "linear-gradient(135deg, #ff007f 0%, #090a0f 100%)".to_string(),
         }
-    } else if lower.contains("forest") || lower.contains("moss") || lower.contains("pine") || lower.contains("nature") || lower.contains("green") || lower.contains("سبز") || lower.contains("جنگل") || lower.contains("طبیعت") {
+    } else if lower.contains("forest")
+        || lower.contains("moss")
+        || lower.contains("pine")
+        || lower.contains("nature")
+        || lower.contains("green")
+        || lower.contains("سبز")
+        || lower.contains("جنگل")
+        || lower.contains("طبیعت")
+    {
         CustomThemeTokens {
-            name: if is_persian { "سبز نوردیک / Nordic Pine".to_string() } else { "Nordic Pine".to_string() },
+            name: if is_persian {
+                "سبز نوردیک / Nordic Pine".to_string()
+            } else {
+                "Nordic Pine".to_string()
+            },
             bg: "#0a1410".to_string(),
             text: "#ecfdf5".to_string(),
             accent: "#10b981".to_string(),
@@ -1163,9 +1245,20 @@ fn generate_algorithmic_theme(prompt: &str) -> CustomThemeTokens {
             dot: "#10b981".to_string(),
             swatch: "linear-gradient(135deg, #10b981 0%, #0a1410 100%)".to_string(),
         }
-    } else if lower.contains("sunset") || lower.contains("warm") || lower.contains("coral") || lower.contains("autumn") || lower.contains("پاییز") || lower.contains("نارنجی") || lower.contains("آفتاب") {
+    } else if lower.contains("sunset")
+        || lower.contains("warm")
+        || lower.contains("coral")
+        || lower.contains("autumn")
+        || lower.contains("پاییز")
+        || lower.contains("نارنجی")
+        || lower.contains("آفتاب")
+    {
         CustomThemeTokens {
-            name: if is_persian { "غروب پاییزی / Sunset Ember".to_string() } else { "Sunset Ember".to_string() },
+            name: if is_persian {
+                "غروب پاییزی / Sunset Ember".to_string()
+            } else {
+                "Sunset Ember".to_string()
+            },
             bg: "#1f0d14".to_string(),
             text: "#fff1f2".to_string(),
             accent: "#f97316".to_string(),
@@ -1175,9 +1268,21 @@ fn generate_algorithmic_theme(prompt: &str) -> CustomThemeTokens {
             dot: "#f97316".to_string(),
             swatch: "linear-gradient(135deg, #f97316 0%, #1f0d14 100%)".to_string(),
         }
-    } else if lower.contains("gold") || lower.contains("luxury") || lower.contains("champagne") || lower.contains("royal") || lower.contains("طلا") || lower.contains("لوکس") || lower.contains("سلطنتی") || lower.contains("زرد") {
+    } else if lower.contains("gold")
+        || lower.contains("luxury")
+        || lower.contains("champagne")
+        || lower.contains("royal")
+        || lower.contains("طلا")
+        || lower.contains("لوکس")
+        || lower.contains("سلطنتی")
+        || lower.contains("زرد")
+    {
         CustomThemeTokens {
-            name: if is_persian { "طلایی لوکس / Imperial Obsidian".to_string() } else { "Imperial Obsidian".to_string() },
+            name: if is_persian {
+                "طلایی لوکس / Imperial Obsidian".to_string()
+            } else {
+                "Imperial Obsidian".to_string()
+            },
             bg: "#0a0a0c".to_string(),
             text: "#faf5ef".to_string(),
             accent: "#eab308".to_string(),
@@ -1187,9 +1292,20 @@ fn generate_algorithmic_theme(prompt: &str) -> CustomThemeTokens {
             dot: "#eab308".to_string(),
             swatch: "linear-gradient(135deg, #eab308 0%, #0a0a0c 100%)".to_string(),
         }
-    } else if lower.contains("ocean") || lower.contains("sea") || lower.contains("aqua") || lower.contains("blue") || lower.contains("دریا") || lower.contains("آبی") || lower.contains("اقیانوس") {
+    } else if lower.contains("ocean")
+        || lower.contains("sea")
+        || lower.contains("aqua")
+        || lower.contains("blue")
+        || lower.contains("دریا")
+        || lower.contains("آبی")
+        || lower.contains("اقیانوس")
+    {
         CustomThemeTokens {
-            name: if is_persian { "آبی اقیانوس / Abyssal Azure".to_string() } else { "Abyssal Azure".to_string() },
+            name: if is_persian {
+                "آبی اقیانوس / Abyssal Azure".to_string()
+            } else {
+                "Abyssal Azure".to_string()
+            },
             bg: "#05111e".to_string(),
             text: "#f0f9ff".to_string(),
             accent: "#0284c7".to_string(),
@@ -1199,9 +1315,18 @@ fn generate_algorithmic_theme(prompt: &str) -> CustomThemeTokens {
             dot: "#0284c7".to_string(),
             swatch: "linear-gradient(135deg, #0284c7 0%, #05111e 100%)".to_string(),
         }
-    } else if lower.contains("purple") || lower.contains("violet") || lower.contains("lavender") || lower.contains("بنفش") || lower.contains("ارغوانی") {
+    } else if lower.contains("purple")
+        || lower.contains("violet")
+        || lower.contains("lavender")
+        || lower.contains("بنفش")
+        || lower.contains("ارغوانی")
+    {
         CustomThemeTokens {
-            name: if is_persian { "بنفش کیهانی / Velvet Nebula".to_string() } else { "Velvet Nebula".to_string() },
+            name: if is_persian {
+                "بنفش کیهانی / Velvet Nebula".to_string()
+            } else {
+                "Velvet Nebula".to_string()
+            },
             bg: "#120a22".to_string(),
             text: "#f5f3ff".to_string(),
             accent: "#a855f7".to_string(),
@@ -1211,9 +1336,19 @@ fn generate_algorithmic_theme(prompt: &str) -> CustomThemeTokens {
             dot: "#a855f7".to_string(),
             swatch: "linear-gradient(135deg, #a855f7 0%, #120a22 100%)".to_string(),
         }
-    } else if lower.contains("minimal") || lower.contains("light") || lower.contains("white") || lower.contains("paper") || lower.contains("سفید") || lower.contains("روشن") {
+    } else if lower.contains("minimal")
+        || lower.contains("light")
+        || lower.contains("white")
+        || lower.contains("paper")
+        || lower.contains("سفید")
+        || lower.contains("روشن")
+    {
         CustomThemeTokens {
-            name: if is_persian { "سفید مینیمال / Minimal White".to_string() } else { "Atelier Paper".to_string() },
+            name: if is_persian {
+                "سفید مینیمال / Minimal White".to_string()
+            } else {
+                "Atelier Paper".to_string()
+            },
             bg: "#f8f9fa".to_string(),
             text: "#18181b".to_string(),
             accent: "#2563eb".to_string(),
@@ -1225,19 +1360,28 @@ fn generate_algorithmic_theme(prompt: &str) -> CustomThemeTokens {
         }
     } else {
         // Deterministic hash-based derivation with clean HEX outputs
-        let hash: u64 = prompt.bytes().fold(5381, |acc, b| acc.wrapping_mul(33).wrapping_add(b as u64));
+        let hash: u64 = prompt
+            .bytes()
+            .fold(5381, |acc, b| acc.wrapping_mul(33).wrapping_add(b as u64));
         let hue = (hash % 360) as f64;
         let s = 0.85;
         let l = 0.58;
         let c = (1.0 - (2.0 * l - 1.0_f64).abs()) * s;
         let x = c * (1.0 - ((hue / 60.0) % 2.0 - 1.0_f64).abs());
         let m = l - c / 2.0;
-        let (r1, g1, b1) = if hue < 60.0 { (c, x, 0.0) }
-            else if hue < 120.0 { (x, c, 0.0) }
-            else if hue < 180.0 { (0.0, c, x) }
-            else if hue < 240.0 { (0.0, x, c) }
-            else if hue < 300.0 { (x, 0.0, c) }
-            else { (c, 0.0, x) };
+        let (r1, g1, b1) = if hue < 60.0 {
+            (c, x, 0.0)
+        } else if hue < 120.0 {
+            (x, c, 0.0)
+        } else if hue < 180.0 {
+            (0.0, c, x)
+        } else if hue < 240.0 {
+            (0.0, x, c)
+        } else if hue < 300.0 {
+            (x, 0.0, c)
+        } else {
+            (c, 0.0, x)
+        };
         let r = ((r1 + m) * 255.0).round().clamp(0.0, 255.0) as u8;
         let g = ((g1 + m) * 255.0).round().clamp(0.0, 255.0) as u8;
         let b = ((b1 + m) * 255.0).round().clamp(0.0, 255.0) as u8;
@@ -1246,9 +1390,15 @@ fn generate_algorithmic_theme(prompt: &str) -> CustomThemeTokens {
         let swatch = format!("linear-gradient(135deg, {accent} 0%, {bg} 100%)");
 
         let display_name = if is_persian {
-            format!("تم اختصاصی ({})", truncate_words(prompt, 18).trim_end_matches('…'))
+            format!(
+                "تم اختصاصی ({})",
+                truncate_words(prompt, 18).trim_end_matches('…')
+            )
         } else {
-            format!("Custom ({})", truncate_words(prompt, 18).trim_end_matches('…'))
+            format!(
+                "Custom ({})",
+                truncate_words(prompt, 18).trim_end_matches('…')
+            )
         };
 
         CustomThemeTokens {
@@ -1304,7 +1454,10 @@ fn html_escape(s: &str) -> String {
 
 fn slide_header_html(badge: &str, title: &str, subtitle: &str) -> String {
     let sub_html = if !subtitle.trim().is_empty() {
-        format!("\n            <p class=\"s-sub body-text\">{}</p>", html_escape(subtitle))
+        format!(
+            "\n            <p class=\"s-sub body-text\">{}</p>",
+            html_escape(subtitle)
+        )
     } else {
         String::new()
     };
@@ -1367,7 +1520,9 @@ fn render_slide_html(
                         && (parts[0].starts_with('+')
                             || parts[0].ends_with('%')
                             || parts[0].contains('٪')
-                            || parts[0].chars().any(|c| c.is_ascii_digit() || ('\u{06F0}'..='\u{06F9}').contains(&c)))
+                            || parts[0].chars().any(|c| {
+                                c.is_ascii_digit() || ('\u{06F0}'..='\u{06F9}').contains(&c)
+                            }))
                     {
                         (parts[0], item[parts[0].len()..].trim())
                     } else {
@@ -1482,7 +1637,11 @@ fn render_slide_html(
             let mut bars_html = String::new();
             for (i, item) in items.iter().enumerate() {
                 let (label, pct, val) = if let Some(def) = default_data.get(i) {
-                    let lbl = if item.trim().is_empty() { def.0 } else { item.as_str() };
+                    let lbl = if item.trim().is_empty() {
+                        def.0
+                    } else {
+                        item.as_str()
+                    };
                     (lbl, def.1, def.2)
                 } else {
                     (item.as_str(), 60 + (i as i32 * 10) % 35, "+40%")
@@ -1535,7 +1694,13 @@ fn render_slide_html(
         "chart_donut" => {
             let default_slices = [
                 ("سهم فناوری‌های نوین", "45%", "#6366f1", "141.3 172.7", "0"),
-                ("بهینه‌سازی هزینه و انرژی", "30%", "#10b981", "94.2 219.8", "-141.3"),
+                (
+                    "بهینه‌سازی هزینه و انرژی",
+                    "30%",
+                    "#10b981",
+                    "94.2 219.8",
+                    "-141.3",
+                ),
                 ("سرعت و چابکی تیم", "25%", "#f59e0b", "78.5 235.5", "-235.5"),
             ];
             let mut legend_html = String::new();
@@ -1580,7 +1745,13 @@ fn render_slide_html(
         "chart_trend" => {
             let mut cards_html = String::new();
             for (i, item) in items.iter().take(3).enumerate() {
-                let delta = if i == 0 { "+140%" } else if i == 1 { "+85%" } else { "3.2x" };
+                let delta = if i == 0 {
+                    "+140%"
+                } else if i == 1 {
+                    "+85%"
+                } else {
+                    "3.2x"
+                };
                 cards_html.push_str(&format!(
                     r#"                <div class="card zd-trend-mini-stat">
                     <div class="stat-val">{}</div>
@@ -1801,9 +1972,11 @@ fn generate_algorithmic_slide_action(
                 }
             }
             let notes = if is_persian {
-                "در این اسلاید، آمار و سنجه‌های عددی کلیدی را به زبان ساده برای حاضرین تشریح کنید.".to_string()
+                "در این اسلاید، آمار و سنجه‌های عددی کلیدی را به زبان ساده برای حاضرین تشریح کنید."
+                    .to_string()
             } else {
-                "Present these key metric data points to highlight measurable performance gains.".to_string()
+                "Present these key metric data points to highlight measurable performance gains."
+                    .to_string()
             };
             (b, t, sub, list, notes)
         }
@@ -1908,7 +2081,8 @@ fn generate_algorithmic_slide_action(
             } else if is_persian {
                 "رویکردی ساختاریافته به منظور ایجاد بیشترین بازدهی با کمترین پیچیدگی.".to_string()
             } else {
-                "A structured paradigm to maximize leverage while eliminating unnecessary overhead.".to_string()
+                "A structured paradigm to maximize leverage while eliminating unnecessary overhead."
+                    .to_string()
             };
             let list = if curr_items.is_empty() {
                 if is_persian {
@@ -1942,14 +2116,8 @@ fn generate_algorithmic_slide_action(
         }
     };
 
-    let html_snippet = render_slide_html(
-        &badge,
-        &title,
-        &subtitle,
-        &items,
-        &speaker_notes,
-        &layout,
-    );
+    let html_snippet =
+        render_slide_html(&badge, &title, &subtitle, &items, &speaker_notes, &layout);
 
     SlideAiResult {
         badge,
@@ -1986,9 +2154,12 @@ async fn generate_llm_slide_action(
     let items = payload.items.clone().unwrap_or_default();
     let target_layout = payload.target_layout.as_deref().unwrap_or("bento");
 
-    let is_persian = format!("{action} {instruction} {title} {subtitle} {}", items.join(" "))
-        .chars()
-        .any(|c| ('\u{0600}'..='\u{06FF}').contains(&c));
+    let is_persian = format!(
+        "{action} {instruction} {title} {subtitle} {}",
+        items.join(" ")
+    )
+    .chars()
+    .any(|c| ('\u{0600}'..='\u{06FF}').contains(&c));
 
     let lang_guide = if is_persian {
         "All generated output (badge, title, subtitle, items, speaker_notes) MUST be in natural, fluent, elegant Persian (فارسی). Maintain professional tone and high readability."
@@ -2109,7 +2280,8 @@ async fn generate_llm_slide_action(
         speaker_notes: String,
     }
 
-    let parsed: LlmSlideOut = serde_json::from_str(json_str).map_err(|e| format!("JSON parse error: {e}"))?;
+    let parsed: LlmSlideOut =
+        serde_json::from_str(json_str).map_err(|e| format!("JSON parse error: {e}"))?;
     let layout = if !target_layout.is_empty() {
         target_layout.to_string()
     } else {
@@ -2191,11 +2363,19 @@ async fn tts_synthesize_internal(state: AppState, payload: TtsPayload) -> impl I
         match provider {
             "elevenlabs" => {
                 let k = settings.elevenlabs_key();
-                if !k.is_empty() { Some(k) } else { None }
+                if !k.is_empty() {
+                    Some(k)
+                } else {
+                    None
+                }
             }
             "openai" => {
                 let k = settings.openai_key();
-                if !k.is_empty() { Some(k) } else { None }
+                if !k.is_empty() {
+                    Some(k)
+                } else {
+                    None
+                }
             }
             _ => None,
         }
@@ -2242,8 +2422,6 @@ async fn tts_synthesize_get(
 ) -> impl IntoResponse {
     tts_synthesize_internal(state, payload).await
 }
-
-
 
 fn detect_artifact_mode(html: &str) -> &'static str {
     if html.contains("class=\"slide")
@@ -2334,7 +2512,11 @@ async fn activate_history_item(
                 "reload",
                 "Loaded project from history.",
             );
-            (StatusCode::OK, Json(json!({ "status": "ok", "item": item }))).into_response()
+            (
+                StatusCode::OK,
+                Json(json!({ "status": "ok", "item": item })),
+            )
+                .into_response()
         }
         Err(err) => (
             StatusCode::NOT_FOUND,
@@ -2459,6 +2641,16 @@ async fn start_export(
 ) -> impl IntoResponse {
     let seconds = request.seconds.unwrap_or(8).clamp(3, 20);
 
+    if !cfg!(target_os = "linux") {
+        return (
+            StatusCode::NOT_IMPLEMENTED,
+            Json(json!({
+                "error": "MP4 export requires Linux/X11 for now. Use PowerPoint or PDF export on this platform."
+            })),
+        )
+            .into_response();
+    }
+
     // Recording without an artifact would only capture Chrome's error page.
     let preview = format!("{}/preview/index.html", state.public_base);
     let has_artifact = state
@@ -2546,7 +2738,7 @@ async fn export_latest(State(state): State<AppState>) -> impl IntoResponse {
 const PPTX_EXPORTER_SCRIPT: &str = include_str!("../export_pptx.py");
 
 async fn export_pptx(State(state): State<AppState>) -> impl IntoResponse {
-    let workspace = resolve_workspace();
+    let workspace = &state.workspace;
     let html_path = workspace.join("index.html");
     if !html_path.exists() {
         return (
@@ -2568,9 +2760,19 @@ async fn export_pptx(State(state): State<AppState>) -> impl IntoResponse {
             .into_response();
     }
 
-    let python_cmd = if cfg!(windows) { "python" } else { "python3" };
+    let Some(python_cmd) = platform::python_binary() else {
+        return (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(json!({
+                "error": "Python 3 was not found. Install Python 3 with pip (python-pptx and beautifulsoup4) to export PowerPoint."
+            })),
+        )
+            .into_response();
+    };
 
-    let output = tokio::process::Command::new(python_cmd)
+    let mut pptx_cmd = tokio::process::Command::new(&python_cmd);
+    crate::platform::configure_tokio_command(&mut pptx_cmd);
+    let output = pptx_cmd
         .arg(&script_path)
         .arg(&html_path)
         .arg(&pptx_path)
@@ -2578,41 +2780,39 @@ async fn export_pptx(State(state): State<AppState>) -> impl IntoResponse {
         .await;
 
     match output {
-        Ok(out) if out.status.success() => {
-            match tokio::fs::read(&pptx_path).await {
-                Ok(bytes) => {
-                    providers::emit_event(
-                        &state.event_sender,
-                        "activity",
-                        "PowerPoint presentation exported (.pptx)",
-                    );
-                    let mut response = axum::response::Response::new(axum::body::Body::from(bytes));
-                    let headers = response.headers_mut();
-                    headers.insert(
-                        axum::http::header::CONTENT_TYPE,
-                        axum::http::HeaderValue::from_static(
-                            "application/vnd.openxmlformats-officedocument.presentationml.presentation",
-                        ),
-                    );
-                    headers.insert(
-                        axum::http::header::CONTENT_DISPOSITION,
-                        axum::http::HeaderValue::from_static(
-                            "attachment; filename=\"presentation.pptx\"",
-                        ),
-                    );
-                    headers.insert(
-                        axum::http::header::CACHE_CONTROL,
-                        axum::http::HeaderValue::from_static("no-store"),
-                    );
-                    response.into_response()
-                }
-                Err(e) => (
-                    StatusCode::INTERNAL_SERVER_ERROR,
-                    Json(json!({ "error": format!("Could not read generated pptx: {e}") })),
-                )
-                    .into_response(),
+        Ok(out) if out.status.success() => match tokio::fs::read(&pptx_path).await {
+            Ok(bytes) => {
+                providers::emit_event(
+                    &state.event_sender,
+                    "activity",
+                    "PowerPoint presentation exported (.pptx)",
+                );
+                let mut response = axum::response::Response::new(axum::body::Body::from(bytes));
+                let headers = response.headers_mut();
+                headers.insert(
+                    axum::http::header::CONTENT_TYPE,
+                    axum::http::HeaderValue::from_static(
+                        "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+                    ),
+                );
+                headers.insert(
+                    axum::http::header::CONTENT_DISPOSITION,
+                    axum::http::HeaderValue::from_static(
+                        "attachment; filename=\"presentation.pptx\"",
+                    ),
+                );
+                headers.insert(
+                    axum::http::header::CACHE_CONTROL,
+                    axum::http::HeaderValue::from_static("no-store"),
+                );
+                response.into_response()
             }
-        }
+            Err(e) => (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(json!({ "error": format!("Could not read generated pptx: {e}") })),
+            )
+                .into_response(),
+        },
         Ok(out) => {
             let stderr = String::from_utf8_lossy(&out.stderr);
             (
@@ -2628,7 +2828,6 @@ async fn export_pptx(State(state): State<AppState>) -> impl IntoResponse {
             .into_response(),
     }
 }
-
 
 /// A black holding page used while the recorder warms up. It polls
 /// `/api/export/armed` and only mounts the artifact once frames are being

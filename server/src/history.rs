@@ -33,26 +33,7 @@ fn history_path() -> PathBuf {
         }
     }
 
-    let base = std::env::var("XDG_CONFIG_HOME")
-        .ok()
-        .filter(|v| !v.trim().is_empty())
-        .map(PathBuf::from)
-        .or_else(|| {
-            std::env::var("APPDATA")
-                .ok()
-                .filter(|v| !v.trim().is_empty())
-                .map(PathBuf::from)
-        })
-        .or_else(|| {
-            std::env::var("HOME")
-                .ok()
-                .or_else(|| std::env::var("USERPROFILE").ok())
-                .filter(|v| !v.trim().is_empty())
-                .map(|home| Path::new(&home).join(".config"))
-        })
-        .unwrap_or_else(|| PathBuf::from(".config"));
-
-    base.join("zen-design").join("history.json")
+    crate::platform::app_history_file()
 }
 
 pub fn sessions_dir(workspace: &Path) -> PathBuf {
@@ -157,16 +138,16 @@ pub fn add_history_entry(
 }
 
 #[allow(dead_code)]
-pub fn save_session_artifact(
-    workspace: &Path,
-    id: &str,
-    html: &str,
-) -> Result<(), String> {
+pub fn save_session_artifact(workspace: &Path, id: &str, html: &str) -> Result<(), String> {
     let sdir = sessions_dir(workspace).join(id);
     fs::create_dir_all(&sdir).map_err(|e| e.to_string())?;
     let path = sdir.join("index.html");
     fs::write(&path, html).map_err(|e| e.to_string())?;
-    info!("Saved session artifact to {:?} ({} bytes)", path, html.len());
+    info!(
+        "Saved session artifact to {:?} ({} bytes)",
+        path,
+        html.len()
+    );
 
     // Update has_artifact in history list
     let mut items = load_history(workspace);
@@ -185,8 +166,12 @@ pub fn activate_session(workspace: &Path, id: &str) -> Result<ChatHistoryItem, S
     }
 
     let target = workspace.join("index.html");
-    fs::copy(&session_file, &target).map_err(|e| format!("Failed to copy session artifact: {e}"))?;
-    info!("Activated session '{id}' -> copied {:?} to {:?}", session_file, target);
+    fs::copy(&session_file, &target)
+        .map_err(|e| format!("Failed to copy session artifact: {e}"))?;
+    info!(
+        "Activated session '{id}' -> copied {:?} to {:?}",
+        session_file, target
+    );
 
     let items = load_history(workspace);
     if let Some(item) = items.into_iter().find(|it| it.id == id) {

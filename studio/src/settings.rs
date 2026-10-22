@@ -2,6 +2,9 @@ use serde::Deserialize;
 
 use crate::i18n::Language;
 
+pub const OPENCODE_FREE_BASE_URL: &str = "https://opencode.ai";
+pub const OPENCODE_FREE_DEFAULT_MODEL: &str = "nemotron-3.5-lightning-free";
+
 /// Connection choices shown in the settings dialog.
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub enum ProviderId {
@@ -33,8 +36,8 @@ impl ProviderId {
             (Self::OpenAi, Language::En) => "OpenAI / Compatible API",
             (Self::OpenAi, Language::Fa) => "سازگار با OpenAI / API",
             (Self::Anthropic, _) => "Anthropic",
-            (Self::OpenCode, Language::En) => "OpenCode agent",
-            (Self::OpenCode, Language::Fa) => "عامل OpenCode",
+            (Self::OpenCode, Language::En) => "OpenCode / Free",
+            (Self::OpenCode, Language::Fa) => "OpenCode / رایگان",
             (Self::Template, Language::En) => "Offline template",
             (Self::Template, Language::Fa) => "قالب آفلاین",
         }
@@ -45,13 +48,11 @@ impl ProviderId {
             (Self::OpenAi, Language::En) => {
                 "OpenAI, 9Router, LM Studio, Ollama, vLLM or custom baseURL"
             }
-            (Self::OpenAi, Language::Fa) => {
-                "OpenAI، ناین‌روتر، LM Studio، اولاما یا baseURL دلخواه"
-            }
+            (Self::OpenAi, Language::Fa) => "OpenAI، ناین‌روتر، LM Studio، اولاما یا baseURL دلخواه",
             (Self::Anthropic, Language::En) => "Native Messages API · Claude Opus / Sonnet",
             (Self::Anthropic, Language::Fa) => "Messages API بومی · Claude Opus / Sonnet",
-            (Self::OpenCode, Language::En) => "Your local agent, its tools and models",
-            (Self::OpenCode, Language::Fa) => "عامل محلی شما، ابزارها و مدل‌هایش",
+            (Self::OpenCode, Language::En) => "Free tier with no app/key, or read opencode.json",
+            (Self::OpenCode, Language::Fa) => "نسخهٔ رایگان بدون اپ/کلید، یا خواندن opencode.json",
             (Self::Template, Language::En) => "No model, zero network, deterministic",
             (Self::Template, Language::Fa) => "بدون مدل، بدون شبکه، قطعی",
         }

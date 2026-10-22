@@ -278,7 +278,6 @@ window.ZenAudio = (() => {
 })();
 </script>"#;
 
-
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct CustomThemeTokens {
     pub name: String,
@@ -478,13 +477,18 @@ impl AgentOrchestrator {
             providers::emit_event(
                 &self.event_sender,
                 "status",
-                format!("🔍 Detecting URL in prompt: {url} — fetching live repository/site context…"),
+                format!(
+                    "🔍 Detecting URL in prompt: {url} — fetching live repository/site context…"
+                ),
             );
             if let Ok(web_context) = fetch_url_context(&self.http, &url).await {
                 providers::emit_event(
                     &self.event_sender,
                     "status",
-                    format!("📄 Extracted context from {url} ({} bytes). Integrating into prompt…", web_context.len()),
+                    format!(
+                        "📄 Extracted context from {url} ({} bytes). Integrating into prompt…",
+                        web_context.len()
+                    ),
                 );
                 req.prompt = format!(
                     "{}\n\n[INSPECTED LIVE CONTEXT FROM {}]:\n{}",
@@ -499,8 +503,19 @@ impl AgentOrchestrator {
         if settings.provider == PROVIDER_OPENAI || settings.provider == PROVIDER_ANTHROPIC {
             let is_short_brief = req.prompt.lines().count() <= 3 && req.prompt.len() < 220;
             let needs_expansion = is_short_brief || req.mode == "slides" || req.mode == "motion";
-            
-            if needs_expansion {
+            let free_lane = settings.provider == PROVIDER_OPENAI
+                && crate::detector::is_opencode_free_endpoint(&settings.openai.base_url);
+
+            if needs_expansion && free_lane {
+                // The public lane has a tighter budget than a paid endpoint.
+                // Spend it on the artifact, not on a second 80-second research
+                // completion that also doubles the prompt size.
+                providers::emit_event(
+                    &self.event_sender,
+                    "status",
+                    "OpenCode Free: skipping the extra research pass and composing the artifact directly…",
+                );
+            } else if needs_expansion {
                 if req.mode == "motion" {
                     providers::emit_event(
                         &self.event_sender,
@@ -514,7 +529,15 @@ impl AgentOrchestrator {
                         "🧠 Autonomous Research Agent: Analyzing domain, extracting core concepts, metrics & narrative structure…",
                     );
                 }
-                if let Ok(expanded) = expand_brief_with_research(&self.http, &settings, &req.prompt, &req.mode, req.duration_secs.unwrap_or(10)).await {
+                if let Ok(expanded) = expand_brief_with_research(
+                    &self.http,
+                    &settings,
+                    &req.prompt,
+                    &req.mode,
+                    req.duration_secs.unwrap_or(10),
+                )
+                .await
+                {
                     providers::emit_event(
                         &self.event_sender,
                         "status",
@@ -541,7 +564,9 @@ impl AgentOrchestrator {
 
         if settings.provider == PROVIDER_TEMPLATE {
             let candidates = providers::resolve_candidates(&settings);
-            let has_network_candidates = candidates.iter().any(|c| !c.base_url.is_empty() && !c.api_key.is_empty());
+            let has_network_candidates = candidates
+                .iter()
+                .any(|c| !c.base_url.is_empty() && !c.api_key.is_empty());
             if !has_network_candidates {
                 return self.render_template(req).await;
             }
@@ -960,7 +985,8 @@ only one complete fenced HTML document."
         let workspace = Path::new(&self.workspace_dir);
         let target = workspace.join("index.html");
         let sanitized = sanitize_slides_html(html);
-        fs::write(&target, &sanitized).map_err(|e| format!("Failed to write to workspace: {}", e))?;
+        fs::write(&target, &sanitized)
+            .map_err(|e| format!("Failed to write to workspace: {}", e))?;
         info!("Wrote artifact to {:?} ({} bytes)", target, sanitized.len());
 
         if let Some(sid) = session_id {
@@ -972,7 +998,11 @@ only one complete fenced HTML document."
                 if let Err(e) = fs::write(&session_file, &sanitized) {
                     warn!("Failed to write session file {:?}: {e}", session_file);
                 } else {
-                    info!("Saved session copy to {:?} ({} bytes)", session_file, sanitized.len());
+                    info!(
+                        "Saved session copy to {:?} ({} bytes)",
+                        session_file,
+                        sanitized.len()
+                    );
                 }
             }
         }
@@ -1013,10 +1043,7 @@ only one complete fenced HTML document."
 
         let size = final_html.len();
         info!("Processed agent artifact ({size} bytes)");
-        Ok(Some(format!(
-            "Agent artifact ready ({} KB).",
-            size / 1024
-        )))
+        Ok(Some(format!("Agent artifact ready ({} KB).", size / 1024)))
     }
 }
 
@@ -1123,14 +1150,49 @@ pub fn contains_rtl_script(text: &str) -> bool {
 fn is_marketing_or_editorial_brief(prompt: &str) -> bool {
     let lower = prompt.to_lowercase();
     let landing_keywords = [
-        "landing", "marketing", "portfolio", "agency", "editorial", "magazine",
-        "blog", "article", "hero", "pricing page", "waitlist", "launch page",
-        "لندینگ", "صفحه فرود", "معرفی محصول", "پورتفولیو", "وبلاگ", "مجله", "سایت شرکتی",
+        "landing",
+        "marketing",
+        "portfolio",
+        "agency",
+        "editorial",
+        "magazine",
+        "blog",
+        "article",
+        "hero",
+        "pricing page",
+        "waitlist",
+        "launch page",
+        "لندینگ",
+        "صفحه فرود",
+        "معرفی محصول",
+        "پورتفولیو",
+        "وبلاگ",
+        "مجله",
+        "سایت شرکتی",
     ];
     let app_keywords = [
-        "dashboard", "app", "studio", "editor", "kanban", "crm", "analytics",
-        "terminal", "ide", "player", "synth", "calculator", "tracker", "panel",
-        "داشبورد", "اپلیکیشن", "پنل", "مدیریت", "ابزار", "ادیتور", "پلیر", "سیستم",
+        "dashboard",
+        "app",
+        "studio",
+        "editor",
+        "kanban",
+        "crm",
+        "analytics",
+        "terminal",
+        "ide",
+        "player",
+        "synth",
+        "calculator",
+        "tracker",
+        "panel",
+        "داشبورد",
+        "اپلیکیشن",
+        "پنل",
+        "مدیریت",
+        "ابزار",
+        "ادیتور",
+        "پلیر",
+        "سیستم",
     ];
     let has_landing = landing_keywords.iter().any(|k| lower.contains(k));
     let has_app = app_keywords.iter().any(|k| lower.contains(k));
@@ -1290,15 +1352,14 @@ fn build_motion_prompt_from_request(tokens: &DesignTokens, req: &PromptRequest) 
 AUDIO & CINEMATIC PROCEDURAL SOUND DESIGN (Web Audio API):
 - The piece MUST include high-production procedural audio using browser Web Audio API inside a <script> block.
 - NO external .mp3/.wav files or CDNs (all network requests are blocked by CSP). Synthesize sounds mathematically via AudioContext, OscillatorNode, GainNode, ConvolverNode/Delay, and BiquadFilterNode.
+- ABSOLUTE NOISE BAN: DO NOT create raw white-noise buffers (`Math.random()` noise buffers, `noiseBuf`, hiss, or radio static). Raw noise sounds like a broken audio glitch.
 - To sound professional, cinematic, and sleek (NEVER harsh, robotic, or cheap 8-bit beeps):
-  1. Continuous Generative Ambient Soundtrack / Drone Pad:
-     A lush, warm polyphonic drone chord (e.g. D minor 9th / Pentatonic: 73.4Hz, 110Hz, 174.6Hz, 261.6Hz) using low-pass filtered sawtooth/sine oscillators (cutoff 280Hz–380Hz) with gentle LFO modulation and soft gain (0.05–0.08) playing continuously throughout the film so the film NEVER feels silent or empty.
+  1. Continuous Warm Ambient Drone Pad:
+     A lush, warm polyphonic drone chord (e.g. D minor 9th / Pentatonic: 73.4Hz, 110Hz, 174.6Hz, 261.6Hz) using low-pass filtered sine oscillators (cutoff 220Hz–320Hz) with gentle LFO modulation and soft gain (0.03–0.05) so the film feels alive without any harshness.
   2. Cinematic Sub-Bass Impact (Bass Drop / Scene Entry):
-     Clean sine wave starting at 90Hz dropping smoothly to 32Hz over 0.8s, passed through a lowpass filter (140Hz), with a soft 15ms attack and logarithmic decay (Gain 0.4 -> 0.001). Add a subtle stereo detuned layer (+3 cents) for stereo warmth.
-  3. Harmonic Glass Chimes (Data / Metric / Title reveals):
-     Layered sine oscillators tuned to musical intervals (Pentatonic: E5 659Hz, B5 987Hz) with fast 5ms attack, sweet resonant bandpass filter, and 350ms gentle exponential decay.
-  4. Cinematic Ambient Whoosh / Air Riser (Scene wipes):
-     Filtered noise or multi-oscillator pitch sweep with soft low-pass filter (sweeping 180Hz -> 1200Hz -> 100Hz) and gentle stereo panning.
+     Clean sine wave starting at 80Hz dropping smoothly to 30Hz over 0.7s, passed through a lowpass filter (120Hz), with a soft 15ms attack and logarithmic decay (Gain 0.3 -> 0.001).
+  3. Harmonic Glass Chimes (Key moments / reveals):
+     Layered pure sine oscillators tuned to musical intervals (Pentatonic: E5 659Hz, B5 987Hz) with sweet resonant bandpass filter and gentle decay.
 - Autoplay & User Gesture:
   Provide a sleek, subtle floating audio button (e.g. "♪ صدا" / "✕ بی‌صدا") and automatically resume AudioContext on first click/key or show an unobtrusive start HUD."#
     } else {
@@ -1335,7 +1396,11 @@ AUDIO & CINEMATIC PROCEDURAL SOUND DESIGN (Web Audio API):
                 total_words_budget = total_words_budget,
                 words_per_sec = 2.3,
                 duration = duration,
-                lang_desc = if contains_rtl_script(&req.prompt) { "Pure natural Persian (فارسی روان، حماسی، موجز و بدون تکلف)" } else { "High-impact concise English" }
+                lang_desc = if contains_rtl_script(&req.prompt) {
+                    "Pure natural Persian (فارسی روان، حماسی، موجز و بدون تکلف)"
+                } else {
+                    "High-impact concise English"
+                }
             )
         };
 
@@ -1353,33 +1418,63 @@ NEURAL VOICE NARRATION & CINEMATIC PACING ENGINE:
   * When the narration ends, the film culminates in its final iconic mark and holds cleanly.
 - AUDIO IMPLEMENTATION VIA ZENAUDIO /API/TTS:
   Implement neural voice playback calling ZenDesign's multi-provider endpoint `/api/tts`:
+  * Pre-fetch / preload narration audio clips at startup so each scene plays instantly without network delay.
+  * Autoplay on interaction: Clicking anywhere on the canvas or clicking the prominent start button (e.g. "▶ شروع فیلم با صدا") unlocks audio context and immediately speaks the voiceover.
+  * High-quality Persian voice: Default to `fa-IR-DilaraNeural` for Persian narration.
   ```javascript
-  async function playNarration(narrationText, voiceName, voiceRate) {{
+  const audioCache = {{}};
+  async function preloadAllNarration(beats) {{
+    for (let i = 0; i < beats.length; i++) {{
+      try {{
+        const res = await fetch('/api/tts', {{
+          method: 'POST',
+          headers: {{ 'Content-Type': 'application/json' }},
+          body: JSON.stringify({{
+            text: beats[i].narration || beats[i].narr,
+            voice: '{tts_lang}'.startsWith('fa') ? 'fa-IR-DilaraNeural' : null,
+            rate: '1.0'
+          }})
+        }});
+        if (res.ok) {{
+          const blob = await res.blob();
+          audioCache[i] = new Audio(URL.createObjectURL(blob));
+        }}
+      }} catch (e) {{}}
+    }}
+  }}
+  let currentAudio = null;
+  async function playNarrationForBeat(index, fallbackText) {{
+    if (!audioEnabled) return;
+    if (currentAudio) {{ try {{ currentAudio.pause(); }} catch (e) {{}} }}
+    if (audioCache[index]) {{
+      currentAudio = audioCache[index];
+      currentAudio.currentTime = 0;
+      await currentAudio.play().catch(() => {{}});
+      return;
+    }}
+    // Immediate on-demand fallback
     try {{
       const res = await fetch('/api/tts', {{
         method: 'POST',
         headers: {{ 'Content-Type': 'application/json' }},
-        body: JSON.stringify({{
-          text: narrationText,
-          voice: voiceName || null,
-          rate: voiceRate || null
-        }})
+        body: JSON.stringify({{ text: fallbackText, voice: null }})
       }});
       if (res.ok) {{
         const blob = await res.blob();
-        const audio = new Audio(URL.createObjectURL(blob));
-        await audio.play();
+        currentAudio = new Audio(URL.createObjectURL(blob));
+        await currentAudio.play().catch(() => {{}});
         return;
       }}
     }} catch (e) {{}}
     if (window.speechSynthesis) {{
-      const u = new SpeechSynthesisUtterance(narrationText);
+      window.speechSynthesis.cancel();
+      const u = new SpeechSynthesisUtterance(fallbackText);
       u.lang = '{tts_lang}';
       window.speechSynthesis.speak(u);
     }}
   }}
   ```
-- Sleek audio interaction: Provide an inviting floating start HUD button (e.g. "▶ شروع فیلم با صدا") or trigger speech automatically upon the first user interaction.
+- Sleek audio interaction: Provide an inviting floating start HUD button (e.g. "▶ شروع فیلم با صدا") or trigger speech automatically upon the first user interaction. Ensure clicking anywhere turns audio on (`audioEnabled = true`).
 "#,
             script_clause = script_clause,
             duration = duration,
@@ -1430,12 +1525,19 @@ KINETIC TYPOGRAPHY AS PROTAGONIST (ZERO CLIPPING DISCIPLINE):
   * Stagger siblings: delay each word or letter by 40–80ms for rhythmic entry.
   * Dynamic typographic behavior: tracking expansion/compression, chromatic text shadow, or filled-to-stroked outline shift.
 
-INTRICATE HERO GRAPHIC ARTIFACT IN EVERY BEAT:
-- Text is NEVER alone. Every single beat MUST feature an intricate inline SVG or HTML5 Canvas visual centerpiece:
-  * Concentric 3D isometric rings rotating on multiple axes (transform: rotateX(60deg) rotateZ(...)) with glowing gradient accents and dashed tick marks.
-  * Dynamic SVG spline curves drawing in real-time using stroke-dasharray and stroke-dashoffset (e.g. glowing metrics graph, biometric waveforms).
-  * Futuristic coordinate reticles, rotating degree dials, orbital satellite dots, or laser sweeps.
-  * Morphing organic vectors or particle explosions.
+TOPIC-GROUNDED HERO VISUAL SCENE IN EVERY BEAT (ABSOLUTE GROUNDING MANDATE):
+- ZERO GENERIC HUD CLICHÉS: If the topic is a physical, industrial, scientific, historical or narrative process (e.g. gold extraction, human anatomy, aerospace, mining, biology, robotics), DO NOT draw meaningless sci-fi coordinate numbers, fake latitude lines, or generic rotating abstract rings!
+- GROUND THE GRAPHICS 100% IN THE USER'S ACTUAL TOPIC AND SCENARIO:
+  * Draw RICH, CONCRETE, BEAUTIFUL ILLUSTRATIONS using inline SVG and Canvas:
+    - Physical environments: Cross-sections of geological strata, underground mines with golden veins, mountains, starry cosmos, or industrial facilities.
+    - Machinery & Processes: Heavy machinery (excavators, milling cylinders, chemical separation tanks with flowing liquid, roasting furnaces with glowing flames).
+    - Human Elements & Characters: Line-art workers, miners with helmets, engineers, silhouetted hands holding raw ore or molten crucibles.
+    - Climax & Realization: The true end-product of the story (e.g. molten liquid gold pouring into molds, gleaming 24K gold bullion ingot with realistic specular light glints and stamped hallmarks "Au 999.9").
+- VISUALS MUST EVOLVE STEP-BY-STEP WITH THE NARRATION:
+  * Every single beat must transition to a distinctly different, illustrative stage that literally visualizes what the narrator is speaking!
+  * If the narrator describes crushing the stone, the visual MUST depict the crusher breaking the rocks into golden powder!
+  * If the narrator describes the 1000°C furnace, the visual MUST blaze with golden-orange smelting fire and pouring liquid metal!
+  * If the narrator describes the finished ingot, the visual MUST spotlight the glorious solid gold bar!
 
 TIMELINE, DURATION & CHOREOGRAPHY (STRICT PACING MANDATE):
 - Autoplay immediately, muted by default or with slick audio start overlay. Total runtime: strictly {duration}s dynamic duration.
@@ -1638,7 +1740,16 @@ fn generate_motion_storyboard_plan(req: &PromptRequest) -> String {
         "Total Film Duration: {duration} seconds | Planned Rhythmic Beats: {num_beats} beats (~{:.1}s per beat)\n",
         actual_beat_len
     ));
-    plan.push_str("MANDATORY PACING MANDATE (NO DEAD TIME):\n- NEVER leave any single graphic or camera angle static on screen for more than 3 to 4.5 seconds!\n- Execute this concrete storyboard beat-by-beat with continuous momentum and visceral transitions:\n\n");
+    plan.push_str(&format!(
+        "CRITICAL TOPIC-GROUNDED STORYBOARD FOR \"{}\":\n\
+        - This motion film MUST tell the progressive visual and narrative story of \"{}\".\n\
+        - ABSOLUTE BAN ON ABSTRACT TECH HUDs: DO NOT draw generic rotating 3D circles, coordinate numbers, or sci-fi radar lines.\n\
+        - In EVERY beat, draw real, illustrative scenes (characters, workers, physical environments, machinery, tools, physical transformations) representing what is being spoken.\n\
+        - Every beat has a spoken narration line in {} that is vocalized via /api/tts.\n\
+        - NEVER leave any single graphic or camera angle static on screen for more than 3 to 4.5 seconds!\n\n",
+        prompt, prompt,
+        if is_rtl { "natural Persian (فارسی)" } else { "concise English" }
+    ));
 
     for i in 0..num_beats {
         let t_start = (i as f64) * actual_beat_len;
@@ -1647,43 +1758,44 @@ fn generate_motion_storyboard_plan(req: &PromptRequest) -> String {
         let pct_end = (((i + 1) as f64) / (num_beats as f64) * 100.0).round() as u32;
 
         let beat_role = if i == 0 {
-            "THE GENESIS & HOOK (Origins, cosmic/microscopic ignition, bold title statement)"
+            "THE HOOK & ORIGIN (Establish the physical setting, raw materials, or environmental context of the prompt)"
         } else if i == 1 {
-            "THE ARCHITECTURE (Structural grid, isometric wireframe synthesis, blueprint vectors)"
+            "THE MECHANISM & ACTION (Show the primary actors, machinery, tools, or physical process in motion)"
         } else if i == num_beats - 1 {
-            "THE FINALE & SIGNATURE (Culmination, iconic unified emblem, continuous kinetic horizon)"
+            "THE SIGNATURE MASTERPIECE (The finished creation, transformed state, or iconic climax in full glory)"
         } else if i == num_beats - 2 {
-            "THE SURGE & VELOCITY (High-frequency clock burst, maximum visual speed, data torrent)"
+            "THE CRUCIAL TURNING POINT (The intense transformation, chemical reaction, melting, flight, or synthesis)"
         } else if i % 2 == 0 {
-            "THE DEEP PROCESS (Complex procedural SVG/Canvas centerpiece, metric evolution)"
+            "THE DEEP PROCESS (Detailed mechanical, chemical, physical, or character-driven refinement)"
         } else {
-            "THE BREAKTHROUGH (Camera scale-through, kinetic typographic impact, frequency shift)"
+            "THE PROGRESSION (Next concrete phase of the physical story)"
         };
 
         let words_per_beat = ((actual_beat_len * 2.3).round() as usize).max(3);
 
         plan.push_str(&format!(
-            "• Beat {:02} [{:.1}s – {:.1}s | {}%–{}%] — {}\n  - Camera & Motion: Active camera movement (zoom-through / 3D tilt / velocity wipe). Zero static stillness.\n  - Kinetic Typo: Massive masked reveal (2–4 words maximum in {}).\n  - Narration & Speech Sync: ~{} words paced strictly for natural {:.1}s delivery.\n  - Centerpiece Visual: Intricate animated SVG / Canvas procedural geometry synchronized with the beat.\n  - Audio Event: Sub-bass impact & synced harmonic riser/whoosh.\n\n",
+            "• Beat {:02} [{:.1}s – {:.1}s | {}%–{}%] — {}\n  - Camera & Scene: Active camera movement (zoom-through / 3D tilt / velocity wipe) into a new distinct visual stage.\n  - Relational Visual Centerpiece: Concrete illustrative scene depicting this exact phase of the story with SVG/Canvas characters, tools, machinery, and environment. ZERO abstract HUD circles.\n  - Spoken Narration (Vocalized via /api/tts): One complete, natural spoken sentence (~{} words) in {}.\n  - Kinetic Typography: Bold masked display text (2–4 words max) synchronized with the voiceover.\n  - Audio Event: Crisp, gentle cinematic transition chime or sub-bass drop.\n\n",
             i + 1,
             t_start,
             t_end,
             pct_start,
             pct_end,
             beat_role,
-            if is_rtl { "natural Persian (فارسی)" } else { "concise English" },
             words_per_beat,
-            actual_beat_len,
+            if is_rtl { "natural Persian (فارسی)" } else { "concise English" },
         ));
     }
 
-    plan.push_str("TIMELINE CLOCK SPECIFICATION:
+    plan.push_str(
+        "TIMELINE CLOCK SPECIFICATION:
 - Driven by a unified `requestAnimationFrame(tick)` loop using `performance.now()`.
 - Calculates `elapsed = (now - startTime) / 1000`.
 - Continuously renders 60fps ambient background Canvas (micro-particles / light sweeps).
 - Evaluates beat triggers at the exact designated timestamps.
 - Hairline bottom progress bar smoothly interpolates `elapsed / TOTAL * 100%`.
 - Monospace counter displays `fmt(elapsed) + ' / ' + fmt(TOTAL)`.
-- At `elapsed >= TOTAL`, holds signature mark cleanly and seamlessly restarts after 2.5s.");
+- At `elapsed >= TOTAL`, holds signature mark cleanly and seamlessly restarts after 2.5s.",
+    );
 
     plan
 }
@@ -2144,11 +2256,26 @@ pub fn sanitize_slides_html(html: &str) -> String {
 
     // 1. Chart & metric animation fix: ensure keyframe animations persist (forwards) instead of resetting (backwards)
     // Replace animation declarations on charts, bars, lines, funnels that mistakenly used backwards
-    out = out.replace("animation: barGrow 1.1s cubic-bezier(0.16,1,0.3,1) backwards;", "animation: barGrow 1.1s cubic-bezier(0.16,1,0.3,1) forwards;");
-    out = out.replace("animation: barGrow .9s var(--ease) backwards;", "animation: barGrow .9s var(--ease) forwards;");
-    out = out.replace("animation: drawLine 1.6s cubic-bezier(0.16,1,0.3,1) backwards;", "animation: drawLine 1.6s cubic-bezier(0.16,1,0.3,1) forwards;");
-    out = out.replace("animation: barGrowX .9s cubic-bezier(0.16,1,0.3,1) backwards;", "animation: barGrowX .9s cubic-bezier(0.16,1,0.3,1) forwards;");
-    out = out.replace("animation: donutTurn 1.3s cubic-bezier(0.16,1,0.3,1) backwards;", "animation: donutTurn 1.3s cubic-bezier(0.16,1,0.3,1) forwards;");
+    out = out.replace(
+        "animation: barGrow 1.1s cubic-bezier(0.16,1,0.3,1) backwards;",
+        "animation: barGrow 1.1s cubic-bezier(0.16,1,0.3,1) forwards;",
+    );
+    out = out.replace(
+        "animation: barGrow .9s var(--ease) backwards;",
+        "animation: barGrow .9s var(--ease) forwards;",
+    );
+    out = out.replace(
+        "animation: drawLine 1.6s cubic-bezier(0.16,1,0.3,1) backwards;",
+        "animation: drawLine 1.6s cubic-bezier(0.16,1,0.3,1) forwards;",
+    );
+    out = out.replace(
+        "animation: barGrowX .9s cubic-bezier(0.16,1,0.3,1) backwards;",
+        "animation: barGrowX .9s cubic-bezier(0.16,1,0.3,1) forwards;",
+    );
+    out = out.replace(
+        "animation: donutTurn 1.3s cubic-bezier(0.16,1,0.3,1) backwards;",
+        "animation: donutTurn 1.3s cubic-bezier(0.16,1,0.3,1) forwards;",
+    );
 
     // Generic backwards -> forwards on chart classes
     for needle in &["barGrow", "barGrowX", "drawLine", "donutTurn", "funnelGrow"] {
@@ -2158,11 +2285,11 @@ pub fn sanitize_slides_html(html: &str) -> String {
     }
 
     // 2. Ensure slide visibility isolation in CSS
-    if out.contains(".slide{") && !out.contains("visibility:hidden") && !out.contains("visibility: hidden") {
-        out = out.replace(
-            ".slide{",
-            ".slide{visibility:hidden;background:var(--bg);",
-        );
+    if out.contains(".slide{")
+        && !out.contains("visibility:hidden")
+        && !out.contains("visibility: hidden")
+    {
+        out = out.replace(".slide{", ".slide{visibility:hidden;background:var(--bg);");
     }
 
     // 3. Strip unintended multiple 'active' classes in slides markup (only first slide should have active initially)
@@ -2180,7 +2307,10 @@ pub fn sanitize_slides_html(html: &str) -> String {
     }
 
     // 4. Update legacy CSP connect-src 'none' to allow self-hosted /api/tts neural voices
-    out = out.replace("connect-src 'none'", "connect-src 'self' data: blob:; media-src 'self' data: blob:");
+    out = out.replace(
+        "connect-src 'none'",
+        "connect-src 'self' data: blob:; media-src 'self' data: blob:",
+    );
 
     // 5. Inject ZenAudio WebAudio sound effects & Neural TTS engine if not present
     if !out.contains("zen-audio-engine") {
@@ -2382,7 +2512,16 @@ fn generate_motion_html(req: &PromptRequest, tokens: &DesignTokens) -> String {
     };
 
     let headline = escape_html(&headline_from_prompt(&req.prompt));
-    let tts_clean = escape_html(tts_text);
+    let is_rtl = contains_rtl_script(&req.prompt);
+    let prompt_clean = req.prompt.trim();
+    let effective_tts = if !tts_text.is_empty() {
+        tts_text.to_string()
+    } else if is_rtl {
+        format!("{headline} — روایتی دیداری و سینمایی از {prompt_clean}")
+    } else {
+        format!("{headline} — A cinematic motion exploration of {prompt_clean}")
+    };
+    let tts_clean = escape_html(&effective_tts);
 
     format!(
         r#"<!DOCTYPE html>
@@ -2964,16 +3103,44 @@ fn generate_motion_html(req: &PromptRequest, tokens: &DesignTokens) -> String {
             }} catch(e) {{}}
         }}
 
-        function speakNarration() {{
-            if (!window.speechSynthesis || !TTS_TEXT) return;
+        let ttsAudio = null;
+        async function speakNarration() {{
+            if (!TTS_TEXT || TTS_TEXT.trim() === '') return;
             try {{
-                window.speechSynthesis.cancel();
-                const utterance = new SpeechSynthesisUtterance(TTS_TEXT);
-                utterance.lang = TTS_LANG;
-                utterance.rate = 1.0;
-                window.speechSynthesis.speak(utterance);
+                const res = await fetch('/api/tts', {{
+                    method: 'POST',
+                    headers: {{ 'Content-Type': 'application/json' }},
+                    body: JSON.stringify({{
+                        text: TTS_TEXT,
+                        voice: TTS_LANG.startsWith('fa') ? 'fa-IR-DilaraNeural' : null,
+                        rate: '1.0'
+                    }})
+                }});
+                if (res.ok) {{
+                    const blob = await res.blob();
+                    if (ttsAudio) {{ try {{ ttsAudio.pause(); }} catch(e) {{}} }}
+                    ttsAudio = new Audio(URL.createObjectURL(blob));
+                    await ttsAudio.play().catch(() => {{}});
+                    return;
+                }}
             }} catch(e) {{}}
+            if (window.speechSynthesis) {{
+                try {{
+                    window.speechSynthesis.cancel();
+                    const utterance = new SpeechSynthesisUtterance(TTS_TEXT);
+                    utterance.lang = TTS_LANG;
+                    utterance.rate = 1.0;
+                    window.speechSynthesis.speak(utterance);
+                }} catch(e) {{}}
+            }}
         }}
+
+        document.addEventListener('click', () => {{
+            getAudioContext();
+            if (!ttsAudio) {{
+                speakNarration();
+            }}
+        }}, {{ once: true }});
 
         function scheduleAudioBeats() {{
             if (sfxMuted) return;
@@ -3035,7 +3202,11 @@ fn generate_motion_html(req: &PromptRequest, tokens: &DesignTokens) -> String {
         tts_clean = tts_clean,
         tts_clean_js = tts_clean.replace('"', "\\\"").replace('\n', " "),
         tts_lang = tts_lang,
-        subtitle_display = if tts_text.is_empty() { "display: none;" } else { "display: block;" },
+        subtitle_display = if effective_tts.is_empty() {
+            "display: none;"
+        } else {
+            "display: block;"
+        },
         sfx_enabled = if sfx { "true" } else { "false" },
         design_system = escape_html(&req.design_system),
         mode = escape_html(&req.mode),
@@ -3133,7 +3304,16 @@ pub fn truncate_words(text: &str, max_chars: usize) -> String {
 
 pub fn extract_first_url(text: &str) -> Option<String> {
     for word in text.split_whitespace() {
-        let clean = word.trim_matches(|c| c == '(' || c == ')' || c == '[' || c == ']' || c == '<' || c == '>' || c == '"' || c == '\'');
+        let clean = word.trim_matches(|c| {
+            c == '('
+                || c == ')'
+                || c == '['
+                || c == ']'
+                || c == '<'
+                || c == '>'
+                || c == '"'
+                || c == '\''
+        });
         if clean.starts_with("http://") || clean.starts_with("https://") {
             return Some(clean.to_string());
         }
@@ -3163,12 +3343,20 @@ pub async fn fetch_url_context(client: &reqwest::Client, url: &str) -> Result<St
                     format!("https://raw.githubusercontent.com/{owner}/{repo}/master/readme.md"),
                 ];
                 for raw_url in raw_candidates {
-                    if let Ok(resp) = client.get(&raw_url).timeout(Duration::from_secs(6)).send().await {
+                    if let Ok(resp) = client
+                        .get(&raw_url)
+                        .timeout(Duration::from_secs(6))
+                        .send()
+                        .await
+                    {
                         if resp.status().is_success() {
                             if let Ok(body) = resp.text().await {
                                 if !body.trim().is_empty() {
                                     let preview = body.chars().take(5000).collect::<String>();
-                                    return Ok(format!("GitHub Repository: {}/{}\n\nREADME:\n{}", owner, repo, preview));
+                                    return Ok(format!(
+                                        "GitHub Repository: {}/{}\n\nREADME:\n{}",
+                                        owner, repo, preview
+                                    ));
                                 }
                             }
                         }
@@ -3181,7 +3369,10 @@ pub async fn fetch_url_context(client: &reqwest::Client, url: &str) -> Result<St
     // Generic Web Page Fetcher: fetch and strip HTML tags
     let resp = client
         .get(target)
-        .header("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) ZenDesign-Agent/1.0")
+        .header(
+            "User-Agent",
+            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) ZenDesign-Agent/1.0",
+        )
         .timeout(Duration::from_secs(7))
         .send()
         .await
@@ -3193,7 +3384,11 @@ pub async fn fetch_url_context(client: &reqwest::Client, url: &str) -> Result<St
 
     let text = resp.text().await.map_err(|e| e.to_string())?;
     let stripped = strip_html_tags(&text);
-    let sample = stripped.split_whitespace().take(800).collect::<Vec<&str>>().join(" ");
+    let sample = stripped
+        .split_whitespace()
+        .take(800)
+        .collect::<Vec<&str>>()
+        .join(" ");
     Ok(sample)
 }
 
@@ -3235,7 +3430,9 @@ pub async fn expand_brief_with_research(
     mode: &str,
     duration_secs: u32,
 ) -> Result<String, String> {
-    let is_persian = prompt.chars().any(|c| ('\u{0600}'..='\u{06FF}').contains(&c));
+    let is_persian = prompt
+        .chars()
+        .any(|c| ('\u{0600}'..='\u{06FF}').contains(&c));
     let lang_instruction = if is_persian {
         "Respond in fluent, professional Persian (Farsi) with modern terminology."
     } else {
@@ -3247,15 +3444,20 @@ pub async fn expand_brief_with_research(
             let minutes = duration_secs / 60;
             format!(
                 "LONG-FORM EPISODIC MOTION FILM ({minutes} min / {duration_secs}s TOTAL RUNTIME):\n\
-                - Design 6 to 10 sequential cinematic acts spanning exactly {duration_secs} seconds.\n\
-                - For each act: specify Exact Timestamp range (e.g. 00:00-00:30), Hero Visual Graphic / Particle / SVG metaphor, Punchy Kinetic Typography (MAX 2-4 words per beat, NO paragraphs), and Camera transition.\n\
-                - The motion timeline must sustain dynamic energy continuously throughout all {duration_secs} seconds."
+                - Design 6 to 10 sequential narrative acts spanning exactly {duration_secs} seconds.\n\
+                - For each act: specify:\n\
+                  * Exact Timestamp range (e.g. 00:00-00:30)\n\
+                  * Spoken Voiceover Narration sentence (word-for-word spoken line for /api/tts)\n\
+                  * Concrete Topic-Grounded Visual Scene: Depict the actual physical setting, objects, machines, characters, and materials of \"{prompt}\" (NO abstract sci-fi HUD circles or generic particle grids)\n\
+                  * Kinetic Typography (2-4 words display headline)\n\
+                  * Camera transition.\n\
+                - The motion timeline must sustain dynamic narrative energy continuously throughout all {duration_secs} seconds."
             )
         } else {
             format!(
                 "SHORT-FORM MOTION PIECE ({duration_secs}s runtime):\n\
-                - 4 cinematic beats (Hook, Friction/Velocity, Breakthrough, Climax/Signature mark).\n\
-                - In each beat: specify the visual centerpiece (e.g., 3D SVG isometric rings, glowing spline curve drawing, particle constellation), the massive kinetic headline (2-4 words max), and dynamic camera move (scale-through, directional wipe)."
+                - 4 cinematic narrative beats (Hook/Origin, Mechanism/Process, Climax/Transformation, Signature/Outcome).\n\
+                - In each beat: specify the concrete visual centerpiece illustrating \"{prompt}\" (characters, machinery, physical environment, or physical transformations — NO generic rotating rings or tech dials), the exact spoken voiceover narration sentence, the massive kinetic headline (2-4 words max), and dynamic camera move (scale-through, directional wipe)."
             )
         };
 
@@ -3276,11 +3478,17 @@ STRICT MOTION DIRECTIVES (OVERRIDE ALL PRESENTATION/SLIDE INSTINCTS):
 2. STORYBOARD & SHOT CHOREOGRAPHY:
 {structure_guide}
 
-3. VISUAL ARTIFACTS & HERO GRAPHICS:
-   - Detail the intricate inline SVG geometry, 3D rotating rings, procedural waveforms, or particle effects rendered in each scene.
-   - Detail the kinetic typography behavior (masked line reveals, split-word stagger, tracking compression, scale-through).
+3. TOPIC-GROUNDED VISUAL SCENES & STORYTELLING:
+   - Every single beat MUST concretely visualize the real-world actors, objects, environments, tools, and physical transformations of the topic ("{prompt}").
+   - ZERO ABSTRACT HUD CLICHÉS: Forbid meaningless 3D rotating rings, floating coordinate numbers, or tech dials when the topic is a physical, narrative, or industrial subject.
+   - Describe rich, expressive vector illustrations: characters (miners, scientists, workers), machinery, natural phenomena, or anatomical/mechanical cross-sections.
+   - The visual artifact MUST evolve step-by-step with the story.
 
-4. COLOR, MOOD & ATMOSPHERE:
+4. SPOKEN VOICEOVER NARRATION SCRIPT:
+   - Provide the complete, spoken voiceover script for each beat (natural, poetic, and compelling in {lang_instruction}).
+   - Calibrate the spoken words to the duration of each beat (~2.3 words/sec).
+
+5. COLOR, MOOD & ATMOSPHERE:
    - Deep cinematic backdrop, lighting halos, accent energy pulses.
 
 {lang_instruction}
@@ -3327,63 +3535,14 @@ Make it deeply comprehensive, structured, and immediately actionable for product
 
     let candidates = providers::resolve_candidates(settings);
     for candidate in &candidates {
-        if candidate.provider == PROVIDER_OPENAI && !candidate.base_url.is_empty() {
-            let body = serde_json::json!({
-                "model": candidate.model,
-                "temperature": 0.6,
-                "messages": [
-                    { "role": "system", "content": system_role },
-                    { "role": "user", "content": research_prompt }
-                ]
-            });
-            let mut req = client.post(format!("{}/chat/completions", candidate.base_url)).json(&body);
-            if !candidate.api_key.is_empty() {
-                req = req.bearer_auth(&candidate.api_key);
-            }
-            if let Ok(resp) = req.send().await {
-                if resp.status().is_success() {
-                    if let Ok(res_json) = resp.json::<serde_json::Value>().await {
-                        let text = res_json["choices"][0]["message"]["content"]
-                            .as_str()
-                            .unwrap_or_default()
-                            .to_string();
-                        if !text.trim().is_empty() {
-                            return Ok(text);
-                        }
-                    }
-                }
-            }
-        } else if candidate.provider == PROVIDER_ANTHROPIC
-            && !candidate.base_url.is_empty()
-            && !candidate.api_key.is_empty()
+        if candidate.base_url.trim().is_empty() {
+            continue;
+        }
+        if let Ok(text) =
+            providers::generate_text_once(client, candidate, system_role, &research_prompt).await
         {
-            let body = serde_json::json!({
-                "model": candidate.model,
-                "system": system_role,
-                "max_tokens": 2048,
-                "messages": [
-                    { "role": "user", "content": research_prompt }
-                ]
-            });
-            if let Ok(resp) = client
-                .post(format!("{}/v1/messages", candidate.base_url))
-                .header("x-api-key", candidate.api_key.trim())
-                .header("anthropic-version", "2023-06-01")
-                .json(&body)
-                .send()
-                .await
-            {
-                if resp.status().is_success() {
-                    if let Ok(res_json) = resp.json::<serde_json::Value>().await {
-                        let text = res_json["content"][0]["text"]
-                            .as_str()
-                            .unwrap_or_default()
-                            .to_string();
-                        if !text.trim().is_empty() {
-                            return Ok(text);
-                        }
-                    }
-                }
+            if !text.trim().is_empty() {
+                return Ok(text);
             }
         }
     }
@@ -3632,4 +3791,3 @@ mod tests {
         assert!(sanitized.contains("zen-audio-engine"));
     }
 }
-
