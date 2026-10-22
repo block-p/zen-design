@@ -101,21 +101,139 @@ struct AgProviderInfo {
     model: Option<String>,
 }
 
-fn find_opencode_ag_provider() -> Option<AgProviderInfo> {
-    let config_dir = xdg_config_dir()?.join("opencode");
-    let candidate1 = config_dir.join("opencode.json");
-    let candidate2 = config_dir.join("opencode.jsonc");
-    let path = if candidate1.is_file() {
-        Some(candidate1)
-    } else if candidate2.is_file() {
-        Some(candidate2)
-    } else {
-        None
-    }?;
+/// Strips line and block comments from JSONC content so standard serde_json can parse it.
+pub fn strip_json_comments(input: &str) -> String {
+    let mut out = String::with_capacity(input.len());
+    let mut chars = input.chars().peekable();
+    let mut in_string = false;
+    let mut escape = false;
 
+    while let Some(ch) = chars.next() {
+        if in_string {
+            out.push(ch);
+            if escape {
+                escape = false;
+            } else if ch == '\\' {
+                escape = true;
+            } else if ch == '"' {
+                in_string = false;
+            }
+            continue;
+        }
+
+        if ch == '"' {
+            in_string = true;
+            out.push(ch);
+            continue;
+        }
+
+        if ch == '/' {
+            if let Some(&next) = chars.peek() {
+                if next == '/' {
+                    chars.next();
+                    // Line comment: skip until newline
+                    for c in chars.by_ref() {
+                        if c == '\n' {
+                            out.push('\n');
+                            break;
+                        }
+                    }
+                    continue;
+                } else if next == '*' {
+                    chars.next();
+                    // Block comment: skip until */
+                    while let Some(c) = chars.next() {
+                        if c == '*' && chars.peek() == Some(&'/') {
+                            chars.next();
+                            break;
+                        }
+                    }
+                    continue;
+                }
+            }
+        }
+
+        out.push(ch);
+    }
+    out
+}
+
+/// Comprehensive cross-platform discovery of OpenCode configuration files,
+/// supporting both CLI and Desktop (.exe) installations.
+/// Checks folders: opencode, OpenCode, opencode-desktop, OpenCode Desktop
+/// Checks files: opencode.json, config.json, settings.json, opencode.jsonc, config.jsonc
+pub fn find_opencode_config_file() -> Option<PathBuf> {
+    let mut search_dirs = Vec::new();
+
+    // 1. Current workspace / relative
+    search_dirs.push(PathBuf::from(".opencode"));
+    search_dirs.push(PathBuf::from("."));
+
+    // 2. User home: ~/.config/<folder>, ~/.<folder>
+    if let Some(home) = home_dir() {
+        for folder in ["opencode", "OpenCode", "opencode-desktop", "OpenCode Desktop"] {
+            search_dirs.push(home.join(".config").join(folder));
+            search_dirs.push(home.join(format!(".{folder}")));
+        }
+    }
+
+    // 3. XDG_CONFIG_HOME
+    if let Ok(xdg) = std::env::var("XDG_CONFIG_HOME") {
+        if !xdg.trim().is_empty() {
+            let base = PathBuf::from(xdg);
+            for folder in ["opencode", "OpenCode", "opencode-desktop", "OpenCode Desktop"] {
+                search_dirs.push(base.join(folder));
+            }
+        }
+    }
+
+    // 4. Windows %APPDATA% and %LOCALAPPDATA% (where Desktop .exe stores configs)
+    if let Ok(appdata) = std::env::var("APPDATA") {
+        if !appdata.trim().is_empty() {
+            let base = PathBuf::from(appdata);
+            for folder in ["opencode", "OpenCode", "opencode-desktop", "OpenCode Desktop"] {
+                search_dirs.push(base.join(folder));
+            }
+        }
+    }
+    if let Ok(local) = std::env::var("LOCALAPPDATA") {
+        if !local.trim().is_empty() {
+            let base = PathBuf::from(local);
+            for folder in ["opencode", "OpenCode", "opencode-desktop", "OpenCode Desktop"] {
+                search_dirs.push(base.join(folder));
+            }
+        }
+    }
+
+    let file_names = [
+        "opencode.json",
+        "opencode.jsonc",
+        "config.json",
+        "config.jsonc",
+        "settings.json",
+    ];
+
+    for dir in search_dirs {
+        for name in file_names {
+            let candidate = dir.join(name);
+            if candidate.is_file() {
+                return Some(candidate);
+            }
+        }
+    }
+
+    None
+}
+
+fn find_opencode_ag_provider() -> Option<AgProviderInfo> {
+    let path = find_opencode_config_file()?;
     let content = fs::read_to_string(&path).ok()?;
-    let value: serde_json::Value = serde_json::from_str(&content).ok()?;
-    let providers = value.get("provider")?.as_object()?;
+    let cleaned = strip_json_comments(&content);
+    let value: serde_json::Value = serde_json::from_str(&cleaned).ok()?;
+    let providers = value
+        .get("provider")
+        .or_else(|| value.get("providers"))?
+        .as_object()?;
 
     for (name, entry) in providers {
         let has_ag_models = entry
@@ -500,20 +618,15 @@ fn resolve_claude_code() -> Result<ResolvedCredentials, String> {
 // ── OpenCode Detector ──────────────────────────────────────────────────────
 
 fn scan_opencode() -> Option<DetectedSource> {
-    let config_dir = xdg_config_dir()?.join("opencode");
-    let candidate1 = config_dir.join("opencode.json");
-    let candidate2 = config_dir.join("opencode.jsonc");
-    let path = if candidate1.is_file() {
-        Some(candidate1)
-    } else if candidate2.is_file() {
-        Some(candidate2)
-    } else {
-        None
-    }?;
+    let path = find_opencode_config_file()?;
 
     let content = fs::read_to_string(&path).ok()?;
-    let value: serde_json::Value = serde_json::from_str(&content).ok()?;
-    let providers = value.get("provider")?.as_object()?;
+    let cleaned = strip_json_comments(&content);
+    let value: serde_json::Value = serde_json::from_str(&cleaned).ok()?;
+    let providers = value
+        .get("provider")
+        .or_else(|| value.get("providers"))?
+        .as_object()?;
 
     let (name, entry) = providers.get_key_value("9router").or_else(|| {
         providers.iter().find(|(_, entry)| {
@@ -532,11 +645,13 @@ fn scan_opencode() -> Option<DetectedSource> {
         .trim_end_matches('/')
         .to_string();
 
+    let is_local = base_url.contains("127.0.0.1") || base_url.contains("localhost");
     let has_key = options
         .get("apiKey")
         .and_then(|v| v.as_str())
         .map(|k| !k.trim().is_empty())
-        .unwrap_or(false);
+        .unwrap_or(false)
+        || is_local;
 
     let detected_models: Vec<String> = entry
         .get("models")
@@ -565,31 +680,22 @@ fn scan_opencode() -> Option<DetectedSource> {
         provider: "openai".to_string(),
         base_url: base_url.clone(),
         model: first_model,
-        hint: format!("{base_url} · ~/.config/opencode"),
+        hint: format!("{base_url} · {}", path.display()),
         has_key,
         models,
     })
 }
 
 fn resolve_opencode() -> Result<ResolvedCredentials, String> {
-    let config_dir = xdg_config_dir()
-        .ok_or("Cannot locate config directory")?
-        .join("opencode");
-    let candidate1 = config_dir.join("opencode.json");
-    let candidate2 = config_dir.join("opencode.jsonc");
-    let path = if candidate1.is_file() {
-        Some(candidate1)
-    } else if candidate2.is_file() {
-        Some(candidate2)
-    } else {
-        None
-    }
-    .ok_or("No OpenCode configuration file found")?;
+    let path = find_opencode_config_file()
+        .ok_or("No OpenCode configuration file found (checked ~/.config/opencode, %APPDATA%, %LOCALAPPDATA%, and workspace)")?;
 
     let content = fs::read_to_string(&path).map_err(|e| e.to_string())?;
-    let value: serde_json::Value = serde_json::from_str(&content).map_err(|e| e.to_string())?;
+    let cleaned = strip_json_comments(&content);
+    let value: serde_json::Value = serde_json::from_str(&cleaned).map_err(|e| e.to_string())?;
     let providers = value
         .get("provider")
+        .or_else(|| value.get("providers"))
         .and_then(|v| v.as_object())
         .ok_or("No providers found in opencode config")?;
 
@@ -625,6 +731,12 @@ fn resolve_opencode() -> Result<ResolvedCredentials, String> {
             }
         })
         .unwrap_or_default();
+
+    let api_key = if api_key.is_empty() && (base_url.contains("127.0.0.1") || base_url.contains("localhost")) {
+        "sk-opencode-local".to_string()
+    } else {
+        api_key
+    };
 
     let detected_models: Vec<String> = entry
         .get("models")

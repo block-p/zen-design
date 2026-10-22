@@ -52,6 +52,10 @@ pub struct Settings {
     pub anthropic: ProviderProfile,
     #[serde(default)]
     pub opencode: ProviderProfile,
+    #[serde(default)]
+    pub elevenlabs_key: String,
+    #[serde(default)]
+    pub tts_voice: String,
 }
 
 fn default_provider() -> String {
@@ -70,6 +74,8 @@ impl Default for Settings {
                 api_key: String::new(),
             },
             opencode: ProviderProfile::default(),
+            elevenlabs_key: String::new(),
+            tts_voice: "fa-IR-DilaraNeural".to_string(),
         }
     }
 }
@@ -87,8 +93,16 @@ impl Settings {
             .filter(|value| !value.trim().is_empty())
             .map(PathBuf::from)
             .or_else(|| {
+                std::env::var("APPDATA")
+                    .ok()
+                    .filter(|value| !value.trim().is_empty())
+                    .map(PathBuf::from)
+            })
+            .or_else(|| {
                 std::env::var("HOME")
                     .ok()
+                    .or_else(|| std::env::var("USERPROFILE").ok())
+                    .filter(|value| !value.trim().is_empty())
                     .map(|home| Path::new(&home).join(".config"))
             })
             .unwrap_or_else(|| PathBuf::from(".config"));
@@ -198,6 +212,11 @@ impl Settings {
         first_non_empty([&self.anthropic.api_key, &env_value("ANTHROPIC_API_KEY")])
     }
 
+    /// ElevenLabs key: setting first, then `ELEVENLABS_API_KEY`.
+    pub fn elevenlabs_key(&self) -> String {
+        first_non_empty([&self.elevenlabs_key, &env_value("ELEVENLABS_API_KEY")])
+    }
+
     /// Human label for the active connection, e.g. `9router via OpenAI`.
     pub fn provider_label(&self) -> String {
         match self.provider.as_str() {
@@ -220,6 +239,8 @@ impl Settings {
             "openai": public_profile(&self.openai, Some("OPENAI_API_KEY")),
             "anthropic": public_profile(&self.anthropic, Some("ANTHROPIC_API_KEY")),
             "opencode": public_profile(&self.opencode, None),
+            "elevenlabs_key_set": !self.elevenlabs_key().is_empty(),
+            "tts_voice": self.tts_voice,
         })
     }
 }

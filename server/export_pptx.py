@@ -28,6 +28,7 @@ TONE_COLORS = {
     "emerald": RGBColor(52, 211, 153),
     "violet": RGBColor(167, 139, 250),
     "rose": RGBColor(251, 113, 133),
+    "gold": RGBColor(200, 169, 110),
 }
 
 DEFAULT_FONT = "Vazirmatn"
@@ -50,9 +51,32 @@ def set_shape_bg(shape, rgb_color, border_color=None):
     else:
         shape.line.fill.background()
 
+def extract_motion_beats(html_content):
+    """Extract beats from motion sequences when no standard slides exist."""
+    beats = []
+    for m in re.finditer(r"function\s+beat(\d+)_enter\s*\(\)\s*\{([\s\S]*?)\n\}", html_content):
+        bid = m.group(1)
+        body = m.group(2)
+        typos = []
+        tm = re.search(r"showTypo\s*\(\s*\[(.*?)\]", body)
+        if tm:
+            items = re.findall(r"[\x27\x22`]([^\x27\x22`]+)[\x27\x22`]", tm.group(1))
+            typos = [t.strip() for t in items if t.strip()]
+        sub = ""
+        sm = re.search(r"showSub\s*\(\s*[\x27\x22`]([^\x27\x22`]+)[\x27\x22`]", body)
+        if sm:
+            sub = sm.group(1).strip()
+        beats.append({
+            "id": bid,
+            "typos": typos,
+            "sub": sub
+        })
+    return beats
+
 def create_pptx_from_html(html_path, output_path):
     with open(html_path, "r", encoding="utf-8") as f:
-        soup = BeautifulSoup(f.read(), "html.parser")
+        html_content = f.read()
+    soup = BeautifulSoup(html_content, "html.parser")
 
     prs = Presentation()
     # 16:9 Widescreen dimensions
@@ -60,13 +84,99 @@ def create_pptx_from_html(html_path, output_path):
     prs.slide_height = Inches(7.5)
     blank_layout = prs.slide_layouts[6]
 
-    is_rtl = soup.html and soup.html.get("dir", "").lower() == "rtl"
+    is_rtl = (soup.html and soup.html.get("dir", "").lower() == "rtl") or is_persian_text(html_content[:2000])
     default_align = PP_ALIGN.RIGHT if is_rtl else PP_ALIGN.LEFT
 
+    # Try standard slide selectors
     slides = soup.find_all("section", class_="slide")
     if not slides:
-        # Fallback if no .slide sections
-        slides = soup.find_all("section")
+        slides = soup.find_all(class_=re.compile(r'\bslide\b'))
+    if not slides:
+        slides = soup.find_all("section", id=re.compile(r'^s\d+'))
+    if not slides:
+        slides = soup.find_all(attrs={"data-slide-id": True})
+    if not slides:
+        sections = soup.find_all("section")
+        if len(sections) > 1:
+            slides = sections
+
+    # If no DOM slide elements found, check if this is a motion sequence (BEATS)
+    if not slides:
+        motion_beats = extract_motion_beats(html_content)
+        if motion_beats:
+            page_title = clean_text(soup.title.get_text()) if soup.title else "Motion Presentation"
+            for b_idx, b in enumerate(motion_beats):
+                slide = prs.slides.add_slide(blank_layout)
+                bg_shape = slide.shapes.add_shape(MSO_SHAPE.RECTANGLE, 0, 0, prs.slide_width, prs.slide_height)
+                set_shape_bg(bg_shape, BG_DARK)
+
+                accent_color = TONE_COLORS.get("gold", TONE_COLORS["cyan"])
+                bar = slide.shapes.add_shape(MSO_SHAPE.RECTANGLE, Inches(0.8), Inches(0.5), Inches(11.733), Pt(3))
+                set_shape_bg(bar, accent_color)
+
+                header_box = slide.shapes.add_textbox(Inches(0.8), Inches(1.2), Inches(11.733), Inches(2.2))
+                tf = header_box.text_frame
+                tf.word_wrap = True
+                tf.margin_left = tf.margin_top = tf.margin_right = tf.margin_bottom = 0
+
+                p_kicker = tf.paragraphs[0]
+                p_kicker.text = f"{b_idx + 1:02d}  ·  {page_title.upper()}"
+                p_kicker.font.name = DEFAULT_FONT
+                p_kicker.font.size = Pt(13)
+                p_kicker.font.bold = True
+                p_kicker.font.color.rgb = accent_color
+                p_kicker.alignment = default_align
+
+                title_text = " ".join(b["typos"]) if b["typos"] else (b["sub"] or f"Beat {b_idx + 1}")
+                p_title = tf.add_paragraph()
+                p_title.text = title_text
+                p_title.font.name = DEFAULT_FONT
+                p_title.font.size = Pt(36 if len(title_text) < 30 else 28)
+                p_title.font.bold = True
+                p_title.font.color.rgb = TEXT_WHITE
+                p_title.alignment = default_align
+
+                if b["sub"] and b["sub"] != title_text:
+                    p_sub = tf.add_paragraph()
+                    p_sub.text = b["sub"]
+                    p_sub.font.name = DEFAULT_FONT
+                    p_sub.font.size = Pt(18)
+                    p_sub.font.color.rgb = TEXT_MUTED
+                    p_sub.alignment = default_align
+
+                # Narrative Card
+                card_shape = slide.shapes.add_shape(MSO_SHAPE.ROUNDED_RECTANGLE, Inches(0.8), Inches(3.8), Inches(11.733), Inches(2.8))
+                set_shape_bg(card_shape, CARD_BG, CARD_BORDER)
+                c_tf = card_shape.text_frame
+                c_tf.word_wrap = True
+                c_tf.margin_left = c_tf.margin_right = Inches(0.4)
+                c_tf.margin_top = c_tf.margin_bottom = Inches(0.3)
+
+                p_c = c_tf.paragraphs[0]
+                p_c.text = f"بخش {b_idx + 1}: {title_text}" if is_rtl else f"Part {b_idx + 1}: {title_text}"
+                p_c.font.name = DEFAULT_FONT
+                p_c.font.size = Pt(20)
+                p_c.font.bold = True
+                p_c.font.color.rgb = accent_color
+                p_c.alignment = default_align
+
+                if b["sub"]:
+                    p_desc = c_tf.add_paragraph()
+                    p_desc.text = b["sub"]
+                    p_desc.font.name = DEFAULT_FONT
+                    p_desc.font.size = Pt(16)
+                    p_desc.font.color.rgb = TEXT_WHITE
+                    p_desc.alignment = default_align
+
+            prs.save(output_path)
+            print(f"Exported {len(motion_beats)} slides to {output_path}")
+            return
+
+    # Fallback if entirely unstructured HTML
+    if not slides:
+        container = soup.body or soup
+        fake_divs = container.find_all(["div", "article"], recursive=False)
+        slides = fake_divs if fake_divs else [container]
 
     for idx, slide_elm in enumerate(slides):
         slide = prs.slides.add_slide(blank_layout)

@@ -8,8 +8,18 @@ pub fn start_watcher(
     watch_dir: &str,
     sender: broadcast::Sender<String>,
 ) -> notify::Result<RecommendedWatcher> {
-    let watch_path =
-        std::fs::canonicalize(watch_dir).unwrap_or_else(|_| std::path::PathBuf::from(watch_dir));
+    let watch_path = std::fs::canonicalize(watch_dir)
+        .map(|p| {
+            #[cfg(windows)]
+            {
+                let s = p.to_string_lossy();
+                if let Some(stripped) = s.strip_prefix(r"\\?\") {
+                    return std::path::PathBuf::from(stripped);
+                }
+            }
+            p
+        })
+        .unwrap_or_else(|_| std::path::PathBuf::from(watch_dir));
 
     info!("Starting file watcher on: {:?}", watch_path);
 

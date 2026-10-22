@@ -1,6 +1,7 @@
 use gloo_net::http::Request;
 use leptos::prelude::*;
 use serde_json::json;
+use wasm_bindgen::JsCast;
 use wasm_bindgen_futures::spawn_local;
 
 use crate::data::{
@@ -245,6 +246,77 @@ pub fn export_video(exporting: RwSignal<bool>, entries: RwSignal<Vec<ActivityEnt
                     entries,
                     ActivityKind::Error,
                     format!("Could not reach the daemon to export: {error}"),
+                );
+            }
+        }
+    });
+}
+
+/// Triggers export of the presentation slides to a native PowerPoint (.pptx) file.
+/// Shows in-flight activity status, catches server/python errors, and triggers
+/// a direct download of `presentation.pptx`.
+pub fn export_pptx_deck(
+    exporting_pptx: RwSignal<bool>,
+    entries: RwSignal<Vec<ActivityEntry>>,
+    lang: Language,
+) {
+    if exporting_pptx.get_untracked() {
+        return;
+    }
+    exporting_pptx.set(true);
+
+    push_activity(
+        entries,
+        ActivityKind::Status,
+        t(
+            lang,
+            "Generating PowerPoint deck (.pptx)…",
+            "در حال ساخت و تبدیل فایل پاورپوینت (.pptx)…",
+        ),
+    );
+
+    spawn_local(async move {
+        match Request::get("/api/export/pptx").send().await {
+            Ok(response) if response.ok() => {
+                exporting_pptx.set(false);
+                if let Some(doc) = web_sys::window().and_then(|w| w.document()) {
+                    if let Ok(el) = doc.create_element("a") {
+                        let _ = el.set_attribute("href", "/api/export/pptx");
+                        let _ = el.set_attribute("download", "presentation.pptx");
+                        if let Ok(anchor) = el.dyn_into::<web_sys::HtmlAnchorElement>() {
+                            anchor.click();
+                        }
+                    }
+                }
+                push_activity(
+                    entries,
+                    ActivityKind::Done,
+                    t(
+                        lang,
+                        "PowerPoint presentation ready and downloaded (.pptx)",
+                        "فایل پاورپوینت آماده و دانلود شد (.pptx)",
+                    ),
+                );
+            }
+            Ok(response) => {
+                exporting_pptx.set(false);
+                let status = response.status();
+                let body = response.text().await.unwrap_or_default();
+                push_activity(
+                    entries,
+                    ActivityKind::Error,
+                    read_error(
+                        &body,
+                        &format!("PPTX export failed: daemon returned {status}"),
+                    ),
+                );
+            }
+            Err(error) => {
+                exporting_pptx.set(false);
+                push_activity(
+                    entries,
+                    ActivityKind::Error,
+                    format!("Could not reach server to export PPTX: {error}"),
                 );
             }
         }

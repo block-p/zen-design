@@ -345,28 +345,71 @@ pub async fn list_models(
             "claude-haiku-4-5".to_string(),
         ]),
         PROVIDER_OPENCODE => {
-            let binary =
-                std::env::var("ZEN_OPENCODE_BIN").unwrap_or_else(|_| "opencode".to_string());
-            let output = Command::new(&binary)
-                .arg("models")
-                .output()
-                .await
-                .map_err(|error| format!("Could not run `{binary} models`: {error}"))?;
-            if !output.status.success() {
-                return Err(format!("`{binary} models` exited with {}", output.status));
+            let mut cmd = create_opencode_command();
+            cmd.arg("models");
+            let output = cmd.output().await;
+            let mut models: Vec<String> = match output {
+                Ok(out) if out.status.success() => {
+                    let stdout = String::from_utf8_lossy(&out.stdout);
+                    stdout
+                        .lines()
+                        .map(str::trim)
+                        .filter(|line| !line.is_empty())
+                        .map(str::to_string)
+                        .collect()
+                }
+                _ => Vec::new(),
+            };
+            if models.is_empty() {
+                // If opencode models output is empty or failed to run, supply standard defaults
+                models = vec![
+                    "opencode/glm-5.3-flash-free".to_string(),
+                    "opencode/claude-3-5-sonnet".to_string(),
+                    "opencode/gpt-4o".to_string(),
+                    "opencode/deepseek-v3".to_string(),
+                ];
             }
-            let stdout = String::from_utf8_lossy(&output.stdout);
-            let mut models: Vec<String> = stdout
-                .lines()
-                .map(str::trim)
-                .filter(|line| !line.is_empty())
-                .map(str::to_string)
-                .collect();
             models.sort();
             models.dedup();
             Ok(models)
         }
         _ => Ok(Vec::new()),
+    }
+}
+
+fn create_opencode_command() -> Command {
+    let custom = std::env::var("ZEN_OPENCODE_BIN").ok();
+    #[cfg(windows)]
+    {
+        if let Some(bin) = custom {
+            Command::new(bin)
+        } else {
+            let mut found_exe = None;
+            if let Ok(local) = std::env::var("LOCALAPPDATA") {
+                let p1 = std::path::PathBuf::from(&local).join("Programs").join("OpenCode").join("OpenCode.exe");
+                let p2 = std::path::PathBuf::from(&local).join("Programs").join("opencode").join("opencode.exe");
+                let p3 = std::path::PathBuf::from(&local).join("Programs").join("OpenCode").join("resources").join("bin").join("opencode.exe");
+                if p1.is_file() {
+                    found_exe = Some(p1);
+                } else if p2.is_file() {
+                    found_exe = Some(p2);
+                } else if p3.is_file() {
+                    found_exe = Some(p3);
+                }
+            }
+            if let Some(exe) = found_exe {
+                Command::new(exe)
+            } else {
+                let mut cmd = Command::new("cmd");
+                cmd.args(["/C", "opencode"]);
+                cmd
+            }
+        }
+    }
+    #[cfg(not(windows))]
+    {
+        let bin = custom.unwrap_or_else(|| "opencode".to_string());
+        Command::new(bin)
     }
 }
 
@@ -629,7 +672,6 @@ async fn opencode_generate_candidate(
     sender: &broadcast::Sender<String>,
     workspace: &Path,
 ) -> Result<Generated, String> {
-    let binary = std::env::var("ZEN_OPENCODE_BIN").unwrap_or_else(|_| "opencode".to_string());
     let model = candidate.model.trim().to_string();
 
     emit_event(
@@ -658,7 +700,7 @@ async fn opencode_generate_candidate(
 
     let before = artifact_state(workspace);
 
-    let mut command = Command::new(&binary);
+    let mut command = create_opencode_command();
     command
         .arg("run")
         .arg("--format")
@@ -680,7 +722,7 @@ async fn opencode_generate_candidate(
 
     let mut child = command
         .spawn()
-        .map_err(|error| format!("Could not start `{binary}`: {error}"))?;
+        .map_err(|error| format!("Could not start OpenCode CLI agent: {error}"))?;
 
     let stdout = child
         .stdout

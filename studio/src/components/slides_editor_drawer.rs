@@ -153,6 +153,8 @@ pub fn SlidesEditorDrawer(
     let selected_slide_idx = RwSignal::new(0_usize);
     let ai_instruction = RwSignal::new(String::new());
     let is_ai_loading = RwSignal::new(false);
+    let tts_voice = RwSignal::new("fa-IR-DilaraNeural".to_string());
+    let tts_rate = RwSignal::new("1.0x".to_string());
 
     // Derived signal: parsed slides
     let slides = Memo::new(move |_| extract_slides(&raw_html.get()));
@@ -294,9 +296,32 @@ pub fn SlidesEditorDrawer(
     let play_notes_tts = move |notes: String| {
         if notes.trim().is_empty() { return; }
         let escaped = notes.replace('\\', "\\\\").replace('\'', "\\'").replace('\n', " ");
-        let _ = js_sys::eval(&format!(
-            "try {{ document.querySelector('.zd-device-iframe')?.contentWindow?.postMessage({{ type: 'zd-speak', text: '{escaped}' }}, '*'); }} catch(e){{}}"
-        ));
+        let voice = tts_voice.get();
+        let rate = tts_rate.get();
+        let code = format!(
+            "(async function() {{
+                try {{
+                    const frame = document.querySelector('.zd-device-iframe');
+                    if (frame && frame.contentWindow) {{
+                        frame.contentWindow.postMessage({{ type: 'zd-speak', text: '{escaped}', voice: '{voice}', rate: '{rate}' }}, '*');
+                        return;
+                    }}
+                }} catch(e) {{}}
+                try {{
+                    const resp = await fetch('/api/tts', {{
+                        method: 'POST',
+                        headers: {{ 'Content-Type': 'application/json' }},
+                        body: JSON.stringify({{ text: '{escaped}', voice: '{voice}', rate: '{rate}' }})
+                    }});
+                    if (resp.ok) {{
+                        const blob = await resp.blob();
+                        const a = new Audio(URL.createObjectURL(blob));
+                        await a.play();
+                    }}
+                }} catch(e) {{ console.error('TTS preview error:', e); }}
+            }})();"
+        );
+        let _ = js_sys::eval(&code);
     };
 
     let run_ai_action = move |action_type: &'static str| {
@@ -1287,6 +1312,42 @@ pub fn SlidesEditorDrawer(
                                                         on:change=move |ev| update_speaker_notes(cur_idx, event_target_value(&ev))
                                                         rows=3
                                                     ></textarea>
+
+                                                    <div class="zd-slide-audio-controls-row">
+                                                        <div class="zd-audio-ctrl-group">
+                                                            <label class="zd-audio-label">{move || t(language.get(), "Voice Engine & Model", "موتور و صدای گوینده")}</label>
+                                                            <select
+                                                                class="zd-input zd-select zd-voice-select"
+                                                                prop:value=tts_voice.get()
+                                                                on:change=move |ev| tts_voice.set(event_target_value(&ev))
+                                                            >
+                                                                <optgroup label="Edge Neural (Free · Zero Config)">
+                                                                    <option value="fa-IR-DilaraNeural">{move || t(language.get(), "Dilara (Persian Natural Female)", "دیلارا (فارسی - گوینده زن روان و شفاف)")}</option>
+                                                                    <option value="fa-IR-FaridNeural">{move || t(language.get(), "Farid (Persian Formal Male)", "فرید (فارسی - گوینده مرد عمیق و جدی)")}</option>
+                                                                    <option value="en-US-JennyNeural">{move || t(language.get(), "Jenny (English US Female)", "Jenny (انگلیسی - زن)")}</option>
+                                                                    <option value="en-US-GuyNeural">{move || t(language.get(), "Guy (English US Male)", "Guy (انگلیسی - مرد)")}</option>
+                                                                </optgroup>
+                                                                <optgroup label="Cloud Studio APIs">
+                                                                    <option value="elevenlabs">{move || t(language.get(), "ElevenLabs (Multilingual v2 Ultra-Realistic)", "ElevenLabs (فوق‌العاده طبیعی)")}</option>
+                                                                    <option value="openai-nova">{move || t(language.get(), "OpenAI Nova (Warm & Expressive)", "OpenAI Nova (گرم و رسا)")}</option>
+                                                                    <option value="openai-alloy">{move || t(language.get(), "OpenAI Alloy (Crisp & Energetic)", "OpenAI Alloy (پرانرژی)")}</option>
+                                                                    <option value="gemini-puck">{move || t(language.get(), "Gemini Audio Puck (Google Native)", "Gemini Puck (مدل صوتی گوگل)")}</option>
+                                                                </optgroup>
+                                                            </select>
+                                                        </div>
+                                                        <div class="zd-audio-ctrl-group" style="max-width: 140px;">
+                                                            <label class="zd-audio-label">{move || t(language.get(), "Pacing Rate", "سرعت بیان")}</label>
+                                                            <select
+                                                                class="zd-input zd-select zd-rate-select"
+                                                                prop:value=tts_rate.get()
+                                                                on:change=move |ev| tts_rate.set(event_target_value(&ev))
+                                                            >
+                                                                <option value="0.8x">"0.8x (آهسته)"</option>
+                                                                <option value="1.0x" selected=true>"1.0x (طبیعی)"</option>
+                                                                <option value="1.2x">"1.2x (سریع)"</option>
+                                                            </select>
+                                                        </div>
+                                                    </div>
                                                 </div>
 
                                                 <!-- Sound Effect (SFX) Selector -->

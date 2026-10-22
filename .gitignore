@@ -17,9 +17,11 @@ dist/
 # Local runtime data & exports
 *.mp4
 *.webm
+*.mp3
 workspace/exports/
 workspace/sessions/
 workspace/notes.txt
+workspace/player.html
 
 # Local configs and history with potential keys
 config.toml

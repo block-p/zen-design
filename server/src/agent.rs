@@ -1305,19 +1305,65 @@ AUDIO & CINEMATIC PROCEDURAL SOUND DESIGN (Web Audio API):
         ""
     };
 
-    let tts_prompt = if let Some(text) = tts {
+    let prompt_lower = req.prompt.to_lowercase();
+    let wants_narration = tts.is_some()
+        || prompt_lower.contains("نریشن")
+        || prompt_lower.contains("voiceover")
+        || prompt_lower.contains("روایت")
+        || prompt_lower.contains("گوینده")
+        || prompt_lower.contains("با صدا")
+        || prompt_lower.contains("دوبله")
+        || prompt_lower.contains("narration");
+
+    let total_words_budget = ((duration as f64) * 2.3).round() as usize;
+
+    let tts_prompt = if wants_narration {
+        let script_clause = if let Some(text) = tts {
+            format!(
+                r#"- Pre-specified user script: "{text}"
+- Narration language code: "{tts_lang}""#,
+                text = escape_html(text),
+                tts_lang = tts_lang
+            )
+        } else {
+            format!(
+                r#"- AUTOMATED MODEL SCRIPTWRITING REQUIRED:
+  The user requested narration without supplying a finished script. You MUST author the complete, cinema-calibre voiceover narration script!
+  * Strictly calibrate the script length to exactly {total_words_budget} words (~{words_per_sec:.1} words/sec for {duration} seconds duration).
+  * Tone: Authoritative, visionary, cinematic, rhythmic, and poetic.
+  * Language: {lang_desc}"#,
+                total_words_budget = total_words_budget,
+                words_per_sec = 2.3,
+                duration = duration,
+                lang_desc = if contains_rtl_script(&req.prompt) { "Pure natural Persian (فارسی روان، حماسی، موجز و بدون تکلف)" } else { "High-impact concise English" }
+            )
+        };
+
         format!(
             r#"
-NEURAL TEXT-TO-SPEECH (TTS) NARRATION ENABLED:
-- Voiceover narration script: "{text}"
-- Narration language code: "{tts_lang}"
-- Implement high-fidelity neural narration using the ZenDesign server endpoint `/api/tts` (with SpeechSynthesis fallback):
-  async function playNarration() {{
+════════════════════════════════════════════════════════════════
+NEURAL VOICE NARRATION & CINEMATIC PACING ENGINE:
+════════════════════════════════════════════════════════════════
+{script_clause}
+- STRICT PACING MATH & TIMELINE SYNCHRONIZATION:
+  * Speech rate constant: 2.3 words per second (138–145 words/min).
+  * Total film runtime: strictly {duration}s. Target total narration: ~{total_words_budget} words.
+  * Divide the narration into the exact sequence of visual beats so that visual events and spoken sentences align 1-to-1.
+  * Kinetic subtitle typography: words must reveal rhythmically with the voiceover, never rushing ahead nor lagging behind.
+  * When the narration ends, the film culminates in its final iconic mark and holds cleanly.
+- AUDIO IMPLEMENTATION VIA ZENAUDIO /API/TTS:
+  Implement neural voice playback calling ZenDesign's multi-provider endpoint `/api/tts`:
+  ```javascript
+  async function playNarration(narrationText, voiceName, voiceRate) {{
     try {{
       const res = await fetch('/api/tts', {{
         method: 'POST',
         headers: {{ 'Content-Type': 'application/json' }},
-        body: JSON.stringify({{ text: "{text}" }})
+        body: JSON.stringify({{
+          text: narrationText,
+          voice: voiceName || null,
+          rate: voiceRate || null
+        }})
       }});
       if (res.ok) {{
         const blob = await res.blob();
@@ -1327,15 +1373,17 @@ NEURAL TEXT-TO-SPEECH (TTS) NARRATION ENABLED:
       }}
     }} catch (e) {{}}
     if (window.speechSynthesis) {{
-      const u = new SpeechSynthesisUtterance("{text}");
-      u.lang = "{tts_lang}";
+      const u = new SpeechSynthesisUtterance(narrationText);
+      u.lang = '{tts_lang}';
       window.speechSynthesis.speak(u);
     }}
   }}
-- Coordinate kinetic typography and subtitles with the spoken narration so words appear in rhythm.
-- Provide an inviting "Play Voiceover & Film" button or trigger speech synthesis on user interaction.
+  ```
+- Sleek audio interaction: Provide an inviting floating start HUD button (e.g. "▶ شروع فیلم با صدا") or trigger speech automatically upon the first user interaction.
 "#,
-            text = escape_html(text),
+            script_clause = script_clause,
+            duration = duration,
+            total_words_budget = total_words_budget,
             tts_lang = tts_lang,
         )
     } else {
@@ -1530,7 +1578,7 @@ CORE PRESENTATION ARCHITECTURE:
      * `data-sfx="drop"`: Sub-bass frequency drop for problem, challenge, or conflict slides.
      * `data-sfx="none"`: Muted silence when solemnity is required.
    - Interactive elements can trigger sounds via `data-sfx-type="chime|punch|digital"` and `data-sfx-trigger="hover|click"`.
-   - Always write detailed, natural speaker talking points on EVERY slide via `data-speaker-notes="..."`. The ZenAudio engine automatically vocalizes these notes via `/api/tts` in presenter mode.
+   - Always write detailed, natural speaker talking points on EVERY slide via `data-speaker-notes="..."` (calibrated to 25–40 words per slide for natural 10–18s delivery at ~2.3 words/second). The ZenAudio engine automatically vocalizes these notes via `/api/tts` in presenter mode.
    - On slide transition, call `if (window.ZenAudio) window.ZenAudio.play(slide.getAttribute('data-sfx') || 'whoosh');` so slide navigation triggers the chosen sound.
 
 9. TECHNICAL & OUTPUT CONTRACT:
@@ -1612,15 +1660,19 @@ fn generate_motion_storyboard_plan(req: &PromptRequest) -> String {
             "THE BREAKTHROUGH (Camera scale-through, kinetic typographic impact, frequency shift)"
         };
 
+        let words_per_beat = ((actual_beat_len * 2.3).round() as usize).max(3);
+
         plan.push_str(&format!(
-            "• Beat {:02} [{:.1}s – {:.1}s | {}%–{}%] — {}\n  - Camera & Motion: Active camera movement (zoom-through / 3D tilt / velocity wipe). Zero static stillness.\n  - Kinetic Typo: Massive masked reveal (2–4 words maximum in {}).\n  - Centerpiece Visual: Intricate animated SVG / Canvas procedural geometry synchronized with the beat.\n  - Audio Event: Sub-bass impact & synced harmonic riser/whoosh.\n\n",
+            "• Beat {:02} [{:.1}s – {:.1}s | {}%–{}%] — {}\n  - Camera & Motion: Active camera movement (zoom-through / 3D tilt / velocity wipe). Zero static stillness.\n  - Kinetic Typo: Massive masked reveal (2–4 words maximum in {}).\n  - Narration & Speech Sync: ~{} words paced strictly for natural {:.1}s delivery.\n  - Centerpiece Visual: Intricate animated SVG / Canvas procedural geometry synchronized with the beat.\n  - Audio Event: Sub-bass impact & synced harmonic riser/whoosh.\n\n",
             i + 1,
             t_start,
             t_end,
             pct_start,
             pct_end,
             beat_role,
-            if is_rtl { "natural Persian (فارسی)" } else { "concise English" }
+            if is_rtl { "natural Persian (فارسی)" } else { "concise English" },
+            words_per_beat,
+            actual_beat_len,
         ));
     }
 

@@ -7,7 +7,7 @@ use icondata_lu::{
 };
 use leptos::prelude::*;
 
-use crate::actions::export_video;
+use crate::actions::{export_pptx_deck, export_video};
 use crate::data::{
     device_meta, ActivityEntry, AspectRatio, ConnectionState, DeviceId, ModeId, ASPECT_RATIOS,
     DEVICES,
@@ -55,6 +55,7 @@ pub fn PreviewPanel(
     let is_editing_inplace = RwSignal::new(false);
     let is_saving_inplace = RwSignal::new(false);
     let trigger_save = RwSignal::new(false);
+    let exporting_pptx = RwSignal::new(false);
 
     // Presenter mode state
     let is_presenting = RwSignal::new(false);
@@ -861,14 +862,33 @@ pub fn PreviewPanel(
                         </Show>
                     </button>
 
-                    <a
-                        href="/api/export/pptx"
-                        download="presentation.pptx"
-                        title=move || t(language.get(), "Export PowerPoint (.pptx)", "خروجی پاورپوینت (PPTX)").to_string()
-                        class="zd-btn-icon"
+                    <button
+                        type="button"
+                        on:click=move |_| export_pptx_deck(exporting_pptx, entries, language.get())
+                        disabled=move || exporting_pptx.get() || running.get()
+                        title=move || {
+                            let lang = language.get();
+                            if exporting_pptx.get() {
+                                t(lang, "Generating PowerPoint presentation…", "در حال ایجاد فایل پاورپوینت…").to_string()
+                            } else {
+                                t(lang, "Export PowerPoint (.pptx)", "خروجی پاورپوینت (PPTX)").to_string()
+                            }
+                        }
+                        class=move || {
+                            if exporting_pptx.get() {
+                                "zd-btn-icon zd-btn-icon--exporting"
+                            } else {
+                                "zd-btn-icon"
+                            }
+                        }
                     >
-                        <Icon data=LuPresentation size=13 />
-                    </a>
+                        <Show
+                            when=move || exporting_pptx.get()
+                            fallback=move || view! { <Icon data=LuPresentation size=13 /> }
+                        >
+                            <Icon data=LuLoaderCircle size=13 class="zd-spin" />
+                        </Show>
+                    </button>
 
                     <a
                         href="/preview/index.html"

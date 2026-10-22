@@ -1,3 +1,5 @@
+#![cfg_attr(windows, windows_subsystem = "windows")]
+
 mod agent;
 mod detector;
 mod export;
@@ -188,11 +190,44 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     info!("Studio: http://{bind_addr}/");
     info!("Artifact preview: http://{bind_addr}/preview/index.html");
 
+    maybe_open_app_window(&bind_addr);
+
     axum::serve(listener, app)
         .with_graceful_shutdown(shutdown_signal())
         .await?;
 
     Ok(())
+}
+
+fn maybe_open_app_window(bind_addr: &str) {
+    if std::env::var("ZEN_NO_OPEN").is_ok() {
+        return;
+    }
+    let url = format!("http://{bind_addr}/");
+    tokio::spawn(async move {
+        tokio::time::sleep(tokio::time::Duration::from_millis(500)).await;
+        #[cfg(windows)]
+        {
+            // First try launching Edge in standalone application window mode (--app)
+            let launched = std::process::Command::new("cmd")
+                .args(["/C", "start", "msedge", &format!("--app={url}")])
+                .spawn();
+            if launched.is_err() {
+                // Fallback to default browser
+                let _ = std::process::Command::new("cmd")
+                    .args(["/C", "start", &url])
+                    .spawn();
+            }
+        }
+        #[cfg(target_os = "macos")]
+        {
+            let _ = std::process::Command::new("open").arg(&url).spawn();
+        }
+        #[cfg(target_os = "linux")]
+        {
+            let _ = std::process::Command::new("xdg-open").arg(&url).spawn();
+        }
+    });
 }
 
 /// Resolve the workspace folder whether the binary is started from `server/`,
@@ -207,11 +242,13 @@ fn resolve_workspace() -> PathBuf {
     }
 
     if let Ok(exe) = std::env::current_exe() {
-        if let Some(parent) = exe.parent() {
-            let exe_ws = parent.join("workspace");
-            if exe_ws.is_dir() {
-                return std::fs::canonicalize(&exe_ws).unwrap_or(exe_ws);
+        let mut curr = exe.parent();
+        while let Some(parent) = curr {
+            let ws = parent.join("workspace");
+            if ws.is_dir() {
+                return std::fs::canonicalize(&ws).unwrap_or(ws);
             }
+            curr = parent.parent();
         }
     }
 
@@ -237,15 +274,15 @@ fn resolve_workspace() -> PathBuf {
 /// Locate the Trunk output regardless of the process working directory.
 fn resolve_studio() -> PathBuf {
     if let Ok(exe) = std::env::current_exe() {
-        if let Some(parent) = exe.parent() {
-            let exe_dist = parent.join("dist");
-            if exe_dist.is_dir() {
-                return std::fs::canonicalize(&exe_dist).unwrap_or(exe_dist);
+        let mut curr = exe.parent();
+        while let Some(parent) = curr {
+            for candidate in ["dist", "studio/dist", "studio"] {
+                let dir = parent.join(candidate);
+                if dir.is_dir() {
+                    return std::fs::canonicalize(&dir).unwrap_or(dir);
+                }
             }
-            let exe_studio = parent.join("studio");
-            if exe_studio.is_dir() {
-                return std::fs::canonicalize(&exe_studio).unwrap_or(exe_studio);
-            }
+            curr = parent.parent();
         }
     }
 
@@ -314,6 +351,8 @@ struct SettingsUpdate {
     base_url: Option<String>,
     model: Option<String>,
     api_key: Option<String>,
+    elevenlabs_key: Option<String>,
+    tts_voice: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -354,6 +393,12 @@ async fn put_settings(
         if let Some(value) = update.api_key {
             profile.api_key = value.trim().to_string();
         }
+    }
+    if let Some(key) = update.elevenlabs_key {
+        settings.elevenlabs_key = key.trim().to_string();
+    }
+    if let Some(voice) = update.tts_voice {
+        settings.tts_voice = voice.trim().to_string();
     }
 
     match settings.save() {
@@ -561,42 +606,18 @@ async fn import_opencode_settings(State(state): State<AppState>) -> impl IntoRes
 }
 
 fn read_opencode_provider() -> Result<ImportedProvider, String> {
-    let base = std::env::var("XDG_CONFIG_HOME")
-        .ok()
-        .filter(|value| !value.trim().is_empty())
-        .map(PathBuf::from)
-        .or_else(|| {
-            std::env::var("HOME")
-                .ok()
-                .map(|home| Path::new(&home).join(".config"))
-        });
-    let Some(base) = base else {
-        return Err("Could not locate the OpenCode configuration directory.".to_string());
-    };
-    let directory = base.join("opencode");
-
-    let mut path = None;
-    for name in ["opencode.json", "opencode.jsonc"] {
-        let candidate = directory.join(name);
-        if candidate.is_file() {
-            path = Some(candidate);
-            break;
-        }
-    }
-    let path = path.ok_or_else(|| {
-        format!(
-            "No OpenCode configuration found in {}.",
-            directory.display()
-        )
-    })?;
+    let path = detector::find_opencode_config_file()
+        .ok_or_else(|| "Could not locate OpenCode configuration (checked ~/.config/opencode, %APPDATA%, %LOCALAPPDATA%, and workspace).".to_string())?;
 
     let raw = std::fs::read_to_string(&path)
         .map_err(|error| format!("Could not read {}: {error}", path.display()))?;
-    let value: serde_json::Value = serde_json::from_str(&raw)
+    let cleaned = detector::strip_json_comments(&raw);
+    let value: serde_json::Value = serde_json::from_str(&cleaned)
         .map_err(|error| format!("Could not parse {}: {error}", path.display()))?;
 
     let providers = value
         .get("provider")
+        .or_else(|| value.get("providers"))
         .and_then(serde_json::Value::as_object)
         .ok_or_else(|| format!("{} has no provider entries.", path.display()))?;
 
@@ -2152,13 +2173,44 @@ async fn slide_ai_action(
 struct TtsPayload {
     text: String,
     #[serde(default)]
+    provider: Option<String>,
+    #[serde(default)]
     voice: Option<String>,
     #[serde(default)]
     rate: Option<String>,
+    #[serde(default)]
+    api_key: Option<String>,
 }
 
-async fn tts_synthesize_internal(payload: TtsPayload) -> impl IntoResponse {
-    match tts::synthesize(&payload.text, payload.voice.as_deref(), payload.rate.as_deref()).await {
+async fn tts_synthesize_internal(state: AppState, payload: TtsPayload) -> impl IntoResponse {
+    let settings = state.settings.read().await;
+    let provider = payload.provider.as_deref().unwrap_or("edge");
+    let key = if let Some(k) = payload.api_key.as_deref().filter(|s| !s.trim().is_empty()) {
+        Some(k.to_string())
+    } else {
+        match provider {
+            "elevenlabs" => {
+                let k = settings.elevenlabs_key();
+                if !k.is_empty() { Some(k) } else { None }
+            }
+            "openai" => {
+                let k = settings.openai_key();
+                if !k.is_empty() { Some(k) } else { None }
+            }
+            _ => None,
+        }
+    };
+    drop(settings);
+
+    match tts::synthesize(
+        Some(provider),
+        &payload.text,
+        payload.voice.as_deref(),
+        payload.rate.as_deref(),
+        key.as_deref(),
+    )
+    .await
+    {
         Ok(bytes) => (
             StatusCode::OK,
             [
@@ -2166,25 +2218,29 @@ async fn tts_synthesize_internal(payload: TtsPayload) -> impl IntoResponse {
                 (axum::http::header::CACHE_CONTROL, "public, max-age=86400"),
             ],
             bytes,
-        ).into_response(),
+        )
+            .into_response(),
         Err(err) => (
             StatusCode::BAD_REQUEST,
             [(axum::http::header::CONTENT_TYPE, "application/json")],
             serde_json::to_string(&json!({ "error": err })).unwrap_or_default(),
-        ).into_response(),
+        )
+            .into_response(),
     }
 }
 
 async fn tts_synthesize_post(
+    State(state): State<AppState>,
     Json(payload): Json<TtsPayload>,
 ) -> impl IntoResponse {
-    tts_synthesize_internal(payload).await
+    tts_synthesize_internal(state, payload).await
 }
 
 async fn tts_synthesize_get(
+    State(state): State<AppState>,
     Query(payload): Query<TtsPayload>,
 ) -> impl IntoResponse {
-    tts_synthesize_internal(payload).await
+    tts_synthesize_internal(state, payload).await
 }
 
 

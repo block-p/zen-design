@@ -38,8 +38,16 @@ fn history_path() -> PathBuf {
         .filter(|v| !v.trim().is_empty())
         .map(PathBuf::from)
         .or_else(|| {
+            std::env::var("APPDATA")
+                .ok()
+                .filter(|v| !v.trim().is_empty())
+                .map(PathBuf::from)
+        })
+        .or_else(|| {
             std::env::var("HOME")
                 .ok()
+                .or_else(|| std::env::var("USERPROFILE").ok())
+                .filter(|v| !v.trim().is_empty())
                 .map(|home| Path::new(&home).join(".config"))
         })
         .unwrap_or_else(|| PathBuf::from(".config"));

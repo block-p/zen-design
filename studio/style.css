@@ -4665,6 +4665,41 @@ html[lang="fa"] * {
   resize: vertical;
 }
 
+.zd-slide-audio-controls-row {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  margin-top: 4px;
+}
+
+.zd-audio-ctrl-group {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  flex: 1;
+}
+
+.zd-audio-label {
+  font-size: 10px;
+  color: var(--zd-text-muted);
+  font-weight: 500;
+}
+
+.zd-voice-select, .zd-rate-select {
+  font-size: 11px !important;
+  padding: 4px 8px !important;
+  height: 28px !important;
+  background: rgba(0, 0, 0, 0.4) !important;
+  border: 1px solid rgba(245, 158, 11, 0.25) !important;
+  border-radius: 5px !important;
+  color: var(--zd-text) !important;
+}
+
+.zd-voice-select option, .zd-voice-select optgroup {
+  background: #18181b;
+  color: #f4f4f5;
+}
+
 /* ── 4. Presenter Mode & Floating HUD ── */
 .zd-preview-canvas--presenting {
   position: fixed !important;
