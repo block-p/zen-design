@@ -1,190 +1,519 @@
 <!DOCTYPE html>
-<html lang="fa" dir="rtl">
+<html lang="en">
 <head><meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'; script-src 'unsafe-inline'; img-src data: blob:; font-src data:; media-src 'self' data: blob:; connect-src 'self' data: blob:; base-uri 'none'; form-action 'none'; frame-src 'none'">
 
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>سفر قطره باران</title>
-<style>
-* {
-  margin: 0;
-  padding: 0;
-  box-sizing: border-box;
-}
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>CS 8410: Distributed Consensus Protocols</title>
+  <style>
+    :root {
+      --bg: #0b0f19;
+      --surface: #161f30;
+      --surface-hover: #1c273e;
+      --surface-border: #22314e;
+      --text: #f8fafc;
+      --text-muted: #94a3b8;
+      --accent: #00f2fe;
+      --accent-dim: rgba(0, 242, 254, 0.15);
+      --accent-glow: rgba(0, 242, 254, 0.35);
+      --indigo: #635bff;
+      --indigo-dim: rgba(99, 91, 255, 0.15);
+      --alert: #ff3b30;
+      --alert-dim: rgba(255, 59, 48, 0.18);
+      --success: #10b981;
+      --font-sans: 'Space Grotesk', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      --font-mono: 'JetBrains Mono', 'Fira Code', Menlo, Consolas, monospace;
+    }
 
-body {
-  width: 100vw;
-  height: 100vh;
-  overflow: hidden;
-  background: #0a2540;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-family: system-ui, sans-serif;
-}
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+      user-select: none;
+    }
 
-#stage {
-  position: relative;
-  width: 1440px;
-  height: 900px;
-  transform-origin: center center;
-  overflow: hidden;
-  background: radial-gradient(circle at 50% 30%, color-mix(in srgb, #635bff 12%, transparent), transparent 70%);
-}
+    body {
+      background: #05070d;
+      color: var(--text);
+      font-family: var(--font-sans);
+      overflow: hidden;
+      width: 100vw;
+      height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
 
-#canvas {
-  position: absolute;
-  top: 0;
-  left: 0;
-  width: 100%;
-  height: 100%;
-  pointer-events: none;
-}
+    /* 16:9 Viewport Stage Container */
+    #deck-stage {
+      transform: translate(-50%, -50%);
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      width: 1440px;
+      height: 810px;
+      transform-origin: center center;
+      background: radial-gradient(circle at 80% 20%, #131b2e 0%, var(--bg) 70%);
+      border: 1px solid var(--surface-border);
+      box-shadow: 0 25px 80px rgba(0, 0, 0, 0.8), 0 0 120px rgba(0, 242, 254, 0.05);
+      overflow: hidden;
+      border-radius: 8px;
+    }
 
-#scene {
-  position: absolute;
-  top: 0;
-  left: 0;
-  width: 100%;
-  height: 100%;
-  pointer-events: none;
-}
+    /* Slide Engine */
+    .slide {
+      position: absolute;
+      inset: 0;
+      padding: 56px 72px;
+      display: flex;
+      flex-direction: column;
+      opacity: 0;
+      visibility: hidden;
+      pointer-events: none;
+      transition: opacity 0.32s cubic-bezier(0.16, 1, 0.3, 1), transform 0.32s cubic-bezier(0.16, 1, 0.3, 1);
+      transform: scale(0.99);
+      background: var(--bg);
+    }
 
-.typo-mask {
-  overflow: hidden;
-  display: inline-block;
-  padding: 0.2em 0.15em;
-  margin: -0.2em -0.15em;
-  vertical-align: bottom;
-}
+    .slide.active {
+      opacity: 1;
+      visibility: visible;
+      pointer-events: auto;
+      transform: scale(1);
+    }
 
-.typo-inner {
-  display: inline-block;
-  transform: translateY(120%);
-  opacity: 0;
-}
+    /* Top Metadata Bar */
+    .meta-bar {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 24px;
+      font-family: var(--font-mono);
+      font-size: 13px;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      color: var(--text-muted);
+      border-bottom: 1px solid var(--surface-border);
+      padding-bottom: 12px;
+    }
 
-#kinetic-text {
-  position: absolute;
-  top: 50%;
-  left: 50%;
-  transform: translate(-50%, -50%);
-  font-size: clamp(96px, 10vw, 180px);
-  font-weight: 900;
-  color: #ffffff;
-  text-align: center;
-  letter-spacing: 0;
-  line-height: 1.3;
-  white-space: nowrap;
-  pointer-events: none;
-  text-shadow: 0 8px 32px rgba(99, 91, 255, 0.6);
-}
+    .meta-tag {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      background: var(--surface);
+      border: 1px solid var(--surface-border);
+      padding: 4px 12px;
+      border-radius: 4px;
+      color: var(--accent);
+      font-weight: 500;
+    }
 
-#progress-bar {
-  position: absolute;
-  bottom: 0;
-  left: 0;
-  width: 100%;
-  height: 2px;
-  background: rgba(255, 255, 255, 0.1);
-  pointer-events: none;
-}
+    .meta-tag::before {
+      content: '';
+      width: 6px;
+      height: 6px;
+      border-radius: 50%;
+      background: var(--accent);
+      box-shadow: 0 0 8px var(--accent);
+    }
 
-#progress-fill {
-  position: absolute;
-  left: 0;
-  top: 0;
-  height: 100%;
-  width: 0%;
-  background: linear-gradient(90deg, #635bff, #ffffff);
-  box-shadow: 0 0 12px #635bff;
-  transition: width 0.05s linear;
-}
+    /* Typography */
+    h1.display-title {
+      font-size: 46px;
+      font-weight: 700;
+      line-height: 1.15;
+      letter-spacing: -0.02em;
+      color: var(--text);
+      margin-bottom: 8px;
+    }
 
-#timer {
-  position: absolute;
-  bottom: 12px;
-  right: 20px;
-  font-family: 'Courier New', monospace;
-  font-size: 11px;
-  color: rgba(255, 255, 255, 0.5);
-  pointer-events: none;
-}
+    .highlight-cyan {
+      color: var(--accent);
+      text-shadow: 0 0 24px rgba(0, 242, 254, 0.3);
+    }
 
-#start-btn {
-  position: absolute;
-  top: 50%;
-  left: 50%;
-  transform: translate(-50%, -50%);
-  padding: 18px 42px;
-  font-size: 22px;
-  font-weight: 700;
-  color: #ffffff;
-  background: linear-gradient(135deg, #635bff, #4c46d8);
-  border: none;
-  border-radius: 8px;
-  cursor: pointer;
-  box-shadow: 0 12px 40px rgba(99, 91, 255, 0.4);
-  transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1);
-  z-index: 100;
-}
+    .highlight-crimson {
+      color: var(--alert);
+    }
 
-#start-btn:hover {
-  transform: translate(-50%, -50%) scale(1.05);
-  box-shadow: 0 16px 56px rgba(99, 91, 255, 0.6);
-}
+    p.subtitle {
+      font-size: 19px;
+      color: var(--text-muted);
+      line-height: 1.5;
+      margin-bottom: 32px;
+    }
 
-#replay-btn {
-  position: absolute;
-  bottom: 20px;
-  left: 20px;
-  width: 40px;
-  height: 40px;
-  background: rgba(255, 255, 255, 0.08);
-  border: 1px solid rgba(255, 255, 255, 0.15);
-  border-radius: 50%;
-  color: #ffffff;
-  font-size: 18px;
-  cursor: pointer;
-  display: none;
-  align-items: center;
-  justify-content: center;
-  transition: all 0.3s;
-  z-index: 10;
-}
+    /* Content Layouts */
+    .slide-body {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      position: relative;
+    }
 
-#replay-btn:hover {
-  background: rgba(255, 255, 255, 0.15);
-  transform: scale(1.1);
-}
+    .grid-split {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 32px;
+      height: 100%;
+    }
 
-@media (prefers-reduced-motion: reduce) {
-  * {
-    animation-duration: 0.01ms !important;
-    transition-duration: 0.01ms !important;
-  }
-}
+    .grid-3col {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 24px;
+      height: 100%;
+    }
 
-@keyframes float-up {
-  from { transform: translateY(0) scale(0.3); opacity: 0; }
-  to { transform: translateY(-40px) scale(1); opacity: 1; }
-}
+    /* Cards */
+    .zd-card {
+      background: var(--surface);
+      border: 1px solid var(--surface-border);
+      border-radius: 12px;
+      padding: 24px 28px;
+      position: relative;
+      display: flex;
+      flex-direction: column;
+      backdrop-filter: blur(8px);
+      transition: transform 0.2s ease, border-color 0.2s ease;
+    }
 
-@keyframes fall-down {
-  from { transform: translateY(-200px); opacity: 0; }
-  to { transform: translateY(0); opacity: 1; }
-}
+    .zd-card:hover {
+      border-color: rgba(0, 242, 254, 0.4);
+      transform: translateY(-2px);
+    }
 
-@keyframes ripple-expand {
-  from { transform: scale(0); opacity: 1; }
-  to { transform: scale(3); opacity: 0; }
-}
+    .zd-card.highlight {
+      border-color: var(--accent);
+      box-shadow: inset 0 0 20px var(--accent-dim);
+    }
 
-@keyframes river-flow {
-  from { stroke-dashoffset: 2000; }
-  to { stroke-dashoffset: 0; }
-}
-</style>
+    .zd-card.danger {
+      border-color: var(--alert);
+      background: linear-gradient(180deg, var(--surface) 0%, rgba(255, 59, 48, 0.08) 100%);
+    }
+
+    .card-label {
+      font-family: var(--font-mono);
+      font-size: 12px;
+      text-transform: uppercase;
+      letter-spacing: 0.1em;
+      color: var(--accent);
+      margin-bottom: 8px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+
+    .card-title {
+      font-size: 20px;
+      font-weight: 600;
+      margin-bottom: 12px;
+      color: var(--text);
+    }
+
+    .card-text {
+      font-size: 15px;
+      line-height: 1.6;
+      color: var(--text-muted);
+    }
+
+    /* Math / Code Badge */
+    .math-callout {
+      background: rgba(0, 0, 0, 0.4);
+      border: 1px solid var(--surface-border);
+      border-left: 3px solid var(--accent);
+      padding: 12px 16px;
+      font-family: var(--font-mono);
+      font-size: 14px;
+      color: #38bdf8;
+      border-radius: 4px;
+      margin: 12px 0;
+    }
+
+    /* Cover Slide Specifics */
+    .cover-layout {
+      display: grid;
+      grid-template-columns: 1.15fr 0.85fr;
+      height: 100%;
+      align-items: center;
+      gap: 40px;
+    }
+
+    .cover-art-box {
+      height: 480px;
+      background: rgba(15, 23, 42, 0.6);
+      border: 1px solid var(--surface-border);
+      border-radius: 16px;
+      position: relative;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      overflow: hidden;
+    }
+
+    /* Protocol Capability Table */
+    .data-table-wrap {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 15px;
+      background: var(--surface);
+      border: 1px solid var(--surface-border);
+      border-radius: 12px;
+      overflow: hidden;
+    }
+
+    .data-table-wrap th {
+      background: rgba(11, 15, 25, 0.8);
+      font-family: var(--font-mono);
+      font-size: 12px;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      color: var(--accent);
+      padding: 16px 20px;
+      text-align: left;
+      border-bottom: 1px solid var(--surface-border);
+    }
+
+    .data-table-wrap td {
+      padding: 18px 20px;
+      border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+      color: var(--text);
+      font-family: var(--font-mono);
+      font-size: 14px;
+    }
+
+    .data-table-wrap tr:last-child td {
+      border-bottom: none;
+    }
+
+    .data-table-wrap tr:hover td {
+      background: var(--surface-hover);
+    }
+
+    .tag-pill {
+      display: inline-block;
+      padding: 4px 10px;
+      border-radius: 20px;
+      font-size: 11px;
+      font-weight: 600;
+      letter-spacing: 0.04em;
+    }
+
+    .tag-cft { background: rgba(56, 189, 248, 0.15); color: #38bdf8; border: 1px solid rgba(56, 189, 248, 0.3); }
+    .tag-bft { background: rgba(168, 85, 247, 0.15); color: #c084fc; border: 1px solid rgba(168, 85, 247, 0.3); }
+    .tag-pow { background: rgba(245, 158, 11, 0.15); color: #fbbf24; border: 1px solid rgba(245, 158, 11, 0.3); }
+
+    /* Big Metric Display */
+    .metric-hero {
+      display: flex;
+      align-items: baseline;
+      gap: 12px;
+      margin: 8px 0;
+    }
+
+    .metric-value {
+      font-size: 52px;
+      font-weight: 700;
+      font-family: var(--font-mono);
+      color: var(--accent);
+      letter-spacing: -0.03em;
+    }
+
+    .metric-unit {
+      font-size: 16px;
+      color: var(--text-muted);
+      font-family: var(--font-mono);
+    }
+
+    /* Editorial Quote Callout */
+    .callout-quote {
+      margin-top: auto;
+      padding: 18px 24px;
+      background: rgba(99, 91, 255, 0.08);
+      border-left: 4px solid var(--indigo);
+      border-radius: 0 8px 8px 0;
+      font-style: italic;
+      color: #cbd5e1;
+      font-size: 16px;
+      display: flex;
+      align-items: center;
+      gap: 16px;
+    }
+
+    /* Step Timeline Horizontal */
+    .timeline-steps {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 20px;
+      position: relative;
+    }
+
+    .timeline-steps::before {
+      content: '';
+      position: absolute;
+      top: 28px;
+      left: 40px;
+      right: 40px;
+      height: 2px;
+      background: linear-gradient(90deg, var(--accent), var(--indigo));
+      z-index: 1;
+      opacity: 0.4;
+    }
+
+    .step-card {
+      background: var(--surface);
+      border: 1px solid var(--surface-border);
+      border-radius: 12px;
+      padding: 24px;
+      position: relative;
+      z-index: 2;
+    }
+
+    .step-node {
+      width: 44px;
+      height: 44px;
+      border-radius: 50%;
+      background: var(--bg);
+      border: 2px solid var(--accent);
+      color: var(--accent);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-family: var(--font-mono);
+      font-weight: 700;
+      margin-bottom: 20px;
+      box-shadow: 0 0 16px var(--accent-glow);
+    }
+
+    /* Interactive Bottom Navigation */
+    #deck-nav {
+      position: absolute;
+      bottom: 20px;
+      left: 72px;
+      right: 72px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      z-index: 100;
+      pointer-events: auto;
+    }
+
+    .nav-counter {
+      font-family: var(--font-mono);
+      font-size: 13px;
+      letter-spacing: 0.1em;
+      color: var(--text-muted);
+    }
+
+    .nav-controls {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+
+    .nav-btn {
+      background: var(--surface);
+      border: 1px solid var(--surface-border);
+      color: var(--text);
+      width: 38px;
+      height: 38px;
+      border-radius: 8px;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      transition: all 0.15s ease;
+    }
+
+    .nav-btn:hover {
+      border-color: var(--accent);
+      color: var(--accent);
+      box-shadow: 0 0 12px var(--accent-dim);
+    }
+
+    /* Progress bar */
+    #progress-bar {
+      position: absolute;
+      bottom: 0;
+      left: 0;
+      height: 3px;
+      background: linear-gradient(90deg, var(--indigo), var(--accent));
+      width: 14.28%;
+      transition: width 0.3s ease;
+      box-shadow: 0 0 10px var(--accent);
+      z-index: 101;
+    }
+
+    /* Audio Indicator Button */
+    .audio-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      cursor: pointer;
+      padding: 6px 12px;
+      border-radius: 6px;
+      background: rgba(255, 255, 255, 0.05);
+      border: 1px solid var(--surface-border);
+      font-size: 12px;
+      color: var(--text-muted);
+      font-family: var(--font-mono);
+    }
+
+    .audio-badge:hover {
+      color: var(--accent);
+      border-color: var(--accent);
+    }
+
+    /* SVG Diagram Animations */
+    @keyframes pulseGlow {
+      0%, 100% { opacity: 0.4; }
+      50% { opacity: 0.85; filter: drop-shadow(0 0 8px var(--accent)); }
+    }
+
+    @keyframes dashMove {
+      to { stroke-dashoffset: -40; }
+    }
+
+    .pulse-node {
+      animation: pulseGlow 2.5s infinite ease-in-out;
+    }
+
+    .packet-stream {
+      stroke-dasharray: 6 6;
+      animation: dashMove 1.5s linear infinite;
+    }
+
+    /* Print Styles */
+    @media print {
+      body {
+        overflow: visible !important;
+        background: #fff;
+      }
+      #deck-stage {
+      transform: translate(-50%, -50%);
+        position: static !important;
+        transform: none !important;
+        width: 100% !important;
+        height: auto !important;
+        box-shadow: none !important;
+        border: none !important;
+      }
+      .slide {
+        position: relative !important;
+        display: flex !important;
+        opacity: 1 !important;
+        visibility: visible !important;
+        page-break-after: always !important;
+        height: 100vh !important;
+        background: #0b0f19 !important;
+      }
+      #deck-nav, #progress-bar {
+        display: none !important;
+      }
+    }
+  </style>
 
 <script id="zen-audio-engine">
 window.ZenAudio = (() => {
@@ -434,381 +763,659 @@ window.ZenAudio = (() => {
 </head>
 <body>
 
-<div id="stage">
-  <canvas id="canvas"></canvas>
-  <svg id="scene" viewBox="0 0 1440 900" xmlns="http://www.w3.org/2000/svg"></svg>
-  <div id="kinetic-text"></div>
-  
-  <div id="progress-bar">
-    <div id="progress-fill"></div>
+  <div id="deck-stage">
+    
+    <!-- SLIDE 1: COVER -->
+    <section class="slide active" id="slide-1" data-sfx="sweep" data-speaker-notes="Welcome to CS 8410. Today we dive into distributed consensus protocols, exploring how state machine replication survives hostile network partitions and asynchronous latency.">
+      <div class="meta-bar">
+        <span class="meta-tag">CS 8410: Graduate Systems</span>
+        <span>Lecture 08 &bull; Consensus Engineering</span>
+      </div>
+      <div class="slide-body">
+        <div class="cover-layout">
+          <div>
+            <div style="display: flex; gap: 8px; margin-bottom: 16px;">
+              <span class="tag-pill tag-cft">Fault Models</span>
+              <span class="tag-pill tag-bft">State Machine Replication</span>
+            </div>
+            <h1 class="display-title">
+              Distributed <br>
+              <span class="highlight-cyan">Consensus Protocols</span>
+            </h1>
+            <p class="subtitle" style="max-width: 620px;">
+              State Machine Replication, Quorum Intersections, and Operational Bounds in Asynchronous, Partition-Prone Networks.
+            </p>
+
+            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-top: 24px;">
+              <div class="zd-card">
+                <div class="card-label">Crash-Fault Tolerant (CFT)</div>
+                <div style="font-family: var(--font-mono); font-size: 18px; color: var(--accent);">Q = &lfloor;n/2&rfloor; + 1</div>
+                <div style="font-size: 13px; color: var(--text-muted); margin-top: 4px;">Tolerates f &lt; n/2 crash failures</div>
+              </div>
+              <div class="zd-card">
+                <div class="card-label">Byzantine-Fault Tolerant (BFT)</div>
+                <div style="font-family: var(--font-mono); font-size: 18px; color: #c084fc;">N &ge; 3f + 1</div>
+                <div style="font-size: 13px; color: var(--text-muted); margin-top: 4px;">Tolerates arbitrary/adversarial nodes</div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Dynamic SVG Topology Visual -->
+          <div class="cover-art-box">
+            <svg viewBox="0 0 400 400" width="380" height="380">
+              <defs>
+                <linearGradient id="cyanGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+                  <stop offset="0%" stop-color="#00f2fe" />
+                  <stop offset="100%" stop-color="#635bff" />
+                </linearGradient>
+              </defs>
+
+              <!-- Circle background boundary -->
+              <circle cx="200" cy="200" r="140" fill="none" stroke="#22314e" stroke-width="1.5" stroke-dasharray="4 4" />
+
+              <!-- Partition barrier cutting Node 3 -->
+              <line x1="170" y1="40" x2="310" y2="350" stroke="#ff3b30" stroke-width="2.5" stroke-dasharray="6 6" />
+              <text x="315" y="220" fill="#ff3b30" font-family="JetBrains Mono" font-size="11" letter-spacing="1">NETWORK PARTITION</text>
+
+              <!-- Node connections within quorum (1, 2, 4) -->
+              <line x1="200" y1="70" x2="75" y2="160" stroke="#00f2fe" stroke-width="2" class="packet-stream" />
+              <line x1="75" y1="160" x2="120" y2="310" stroke="#00f2fe" stroke-width="2" class="packet-stream" />
+              <line x1="200" y1="70" x2="120" y2="310" stroke="#00f2fe" stroke-width="1.5" stroke-opacity="0.5" />
+
+              <!-- Broken connections to isolated nodes -->
+              <line x1="200" y1="70" x2="325" y2="160" stroke="#ff3b30" stroke-width="1" stroke-dasharray="3 3" opacity="0.4" />
+              <line x1="280" y1="310" x2="120" y2="310" stroke="#ff3b30" stroke-width="1" stroke-dasharray="3 3" opacity="0.4" />
+
+              <!-- Node 1: Leader -->
+              <circle cx="200" cy="70" r="26" fill="#161f30" stroke="#00f2fe" stroke-width="3" />
+              <circle cx="200" cy="70" r="32" fill="none" stroke="#00f2fe" stroke-width="1" class="pulse-node" />
+              <text x="200" y="74" fill="#00f2fe" font-family="JetBrains Mono" font-size="12" font-weight="700" text-anchor="middle">N1 (L)</text>
+
+              <!-- Node 2: Follower (Quorum) -->
+              <circle cx="75" cy="160" r="24" fill="#161f30" stroke="#38bdf8" stroke-width="2" />
+              <text x="75" y="164" fill="#f8fafc" font-family="JetBrains Mono" font-size="12" text-anchor="middle">N2</text>
+
+              <!-- Node 4: Follower (Quorum) -->
+              <circle cx="120" cy="310" r="24" fill="#161f30" stroke="#38bdf8" stroke-width="2" />
+              <text x="120" y="314" fill="#f8fafc" font-family="JetBrains Mono" font-size="12" text-anchor="middle">N4</text>
+
+              <!-- Node 3: Isolated (Partitioned) -->
+              <circle cx="325" cy="160" r="24" fill="#161f30" stroke="#ff3b30" stroke-width="2" />
+              <text x="325" y="164" fill="#ff3b30" font-family="JetBrains Mono" font-size="12" text-anchor="middle">N3 &times;</text>
+
+              <!-- Node 5: Follower (Partitioned) -->
+              <circle cx="280" cy="310" r="24" fill="#161f30" stroke="#ff3b30" stroke-width="1.5" stroke-dasharray="3 3" />
+              <text x="280" y="314" fill="#94a3b8" font-family="JetBrains Mono" font-size="12" text-anchor="middle">N5</text>
+
+              <!-- Quorum Badge Overlay -->
+              <rect x="30" y="24" width="130" height="30" rx="6" fill="#161f30" stroke="#00f2fe" stroke-width="1" />
+              <text x="95" y="44" fill="#00f2fe" font-family="JetBrains Mono" font-size="11" font-weight="600" text-anchor="middle">&check; ACTIVE QUORUM</text>
+            </svg>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- SLIDE 2: THE IMPOSSIBILITY FRONTIER -->
+    <section class="slide" id="slide-2" data-sfx="drop" data-speaker-notes="Network determinism is a mathematical illusion. The FLP impossibility theorem proves no asynchronous consensus can be both completely live and safe against even one crash.">
+      <div class="meta-bar">
+        <span class="meta-tag">Theoretical Foundations</span>
+        <span>Asynchrony &bull; Bounds &bull; FLP Impossibility</span>
+      </div>
+      <div class="slide-body">
+        <h1 class="display-title">The Fallacy of <span class="highlight-crimson">Network Determinism</span></h1>
+        <p class="subtitle">Asynchronous network hazards, unbonded latency, and split-brain guarantees.</p>
+
+        <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 20px; margin-bottom: 28px;">
+          <div class="zd-card danger">
+            <div class="card-label" style="color: var(--alert);">Hazard 01</div>
+            <div class="card-title">Unbounded Latency</div>
+            <p class="card-text">Packets can be delayed arbitrarily without detection. A silent node cannot be distinguished from a dead node or a sluggish transmission line.</p>
+            <div class="math-callout" style="border-left-color: var(--alert); color: #fca5a5;">Delay(&Delta;t) &rarr; &infin;</div>
+          </div>
+
+          <div class="zd-card danger">
+            <div class="card-label" style="color: var(--alert);">Hazard 02</div>
+            <div class="card-title">Clock Skew & Drift</div>
+            <p class="card-text">NTP synchronized physical clocks violate linearizability guarantees due to asymmetric network jitter and oscillator temperature variance.</p>
+            <div class="math-callout" style="border-left-color: var(--alert); color: #fca5a5;">|C_i(t) - C_j(t)| &gt; &epsilon;</div>
+          </div>
+
+          <div class="zd-card danger">
+            <div class="card-label" style="color: var(--alert);">Hazard 03</div>
+            <div class="card-title">Split-Brain Divergence</div>
+            <p class="card-text">Without a strict majority quorum intersection, independent partitions accept contradictory mutations, causing irrecoverable data corruption.</p>
+            <div class="math-callout" style="border-left-color: var(--alert); color: #fca5a5;">Q_A &cap; Q_B = &empty;</div>
+          </div>
+        </div>
+
+        <div class="grid-split" style="height: auto; flex: 1;">
+          <div class="zd-card">
+            <div class="card-label">Core Theorem</div>
+            <div class="card-title">FLP Impossibility (1985)</div>
+            <p class="card-text">Fischer, Lynch, and Paterson proved that in a purely asynchronous network, <em>no deterministic consensus protocol</em> can guarantee liveness in the presence of even a single unannounced crash fault.</p>
+          </div>
+
+          <div class="zd-card">
+            <div class="card-label">Practical Resolution</div>
+            <div class="card-title">Partial Synchrony & Randomization</div>
+            <p class="card-text">Production protocols (Raft, Multi-Paxos) circumvent FLP by assuming <strong>partial synchrony</strong> (&Delta; holds after Global Stabilization Time) or randomized timers to break election deadlocks.</p>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- SLIDE 3: REPLICATED STATE MACHINE MODEL -->
+    <section class="slide" id="slide-3" data-sfx="digital" data-speaker-notes="Consensus enables the Replicated State Machine. If all nodes apply an identical sequence of deterministic inputs to identical state machines, they produce identical outputs.">
+      <div class="meta-bar">
+        <span class="meta-tag">System Architecture</span>
+        <span>Replicated State Machine &bull; Deterministic Execution</span>
+      </div>
+      <div class="slide-body">
+        <h1 class="display-title">Replicated State Machine <span class="highlight-cyan">(RSM)</span></h1>
+        <p class="subtitle">Deterministic inputs applied to identical state engines across distributed nodes.</p>
+
+        <div class="timeline-steps" style="margin-bottom: 24px;">
+          <div class="step-card">
+            <div class="step-node">01</div>
+            <div class="card-title">Client Log Ingress</div>
+            <p class="card-text">Write commands arrive exclusively at the designated Leader node. The entry is assigned a monotonically increasing Term and Log Index, buffered in uncommitted state.</p>
+          </div>
+
+          <div class="step-card">
+            <div class="step-node">02</div>
+            <div class="card-title">AppendEntries RPC</div>
+            <p class="card-text">The Leader dispatches parallel log replication payloads to all Followers. Followers verify log continuity (matching previous index/term) before appending to their write-ahead log.</p>
+          </div>
+
+          <div class="step-card">
+            <div class="step-node">03</div>
+            <div class="card-title">Commit & Execution</div>
+            <p class="card-text">Once acknowledgment receipts are persisted on a quorum of NVMe disks (Q &ge; &lfloor;n/2&rfloor; + 1), the Leader commits the entry and applies it to its local deterministic state machine.</p>
+          </div>
+        </div>
+
+        <div class="zd-card" style="margin-top: 4px; padding: 18px 24px;">
+          <div style="display: flex; align-items: center; justify-content: space-between;">
+            <div>
+              <span class="card-label" style="margin-bottom: 4px;">Fundamental Invariant</span>
+              <div style="font-size: 17px; font-weight: 600; color: #f8fafc;">
+                State Machine Safety Property: &forall; s_1, s_2: Applied(s_1, i) = Applied(s_2, i) &rArr; State(s_1) &equiv; State(s_2)
+              </div>
+            </div>
+            <span class="tag-pill tag-cft" style="font-size: 13px; padding: 6px 14px;">Linearizable Reads</span>
+          </div>
+        </div>
+
+        <div class="callout-quote">
+          <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
+          <span>"Safety is never compromised for performance: logs only overwrite uncommitted entries; committed logs are immutable forever."</span>
+        </div>
+      </div>
+    </section>
+
+    <!-- SLIDE 4: PROTOCOL CAPABILITY MATRIX -->
+    <section class="slide" id="slide-4" data-sfx="punch" data-speaker-notes="Comparing the operational envelope across paradigms: Crash-recovery Paxos and Raft provide 12ms latency, while Byzantine protocols like PBFT pay an O(n squared) communication tax.">
+      <div class="meta-bar">
+        <span class="meta-tag">Tradeoff Matrix</span>
+        <span>Comparative Protocol Analysis &bull; Fault Budgets</span>
+      </div>
+      <div class="slide-body">
+        <h1 class="display-title">Protocol Capability <span class="highlight-cyan">Matrix</span></h1>
+        <p class="subtitle">Operational envelope, message complexity, and latency bounds across paradigms.</p>
+
+        <table class="data-table-wrap">
+          <thead>
+            <tr>
+              <th>Protocol</th>
+              <th>Fault Model</th>
+              <th>Fault Budget (n=7)</th>
+              <th>Msg Complexity (Normal)</th>
+              <th>P99 Commit Latency</th>
+              <th>Primary Production Use</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td style="font-weight: 700; color: var(--accent);">Multi-Paxos</td>
+              <td><span class="tag-pill tag-cft">Crash-Recovery</span></td>
+              <td>f = 3 crashes</td>
+              <td>O(n) with stable leader</td>
+              <td>~15 ms</td>
+              <td>Google Chubby, Spanner</td>
+            </tr>
+            <tr>
+              <td style="font-weight: 700; color: #38bdf8;">Raft</td>
+              <td><span class="tag-pill tag-cft">Crash-Recovery</span></td>
+              <td>f = 3 crashes</td>
+              <td>O(n) broadcast</td>
+              <td>~12 ms</td>
+              <td>etcd, Kubernetes, CockroachDB</td>
+            </tr>
+            <tr>
+              <td style="font-weight: 700; color: #c084fc;">PBFT</td>
+              <td><span class="tag-pill tag-bft">Byzantine Faults</span></td>
+              <td>f = 2 malicious nodes</td>
+              <td>O(n&sup2;) all-to-all</td>
+              <td>~140 ms</td>
+              <td>Hyperledger Fabric, BFT-SMaRt</td>
+            </tr>
+            <tr>
+              <td style="font-weight: 700; color: #fbbf24;">Nakamoto</td>
+              <td><span class="tag-pill tag-pow">Proof-of-Work</span></td>
+              <td>&lt; 51% Hashrate</td>
+              <td>O(1) gossip flood</td>
+              <td>~60 mins (Probabilistic)</td>
+              <td>Bitcoin, Layer 1 Public Ledgers</td>
+            </tr>
+          </tbody>
+        </table>
+
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 24px; margin-top: 24px; flex: 1;">
+          <div class="zd-card">
+            <div class="card-label">Quorum Formula Comparison</div>
+            <div style="display: flex; flex-direction: column; gap: 8px; margin-top: 8px;">
+              <div style="font-family: var(--font-mono); font-size: 14px;">
+                CFT (Raft): <span style="color: var(--accent);">N &ge; 2f + 1</span> &rarr; Overlap = 1 node
+              </div>
+              <div style="font-family: var(--font-mono); font-size: 14px;">
+                BFT (PBFT): <span style="color: #c084fc;">N &ge; 3f + 1</span> &rarr; Overlap = f + 1 honest nodes
+              </div>
+              <div style="font-size: 13px; color: var(--text-muted); margin-top: 4px;">
+                Byzantine quorums require extra overlap to drown out coordinated liars who vote in two directions simultaneously.
+              </div>
+            </div>
+          </div>
+
+          <div class="zd-card">
+            <div class="card-label">Communication Scaling Tax</div>
+            <p class="card-text">
+              As cluster size grows, PBFT's quadratic <strong>O(n&sup2;)</strong> message phase causes catastrophic network saturation on standard Ethernet switches, making it unviable for clusters beyond n=20 nodes without pipelined HotStuff signatures.
+            </p>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- SLIDE 5: RAFT CONSENSUS MECHANICS -->
+    <section class="slide" id="slide-5" data-sfx="whoosh" data-speaker-notes="Raft decomposes consensus into three discrete, understandable problems: randomized leader election, strict log matching, and two-phase joint consensus for safe membership changes.">
+      <div class="meta-bar">
+        <span class="meta-tag">Deep Dive</span>
+        <span>Raft Mechanics &bull; Ongaro & Ousterhout</span>
+      </div>
+      <div class="slide-body">
+        <h1 class="display-title">Raft: Deconstructed <span class="highlight-cyan">Decomposition</span></h1>
+        <p class="subtitle">Leader election, log matching, and cluster reconfiguration without state splits.</p>
+
+        <div class="grid-3col">
+          <div class="zd-card highlight">
+            <div class="card-label">Phase 01</div>
+            <div class="card-title">Election Safety</div>
+            <p class="card-text">Heartbeat timeouts are jittered with random distribution (150ms &ndash; 300ms) to prevent split-vote ties.</p>
+            <div class="math-callout">
+              Timer &sim; Uniform(150, 300)ms
+            </div>
+            <p class="card-text" style="font-size: 13px; margin-top: 8px;">
+              <strong>Leader Completeness:</strong> A voter rejects candidate votes if candidate's log is less up-to-date than the voter's own WAL.
+            </p>
+          </div>
+
+          <div class="zd-card">
+            <div class="card-label">Phase 02</div>
+            <div class="card-title">Log Matching</div>
+            <p class="card-text">Inductive guarantee: If two distinct logs contain an entry with identical (index, term), they store identical commands.</p>
+            <div class="math-callout">
+              log[i].term == log'[i].term
+            </div>
+            <p class="card-text" style="font-size: 13px; margin-top: 8px;">
+              Followers truncate uncommitted conflicting entries upon receiving valid leader-authorized AppendEntries packets.
+            </p>
+          </div>
+
+          <div class="zd-card">
+            <div class="card-label">Phase 03</div>
+            <div class="card-title">Joint Consensus</div>
+            <p class="card-text">Dynamic node addition and removal without pausing active client writes using 2-phase configuration commit:</p>
+            <div class="math-callout" style="color: #c084fc; border-left-color: #a855f7;">
+              C_old &rarr; C_old,new &rarr; C_new
+            </div>
+            <p class="card-text" style="font-size: 13px; margin-top: 8px;">
+              Decisions during transition require simultaneous, separate majorities from both C_old and C_new configurations.
+            </p>
+          </div>
+        </div>
+
+        <div class="callout-quote" style="margin-top: 24px;">
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+          <span>"Raft prioritizes understandability by cleanly separating leader election, log replication, and commitment safety."</span>
+        </div>
+      </div>
+    </section>
+
+    <!-- SLIDE 6: PRODUCTION CASE STUDY (KUBERNETES & ETCD) -->
+    <section class="slide" id="slide-6" data-sfx="punch" data-speaker-notes="In real-world Kubernetes deployments, etcd sustains 33,000 writes per second. Even when AWS partitions two nodes, zero downtime occurs. However, NVMe fsync spikes remain the chief cause of false leader elections.">
+      <div class="meta-bar">
+        <span class="meta-tag">Production Systems</span>
+        <span>Case Study &bull; etcd v3.5 & Kubernetes Control Plane</span>
+      </div>
+      <div class="slide-body">
+        <h1 class="display-title">Production Reality: <span class="highlight-cyan">Kubernetes & etcd</span></h1>
+        <p class="subtitle">Validating consensus under high-throughput chaos injection and NVMe fsync bottlenecks.</p>
+
+        <div style="display: grid; grid-template-columns: 1.1fr 0.9fr; gap: 28px; height: 100%;">
+          <div style="display: flex; flex-direction: column; gap: 18px;">
+            <div class="zd-card">
+              <div class="card-label">Production Chaos Scenario</div>
+              <div class="card-title" style="font-size: 18px;">3-AZ Multi-Region Partition</div>
+              <p class="card-text" style="font-size: 14px;">
+                5-node cluster deployed across AWS us-east-1 (AZ-A, AZ-B, AZ-C). Synthetic traffic injects 40,000 key-value updates/sec. A network partition isolates AZ-C containing Node 4 and Node 5.
+              </p>
+              <div style="display: flex; gap: 16px; margin-top: 14px;">
+                <div style="font-family: var(--font-mono); font-size: 13px; color: var(--accent);">Active Quorum: {N1, N2, N3}</div>
+                <div style="font-family: var(--font-mono); font-size: 13px; color: var(--alert);">Isolated: {N4, N5} (Read-Only)</div>
+              </div>
+            </div>
+
+            <div class="zd-card danger">
+              <div class="card-label" style="color: var(--alert);">Real-World Failure Mode</div>
+              <div class="card-title" style="font-size: 18px;">The Disk Fsync Cliff</div>
+              <p class="card-text" style="font-size: 14px;">
+                Consensus safety dictates log entries must be flushed to disk via <code style="color: #f8fafc; font-family: var(--font-mono);">fdatasync()</code>. If NVMe queue saturation pushes fsync latency above 20ms, leader heartbeats stall, triggering cascaded election storms.
+              </p>
+            </div>
+          </div>
+
+          <div class="zd-card highlight" style="justify-content: center; align-items: center; text-align: center; padding: 36px 24px;">
+            <div class="card-label">Benchmark Metrics (etcd v3.5)</div>
+            <div class="metric-hero">
+              <div class="metric-value">33,000</div>
+              <div class="metric-unit">writes / sec</div>
+            </div>
+            <div style="color: var(--text-muted); font-size: 14px; margin-bottom: 24px;">
+              3-Node NVMe Cluster &bull; 256-byte payload &bull; Linearizable Write
+            </div>
+
+            <div style="width: 100%; border-top: 1px solid var(--surface-border); padding-top: 20px; display: grid; grid-template-columns: 1fr 1fr; gap: 16px;">
+              <div>
+                <div style="font-family: var(--font-mono); font-size: 26px; color: #10b981; font-weight: 700;">12.4ms</div>
+                <div style="font-size: 12px; color: var(--text-muted); font-family: var(--font-mono);">P99 Latency (70% load)</div>
+              </div>
+              <div>
+                <div style="font-family: var(--font-mono); font-size: 26px; color: var(--accent); font-weight: 700;">0</div>
+                <div style="font-size: 12px; color: var(--text-muted); font-family: var(--font-mono);">Divergence / 10M Chaos Tests</div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- SLIDE 7: CONCLUSION & FRONTIERS -->
+    <section class="slide" id="slide-7" data-sfx="chime" data-speaker-notes="Consensus is not about agreeing on absolute objective truth; it is about establishing an identical, immutable chronology of events. As we look ahead, hardware offload via RDMA and BFT threshold signatures represent the frontier.">
+      <div class="meta-bar">
+        <span class="meta-tag">Course Synthesis</span>
+        <span>Architectural Frontiers &bull; The Next Decade</span>
+      </div>
+      <div class="slide-body">
+        <h1 class="display-title">Consensus Evolution: <span class="highlight-cyan">Classic to Modern</span></h1>
+        <p class="subtitle">Where distributed coordination moves next: hardware acceleration and signature aggregation.</p>
+
+        <div class="grid-3col" style="margin-bottom: 28px;">
+          <div class="zd-card">
+            <div class="card-label">Pillar 01</div>
+            <div class="card-title">CFT is a Solved Primitive</div>
+            <p class="card-text">
+              Raft and Multi-Paxos are universally integrated into production backbones (etcd, Consul, CockroachDB). The operational focus has shifted from algorithm invention to zero-copy RPC serialization and tail-latency smoothing.
+            </p>
+          </div>
+
+          <div class="zd-card">
+            <div class="card-label">Pillar 02</div>
+            <div class="card-title">BFT Complexity Compression</div>
+            <p class="card-text">
+              Modern protocols like HotStuff, Narwhal, and AptosBFT compress view-change communication from quadratic <strong>O(n&sup2;)</strong> to linear <strong>O(n)</strong> via BLS threshold cryptographic signatures and pipelined commit chains.
+            </p>
+          </div>
+
+          <div class="zd-card">
+            <div class="card-label">Pillar 03</div>
+            <div class="card-title">Hardware Acceleration</div>
+            <p class="card-text">
+              Kernel bypass technologies (RDMA over Converged Ethernet) and CXL shared-memory fabrics allow replication to bypass host OS network stacks entirely, yielding sub-microsecond consensus round-trips.
+            </p>
+          </div>
+        </div>
+
+        <div class="callout-quote" style="background: rgba(0, 242, 254, 0.08); border-left-color: var(--accent); padding: 24px 32px;">
+          <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="color: var(--accent);"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>
+          <div style="font-size: 19px; font-weight: 500; color: #f8fafc;">
+            "Consensus is not about agreeing on truth; it is about agreeing on an identical history of events."
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Bottom Navigation Bar & HUD -->
+    <footer id="deck-nav">
+      <div style="display: flex; align-items: center; gap: 18px;">
+        <span class="nav-counter" id="slide-num">01 / 07</span>
+        <button class="audio-badge" id="sfx-toggle" title="Procedural Audio SFX enabled">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><path d="M19.07 4.93a10 10 0 0 1 0 14.14M15.54 8.46a5 5 0 0 1 0 7.07"/></svg>
+          <span>Audio: ON</span>
+        </button>
+      </div>
+
+      <div class="nav-controls">
+        <button class="nav-btn" id="prev-btn" title="Previous Slide (Left Arrow)">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="15 18 9 12 15 6"/></svg>
+        </button>
+        <button class="nav-btn" id="next-btn" title="Next Slide (Right Arrow / Space)">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="9 18 15 12 9 6"/></svg>
+        </button>
+        <button class="nav-btn" id="fs-btn" title="Toggle Fullscreen (F)">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M8 3H5a2 2 0 0 0-2 2v3m18 0V5a2 2 0 0 0-2-2h-3m0 18h3a2 2 0 0 0 2-2v-3M3 16v3a2 2 0 0 0 2 2h3"/></svg>
+        </button>
+      </div>
+    </footer>
+
+    <!-- Edge Progress Rail -->
+    <div id="progress-bar"></div>
+
   </div>
-  <div id="timer">00:00 / 10s</div>
-  
-  <button id="start-btn">▶ شروع فیلم با صدا</button>
-  <button id="replay-btn">↻</button>
-</div>
 
-<script>
-const TOTAL = 10;
-const stage = document.getElementById('stage');
-const canvas = document.getElementById('canvas');
-const ctx = canvas.getContext('2d');
-const scene = document.getElementById('scene');
-const kineticText = document.getElementById('kinetic-text');
-const progressFill = document.getElementById('progress-fill');
-const timer = document.getElementById('timer');
-const startBtn = document.getElementById('start-btn');
-const replayBtn = document.getElementById('replay-btn');
+  <script>
+    /* Responsive Canvas 16:9 Scale Manager */
+    const stage = document.getElementById('deck-stage');
+    function resizeStage() {
+      const stageW = 1440;
+      const stageH = 810;
+      const scale = Math.min(window.innerWidth / stageW, window.innerHeight / stageH);
+      stage.style.transform = `translate(-50%, -50%) scale(${scale})`;
+    }
+    window.addEventListener('resize', resizeStage);
+    resizeStage();
 
-canvas.width = 1440;
-canvas.height = 900;
-
-let audioEnabled = false;
-let startTime = null;
-let animationId = null;
-let currentBeat = -1;
-let currentAudio = null;
-
-const audioCache = {};
-const beats = [
-  { time: 0, narr: 'در دل ابر، قطره‌ای جان می‌گیرد', typo: 'تولد' },
-  { time: 3.3, narr: 'می‌افتد، می‌شتابد، زمین را می‌جوید', typo: 'سقوط آزاد' },
-  { time: 6.7, narr: 'با هزاران قطره دیگر یکی می‌شود و رودخانه‌ای می‌سازد', typo: 'رودخانه' }
-];
-
-class Particle {
-  constructor(x, y, vx, vy, size, color) {
-    this.x = x;
-    this.y = y;
-    this.vx = vx;
-    this.vy = vy;
-    this.size = size;
-    this.color = color;
-    this.life = 1;
-  }
-  update(dt) {
-    this.x += this.vx * dt;
-    this.y += this.vy * dt;
-    this.life -= dt * 0.3;
-  }
-  draw(ctx) {
-    if (this.life <= 0) return;
-    ctx.globalAlpha = this.life;
-    ctx.fillStyle = this.color;
-    ctx.beginPath();
-    ctx.arc(this.x, this.y, this.size, 0, Math.PI * 2);
-    ctx.fill();
-    ctx.globalAlpha = 1;
-  }
-}
-
-let particles = [];
-
-function scaleStage() {
-  const vw = window.innerWidth;
-  const vh = window.innerHeight;
-  const scale = Math.min(vw / 1440, vh / 900);
-  stage.style.transform = `translate(-50%, -50%) scale(${scale})`;
-}
-window.addEventListener('resize', scaleStage);
-scaleStage();
-
-async function preloadAllNarration() {
-  for (let i = 0; i < beats.length; i++) {
-    try {
-      const res = await fetch('/api/tts', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          text: beats[i].narr,
-          voice: 'fa-IR-DilaraNeural',
-          rate: '1.0'
-        })
-      });
-      if (res.ok) {
-        const blob = await res.blob();
-        audioCache[i] = new Audio(URL.createObjectURL(blob));
+    /* Procedural Web Audio API Engine (Zero dependencies) */
+    class AudioDirector {
+      constructor() {
+        this.ctx = null;
+        this.enabled = true;
       }
-    } catch (e) {}
-  }
-}
+      init() {
+        if (!this.ctx) {
+          const AudioContext = window.AudioContext || window.webkitAudioContext;
+          this.ctx = new AudioContext();
+        }
+        if (this.ctx.state === 'suspended') {
+          this.ctx.resume();
+        }
+      }
+      play(type) {
+        if (!this.enabled) return;
+        this.init();
+        const now = this.ctx.currentTime;
 
-async function playNarrationForBeat(index, fallbackText) {
-  if (!audioEnabled) return;
-  if (currentAudio) {
-    try { currentAudio.pause(); currentAudio.currentTime = 0; } catch (e) {}
-  }
-  if (audioCache[index]) {
-    currentAudio = audioCache[index];
-    currentAudio.currentTime = 0;
-    await currentAudio.play().catch(() => {});
-    return;
-  }
-  try {
-    const res = await fetch('/api/tts', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ text: fallbackText, voice: 'fa-IR-DilaraNeural' })
+        switch (type) {
+          case 'sweep': {
+            const osc = this.ctx.createOscillator();
+            const gain = this.ctx.createGain();
+            osc.type = 'sine';
+            osc.frequency.setValueAtTime(140, now);
+            osc.frequency.exponentialRampToValueAtTime(480, now + 0.35);
+            gain.gain.setValueAtTime(0.08, now);
+            gain.gain.linearRampToValueAtTime(0.001, now + 0.35);
+            osc.connect(gain);
+            gain.connect(this.ctx.destination);
+            osc.start(now);
+            osc.stop(now + 0.36);
+            break;
+          }
+          case 'drop': {
+            const osc = this.ctx.createOscillator();
+            const gain = this.ctx.createGain();
+            osc.type = 'sawtooth';
+            osc.frequency.setValueAtTime(180, now);
+            osc.frequency.exponentialRampToValueAtTime(45, now + 0.38);
+            gain.gain.setValueAtTime(0.12, now);
+            gain.gain.linearRampToValueAtTime(0.001, now + 0.4);
+            osc.connect(gain);
+            gain.connect(this.ctx.destination);
+            osc.start(now);
+            osc.stop(now + 0.41);
+            break;
+          }
+          case 'digital': {
+            const freqs = [320, 640, 960];
+            freqs.forEach((f, i) => {
+              const osc = this.ctx.createOscillator();
+              const gain = this.ctx.createGain();
+              osc.type = 'triangle';
+              osc.frequency.setValueAtTime(f, now + i * 0.04);
+              gain.gain.setValueAtTime(0.05, now + i * 0.04);
+              gain.gain.linearRampToValueAtTime(0.001, now + i * 0.04 + 0.08);
+              osc.connect(gain);
+              gain.connect(this.ctx.destination);
+              osc.start(now + i * 0.04);
+              osc.stop(now + i * 0.04 + 0.09);
+            });
+            break;
+          }
+          case 'punch': {
+            const osc = this.ctx.createOscillator();
+            const gain = this.ctx.createGain();
+            osc.type = 'sine';
+            osc.frequency.setValueAtTime(120, now);
+            osc.frequency.exponentialRampToValueAtTime(30, now + 0.28);
+            gain.gain.setValueAtTime(0.25, now);
+            gain.gain.exponentialRampToValueAtTime(0.001, now + 0.3);
+            osc.connect(gain);
+            gain.connect(this.ctx.destination);
+            osc.start(now);
+            osc.stop(now + 0.31);
+            break;
+          }
+          case 'chime': {
+            const chord = [523.25, 659.25, 783.99, 1046.50];
+            chord.forEach((freq, idx) => {
+              const osc = this.ctx.createOscillator();
+              const gain = this.ctx.createGain();
+              osc.type = 'sine';
+              osc.frequency.setValueAtTime(freq, now + idx * 0.05);
+              gain.gain.setValueAtTime(0.06, now + idx * 0.05);
+              gain.gain.exponentialRampToValueAtTime(0.001, now + idx * 0.05 + 0.6);
+              osc.connect(gain);
+              gain.connect(this.ctx.destination);
+              osc.start(now + idx * 0.05);
+              osc.stop(now + idx * 0.05 + 0.65);
+            });
+            break;
+          }
+          case 'whoosh':
+          default: {
+            const osc = this.ctx.createOscillator();
+            const gain = this.ctx.createGain();
+            osc.type = 'sine';
+            osc.frequency.setValueAtTime(260, now);
+            osc.frequency.exponentialRampToValueAtTime(540, now + 0.18);
+            gain.gain.setValueAtTime(0.07, now);
+            gain.gain.linearRampToValueAtTime(0.001, now + 0.2);
+            osc.connect(gain);
+            gain.connect(this.ctx.destination);
+            osc.start(now);
+            osc.stop(now + 0.21);
+            break;
+          }
+        }
+      }
+    }
+
+    const audioDirector = new AudioDirector();
+    window.ZenAudio = audioDirector;
+
+    /* Slide Navigation System */
+    const slides = Array.from(document.querySelectorAll('.slide'));
+    const totalSlides = slides.length;
+    let currentIdx = 0;
+
+    const slideNumEl = document.getElementById('slide-num');
+    const progressBar = document.getElementById('progress-bar');
+    const prevBtn = document.getElementById('prev-btn');
+    const nextBtn = document.getElementById('next-btn');
+    const fsBtn = document.getElementById('fs-btn');
+    const sfxBtn = document.getElementById('sfx-toggle');
+
+    function updateSlide(newIdx) {
+      if (newIdx < 0 || newIdx >= totalSlides) return;
+      
+      slides[currentIdx].classList.remove('active');
+      currentIdx = newIdx;
+      const activeSlide = slides[currentIdx];
+      activeSlide.classList.add('active');
+
+      // Update counters & progress
+      const numStr = String(currentIdx + 1).padStart(2, '0');
+      const totalStr = String(totalSlides).padStart(2, '0');
+      slideNumEl.textContent = `${numStr} / ${totalStr}`;
+      progressBar.style.width = `${((currentIdx + 1) / totalSlides) * 100}%`;
+
+      // Trigger SFX
+      const sfx = activeSlide.getAttribute('data-sfx') || 'whoosh';
+      audioDirector.play(sfx);
+    }
+
+    // Keyboard Controller
+    window.addEventListener('keydown', (e) => {
+      if (e.target && (e.target.isContentEditable || e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA')) {
+        return;
+      }
+
+      if (e.key === 'ArrowRight' || e.key === ' ' || e.key === 'PageDown') {
+        e.preventDefault();
+        updateSlide(currentIdx + 1);
+      } else if (e.key === 'ArrowLeft' || e.key === 'PageUp') {
+        e.preventDefault();
+        updateSlide(currentIdx - 1);
+      } else if (e.key === 'f' || e.key === 'F') {
+        toggleFullscreen();
+      } else if (e.key === 'Home') {
+        updateSlide(0);
+      } else if (e.key === 'End') {
+        updateSlide(totalSlides - 1);
+      }
     });
-    if (res.ok) {
-      const blob = await res.blob();
-      currentAudio = new Audio(URL.createObjectURL(blob));
-      await currentAudio.play().catch(() => {});
-      return;
+
+    // Touch & Button Controls
+    prevBtn.addEventListener('click', () => updateSlide(currentIdx - 1));
+    nextBtn.addEventListener('click', () => updateSlide(currentIdx + 1));
+
+    
+    function toggleFullscreen() {
+      if (!document.fullscreenElement) {
+        document.documentElement.requestFullscreen().catch(() => {});
+      } else {
+        document.exitFullscreen().catch(() => {});
+      }
     }
-  } catch (e) {}
-  if (window.speechSynthesis) {
-    window.speechSynthesis.cancel();
-    const u = new SpeechSynthesisUtterance(fallbackText);
-    u.lang = 'fa-IR';
-    window.speechSynthesis.speak(u);
-  }
-}
-
-function setKineticText(text) {
-  kineticText.innerHTML = `<span class="typo-mask"><span class="typo-inner">${text}</span></span>`;
-  const inner = kineticText.querySelector('.typo-inner');
-  setTimeout(() => {
-    inner.style.transition = 'transform 0.8s cubic-bezier(0.16, 1, 0.3, 1), opacity 0.8s cubic-bezier(0.16, 1, 0.3, 1)';
-    inner.style.transform = 'translateY(0%)';
-    inner.style.opacity = '1';
-  }, 50);
-}
-
-function clearScene() {
-  scene.innerHTML = '';
-}
-
-function renderBeat0() {
-  clearScene();
-  particles = [];
-  for (let i = 0; i < 120; i++) {
-    particles.push(new Particle(
-      Math.random() * 1440,
-      Math.random() * 900,
-      (Math.random() - 0.5) * 20,
-      (Math.random() - 0.5) * 20,
-      Math.random() * 3 + 1,
-      'rgba(200, 220, 255, 0.6)'
-    ));
-  }
-  
-  const cloud = document.createElementNS('http://www.w3.org/2000/svg', 'g');
-  cloud.innerHTML = `
-    <ellipse cx="720" cy="300" rx="280" ry="140" fill="rgba(150, 170, 200, 0.4)" opacity="0">
-      <animate attributeName="opacity" from="0" to="0.8" dur="1.2s" fill="freeze"/>
-      <animate attributeName="ry" from="100" to="140" dur="1.5s" fill="freeze"/>
-    </ellipse>
-    <ellipse cx="600" cy="320" rx="200" ry="100" fill="rgba(160, 180, 210, 0.5)" opacity="0">
-      <animate attributeName="opacity" from="0" to="0.7" dur="1.4s" fill="freeze"/>
-    </ellipse>
-    <ellipse cx="840" cy="320" rx="200" ry="100" fill="rgba(160, 180, 210, 0.5)" opacity="0">
-      <animate attributeName="opacity" from="0" to="0.7" dur="1.4s" fill="freeze"/>
-    </ellipse>
-    <circle cx="720" cy="380" r="18" fill="#8fb9ff" opacity="0">
-      <animate attributeName="opacity" from="0" to="1" dur="1s" begin="0.8s" fill="freeze"/>
-      <animate attributeName="r" from="8" to="18" dur="1s" begin="0.8s" fill="freeze"/>
-    </circle>
-  `;
-  scene.appendChild(cloud);
-  setKineticText('تولد');
-}
-
-function renderBeat1() {
-  clearScene();
-  particles = [];
-  
-  const drop = document.createElementNS('http://www.w3.org/2000/svg', 'g');
-  drop.innerHTML = `
-    <defs>
-      <linearGradient id="dropGrad" x1="0%" y1="0%" x2="0%" y2="100%">
-        <stop offset="0%" style="stop-color:#a0d5ff;stop-opacity:1" />
-        <stop offset="100%" style="stop-color:#3b8ed6;stop-opacity:1" />
-      </linearGradient>
-      <filter id="blur">
-        <feGaussianBlur in="SourceGraphic" stdDeviation="2" />
-      </filter>
-    </defs>
-    <ellipse cx="720" cy="-100" rx="22" ry="36" fill="url(#dropGrad)" opacity="0.9">
-      <animate attributeName="cy" from="-100" to="750" dur="2.5s" fill="freeze"/>
-      <animate attributeName="ry" from="36" to="44" dur="2.5s" fill="freeze"/>
-    </ellipse>
-    <line x1="720" y1="-80" x2="720" y2="-200" stroke="#6db3ff" stroke-width="3" opacity="0.6" filter="url(#blur)">
-      <animate attributeName="y1" from="-80" to="730" dur="2.5s" fill="freeze"/>
-      <animate attributeName="y2" from="-200" to="610" dur="2.5s" fill="freeze"/>
-    </line>
-  `;
-  scene.appendChild(drop);
-  
-  for (let i = 0; i < 40; i++) {
-    setTimeout(() => {
-      particles.push(new Particle(
-        720 + (Math.random() - 0.5) * 60,
-        Math.random() * 400 + 200,
-        (Math.random() - 0.5) * 40,
-        Math.random() * 100 + 50,
-        Math.random() * 2 + 1,
-        'rgba(180, 220, 255, 0.5)'
-      ));
-    }, i * 50);
-  }
-  
-  setKineticText('سقوط آزاد');
-}
-
-function renderBeat2() {
-  clearScene();
-  particles = [];
-  
-  const river = document.createElementNS('http://www.w3.org/2000/svg', 'g');
-  river.innerHTML = `
-    <defs>
-      <linearGradient id="riverGrad" x1="0%" y1="50%" x2="100%" y2="50%">
-        <stop offset="0%" style="stop-color:#2a6fa0;stop-opacity:1" />
-        <stop offset="50%" style="stop-color:#4fa8d6;stop-opacity:1" />
-        <stop offset="100%" style="stop-color:#2a6fa0;stop-opacity:1" />
-      </linearGradient>
-      <filter id="glow">
-        <feGaussianBlur stdDeviation="4" result="coloredBlur"/>
-        <feMerge>
-          <feMergeNode in="coloredBlur"/>
-          <feMergeNode in="SourceGraphic"/>
-        </feMerge>
-      </filter>
-    </defs>
-    <path d="M 0,500 Q 360,480 720,500 T 1440,500 L 1440,900 L 0,900 Z" fill="url(#riverGrad)" opacity="0">
-      <animate attributeName="opacity" from="0" to="0.85" dur="1.2s" fill="freeze"/>
-    </path>
-    <circle cx="720" cy="500" r="0" fill="none" stroke="#6db3ff" stroke-width="3" opacity="0.8">
-      <animate attributeName="r" from="0" to="200" dur="1.5s" fill="freeze"/>
-      <animate attributeName="opacity" from="0.8" to="0" dur="1.5s" fill="freeze"/>
-    </circle>
-    <circle cx="720" cy="500" r="0" fill="none" stroke="#6db3ff" stroke-width="2" opacity="0.6">
-      <animate attributeName="r" from="0" to="300" dur="2s" begin="0.3s" fill="freeze"/>
-      <animate attributeName="opacity" from="0.6" to="0" dur="2s" begin="0.3s" fill="freeze"/>
-    </circle>
-    <path d="M 200,500 Q 400,490 600,500 T 1000,500" fill="none" stroke="#8fd4ff" stroke-width="4" opacity="0.7" filter="url(#glow)" stroke-dasharray="2000" stroke-dashoffset="2000">
-      <animate attributeName="stroke-dashoffset" from="2000" to="0" dur="2.5s" fill="freeze"/>
-    </path>
-    <path d="M 300,550 Q 500,540 700,550 T 1100,550" fill="none" stroke="#6db3ff" stroke-width="3" opacity="0.5" stroke-dasharray="2000" stroke-dashoffset="2000">
-      <animate attributeName="stroke-dashoffset" from="2000" to="0" dur="3s" begin="0.2s" fill="freeze"/>
-    </path>
-  `;
-  scene.appendChild(river);
-  
-  for (let i = 0; i < 60; i++) {
-    setTimeout(() => {
-      particles.push(new Particle(
-        Math.random() * 1440,
-        Math.random() * 200 + 450,
-        (Math.random() - 0.5) * 80,
-        (Math.random() - 0.5) * 30,
-        Math.random() * 3 + 1,
-        'rgba(140, 210, 255, 0.7)'
-      ));
-    }, i * 40);
-  }
-  
-  setKineticText('رودخانه');
-}
-
-function drawAmbient(elapsed) {
-  ctx.fillStyle = 'rgba(10, 37, 64, 0.15)';
-  ctx.fillRect(0, 0, 1440, 900);
-  
-  const dt = 0.016;
-  for (let i = particles.length - 1; i >= 0; i--) {
-    particles[i].update(dt);
-    particles[i].draw(ctx);
-    if (particles[i].life <= 0) particles.splice(i, 1);
-  }
-  
-  if (currentBeat === 0) {
-    ctx.globalAlpha = 0.3;
-    ctx.fillStyle = `rgba(99, 91, 255, ${0.1 + Math.sin(elapsed * 2) * 0.05})`;
-    ctx.beginPath();
-    ctx.arc(720, 300, 200 + Math.sin(elapsed * 3) * 20, 0, Math.PI * 2);
-    ctx.fill();
-    ctx.globalAlpha = 1;
-  }
-}
-
-function tick(now) {
-  if (!startTime) return;
-  
-  const elapsed = (now - startTime) / 1000;
-  
-  drawAmbient(elapsed);
-  
-  progressFill.style.width = `${Math.min(elapsed / TOTAL * 100, 100)}%`;
-  timer.textContent = `${Math.floor(elapsed).toString().padStart(2, '0')}:${Math.floor((elapsed % 1) * 100).toString().padStart(2, '0')} / ${TOTAL}s`;
-  
-  for (let i = beats.length - 1; i >= 0; i--) {
-    if (elapsed >= beats[i].time && currentBeat < i) {
-      currentBeat = i;
-      if (i === 0) renderBeat0();
-      else if (i === 1) renderBeat1();
-      else if (i === 2) renderBeat2();
-      playNarrationForBeat(i, beats[i].narr);
-      break;
-    }
-  }
-  
-  if (elapsed >= TOTAL) {
-    setTimeout(() => {
-      restart();
-    }, 2500);
-    return;
-  }
-  
-  animationId = requestAnimationFrame(tick);
-}
-
-function start() {
-  audioEnabled = true;
-  startBtn.style.display = 'none';
-  replayBtn.style.display = 'flex';
-  startTime = performance.now();
-  currentBeat = -1;
-  animationId = requestAnimationFrame(tick);
-}
-
-function restart() {
-  if (currentAudio) {
-    try { currentAudio.pause(); currentAudio.currentTime = 0; } catch (e) {}
-  }
-  if (animationId) cancelAnimationFrame(animationId);
-  clearScene();
-  particles = [];
-  kineticText.innerHTML = '';
-  progressFill.style.width = '0%';
-  timer.textContent = '00:00 / 10s';
-  currentBeat = -1;
-  startTime = performance.now();
-  animationId = requestAnimationFrame(tick);
-}
-
-startBtn.addEventListener('click', start);
-replayBtn.addEventListener('click', restart);
-
-document.addEventListener('keydown', (e) => {
-  if (e.code === 'Space') {
-    e.preventDefault();
-    if (!startTime) start();
-    else if (animationId) {
-      cancelAnimationFrame(animationId);
-      animationId = null;
-    } else {
-      startTime = performance.now() - ((performance.now() - startTime));
-      animationId = requestAnimationFrame(tick);
-    }
-  } else if (e.code === 'KeyR') {
-    restart();
-  }
-});
-
-preloadAllNarration();
-</script>
-
+  </script>
 </body>
 </html>

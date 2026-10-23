@@ -913,6 +913,8 @@ pub fn PreviewPanel(
                             AspectRatio::Fill => "zd-frame--aspect-fill",
                         };
                         format!("zd-device-frame {ratio_class}")
+                    } else if mode.get() == ModeId::Slides {
+                        "zd-device-frame zd-frame--slides".to_string()
                     } else {
                         format!("zd-device-frame {}", device_meta(device.get()).frame_class)
                     }

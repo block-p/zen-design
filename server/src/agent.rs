@@ -2405,6 +2405,38 @@ pub fn sanitize_slides_html(html: &str) -> String {
         }
     }
 
+    // 6. Guarantee slide / stage container centering
+    const CENTERING_CSS: &str = r#"<style id="zd-auto-center-fix">
+      html, body { margin: 0; padding: 0; width: 100vw; height: 100vh; overflow: hidden; display: flex; align-items: center; justify-content: center; }
+      #deck-stage, .deck-stage, [data-deck-stage], #stage, .presentation-stage {
+        top: 50% !important;
+        left: 50% !important;
+        transform: translate(-50%, -50%) !important;
+        transform-origin: center center !important;
+      }
+    </style>"#;
+
+    if (out.contains("#deck-stage") || out.contains(".deck-stage") || out.contains("class=\"slide\"") || out.contains("class='slide'"))
+        && !out.contains("zd-auto-center-fix")
+    {
+        if let Some(pos) = out.rfind("</head>") {
+            out = format!("{}\n{}\n{}", &out[..pos], CENTERING_CSS, &out[pos..]);
+        }
+    }
+
+    // 7. Auto-heal any truncated scripts and tags
+    let script_open = out.matches("<script").count();
+    let script_close = out.matches("</script>").count();
+    if script_open > script_close {
+        out.push_str("\n  </script>");
+    }
+    if !out.contains("</body>") {
+        out.push_str("\n</body>");
+    }
+    if !out.contains("</html>") {
+        out.push_str("\n</html>");
+    }
+
     out
 }
 
