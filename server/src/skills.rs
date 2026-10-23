@@ -1,12 +1,18 @@
-//! Dynamic skill matcher and loader for Claude Graphic & Motion Skills.
+//! Dynamic skill matcher and loader for Claude Graphic, Motion & Slide Presentation Skills.
 //!
-//! Scans `skills/` and `~/.claude/skills/` for `SKILL.md` packages, matches the user's
-//! brief against available graphic and motion skills, and injects the specialized instructions,
-//! easing curves, and design patterns into the model prompt when using any API key.
+//! Fully self-contained: all skills are embedded directly into the binary via `RustEmbed`
+//! so that any user on Windows, macOS, or Linux has access to all 109+ presentation,
+//! motion, and graphic skills out of the box with zero manual setup. Local skill folders
+//! in workspace or `~/.claude/skills/` are also loaded as local overrides.
 
 use std::fs;
 use std::path::{Path, PathBuf};
+use rust_embed::RustEmbed;
 use tracing::info;
+
+#[derive(RustEmbed)]
+#[folder = "../skills"]
+pub struct EmbeddedSkills;
 
 #[derive(Clone, Debug)]
 pub struct LoadedSkill {
@@ -51,6 +57,56 @@ fn strip_frontmatter(content: &str) -> String {
     }
 }
 
+pub fn load_embedded_skills(results: &mut Vec<LoadedSkill>) {
+    for file_path in EmbeddedSkills::iter() {
+        if file_path.ends_with("SKILL.md") {
+            if let Some(file) = EmbeddedSkills::get(&file_path) {
+                if let Ok(content) = std::str::from_utf8(file.data.as_ref()) {
+                    let parts: Vec<&str> = file_path.split('/').collect();
+                    let slug = if parts.len() >= 2 {
+                        parts[parts.len() - 2].to_string()
+                    } else {
+                        "skill".to_string()
+                    };
+
+                    let name = extract_frontmatter_field(content, "name").unwrap_or_else(|| slug.clone());
+                    let title = extract_frontmatter_field(content, "title").unwrap_or_else(|| {
+                        slug.replace('-', " ")
+                            .split_whitespace()
+                            .map(|w| {
+                                let mut c = w.chars();
+                                match c.next() {
+                                    None => String::new(),
+                                    Some(f) => f.to_uppercase().collect::<String>() + c.as_str(),
+                                }
+                            })
+                            .collect::<Vec<_>>()
+                            .join(" ")
+                    });
+                    let category = extract_frontmatter_field(content, "category").unwrap_or_else(|| {
+                        if parts.len() >= 3 {
+                            parts[parts.len() - 3].to_string()
+                        } else {
+                            String::new()
+                        }
+                    });
+                    let description = extract_frontmatter_field(content, "description").unwrap_or_default();
+                    let instructions = strip_frontmatter(content);
+
+                    results.push(LoadedSkill {
+                        name,
+                        title,
+                        category,
+                        description,
+                        instructions,
+                        path: PathBuf::from(file_path.as_ref()),
+                    });
+                }
+            }
+        }
+    }
+}
+
 pub fn scan_skills_in_dir(base: &Path, results: &mut Vec<LoadedSkill>) {
     if !base.is_dir() {
         return;
@@ -67,7 +123,6 @@ pub fn scan_skills_in_dir(base: &Path, results: &mut Vec<LoadedSkill>) {
             continue;
         }
 
-        // Check if subdirectories have SKILL.md (e.g. skills/motion/kinetic-type-title/SKILL.md)
         let skill_file = path.join("SKILL.md");
         if skill_file.is_file() {
             if let Ok(content) = fs::read_to_string(&skill_file) {
@@ -105,7 +160,6 @@ pub fn scan_skills_in_dir(base: &Path, results: &mut Vec<LoadedSkill>) {
                 });
             }
         } else {
-            // Recurse one level down (e.g. skills/graphic/ or skills/motion/)
             scan_skills_in_dir(&path, results);
         }
     }
@@ -113,9 +167,13 @@ pub fn scan_skills_in_dir(base: &Path, results: &mut Vec<LoadedSkill>) {
 
 pub fn load_all_skills(workspace_dir: &str) -> Vec<LoadedSkill> {
     let mut skills = Vec::new();
-    let ws = Path::new(workspace_dir);
 
-    // 1. Check workspace/skills or repo/skills
+    // 1. First, load embedded skills (works on every machine, Windows/macOS/Linux, zero folders required)
+    load_embedded_skills(&mut skills);
+    let embedded_count = skills.len();
+
+    // 2. Next, load any local disk skills (allows developer overrides or custom additions)
+    let ws = Path::new(workspace_dir);
     let candidates = [
         ws.join("skills"),
         ws.join("../skills"),
@@ -126,27 +184,27 @@ pub fn load_all_skills(workspace_dir: &str) -> Vec<LoadedSkill> {
     for candidate in &candidates {
         if candidate.is_dir() {
             scan_skills_in_dir(candidate, &mut skills);
-            if !skills.is_empty() {
-                break;
-            }
         }
     }
 
-    // 2. Check ~/.claude/skills
-    if skills.is_empty() {
-        if let Ok(home) = std::env::var("HOME") {
-            let claude_skills = PathBuf::from(home).join(".claude").join("skills");
-            if claude_skills.is_dir() {
-                scan_skills_in_dir(&claude_skills, &mut skills);
-            }
+    // 3. Check ~/.claude/skills
+    if let Ok(home) = std::env::var("HOME") {
+        let claude_skills = PathBuf::from(home).join(".claude").join("skills");
+        if claude_skills.is_dir() {
+            scan_skills_in_dir(&claude_skills, &mut skills);
         }
     }
 
-    // Deduplicate by name
+    // Deduplicate by name (preserving most specific / local first)
     let mut seen = std::collections::HashSet::new();
     skills.retain(|s| seen.insert(s.name.clone()));
 
-    info!("Loaded {} skills from skills directory", skills.len());
+    info!(
+        "Skills engine ready: loaded {} skills ({} embedded in binary, {} active)",
+        skills.len(),
+        embedded_count,
+        skills.len()
+    );
     skills
 }
 
@@ -169,7 +227,46 @@ pub fn match_skills<'a>(
             score += 150;
         }
 
-        // Semantic keyword rules
+        // =====================================================================
+        // SLIDES & PRESENTATION SKILLS
+        // =====================================================================
+        if mode == "slides" {
+            // General presentation triggers
+            let has_slide_keywords = p_lower.contains("slide")
+                || p_lower.contains("presentation")
+                || p_lower.contains("deck")
+                || p_lower.contains("keynote")
+                || p_lower.contains("pitch")
+                || p_lower.contains("اسلاید")
+                || p_lower.contains("ارائه")
+                || p_lower.contains("پرزنتیشن");
+
+            if skill.name == "dashi-ppt" {
+                score += if has_slide_keywords { 95 } else { 80 };
+            } else if skill.name == "slide-maker" {
+                score += if has_slide_keywords { 90 } else { 75 };
+            } else if skill.name == "marp-slides" {
+                score += 70;
+            } else if skill.name == "pptx" {
+                score += 65;
+            } else if skill.name == "ppt-image-first" && (p_lower.contains("image") || p_lower.contains("visual") || p_lower.contains("عکس") || p_lower.contains("تصویر")) {
+                score += 85;
+            } else if skill.name == "studio-pitch" && (p_lower.contains("pitch") || p_lower.contains("investor") || p_lower.contains("سرمایه‌گذار")) {
+                score += 90;
+            } else if skill.name == "night-keynote" && (p_lower.contains("keynote") || p_lower.contains("apple") || p_lower.contains("dark")) {
+                score += 90;
+            } else if skill.name == "boardroom-memo" && (p_lower.contains("board") || p_lower.contains("memo") || p_lower.contains("executive") || p_lower.contains("مدیریتی")) {
+                score += 90;
+            } else if skill.name == "chalk-classroom" && (p_lower.contains("classroom") || p_lower.contains("teach") || p_lower.contains("course") || p_lower.contains("آموزش")) {
+                score += 90;
+            } else if skill.category.eq_ignore_ascii_case("deck") {
+                score += 60;
+            }
+        }
+
+        // =====================================================================
+        // MOTION & KINETIC SKILLS
+        // =====================================================================
         if mode == "motion" {
             if skill.category.eq_ignore_ascii_case("explainer")
                 && (p_lower.contains("explainer") || p_lower.contains("tutorial") || p_lower.contains("توضیح"))
@@ -186,7 +283,7 @@ pub fn match_skills<'a>(
             {
                 score += 50;
             }
-            if skill.name == "data-chart-story" || skill.name == "data-to-video"
+            if (skill.name == "data-chart-story" || skill.name == "data-to-video")
                 && (p_lower.contains("chart") || p_lower.contains("data") || p_lower.contains("graph") || p_lower.contains("نمودار"))
             {
                 score += 50;
@@ -197,11 +294,13 @@ pub fn match_skills<'a>(
                 score += 50;
             }
             if skill.name == "motion-director" {
-                score += 20; // baseline motion director
+                score += 20;
             }
         }
 
-        // Graphic skills keywords
+        // =====================================================================
+        // GRAPHIC & PROTOTYPE SKILLS
+        // =====================================================================
         if skill.name == "canvas-design"
             && (p_lower.contains("canvas") || p_lower.contains("drawing") || p_lower.contains("webgl") || p_lower.contains("بوم"))
         {
