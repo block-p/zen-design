@@ -299,6 +299,47 @@ pub fn match_skills<'a>(
         }
 
         // =====================================================================
+        // PROTOTYPE & FRONTEND SKILLS
+        // =====================================================================
+        if mode == "prototype" {
+            let has_dashboard = p_lower.contains("dashboard")
+                || p_lower.contains("saas")
+                || p_lower.contains("admin")
+                || p_lower.contains("telemetry")
+                || p_lower.contains("workspace")
+                || p_lower.contains("app shell")
+                || p_lower.contains("داشبورد")
+                || p_lower.contains("پنل");
+
+            let has_landing = p_lower.contains("landing")
+                || p_lower.contains("website")
+                || p_lower.contains("marketing")
+                || p_lower.contains("homepage")
+                || p_lower.contains("لندینگ")
+                || p_lower.contains("سایت");
+
+            if has_dashboard && (skill.name == "dashboard-app-shell" || skill.name == "saas-scaffolder") {
+                score += 95;
+            } else if has_landing && (skill.name == "landing-page-generator" || skill.name == "modern-web-playbooks") {
+                score += 95;
+            } else if skill.name == "rapid-interactive-prototype" {
+                score += 85;
+            } else if skill.name == "frontend-design" {
+                score += 80;
+            } else if skill.name == "aesthetic-excellence" {
+                score += 75;
+            } else if skill.name == "design-system-foundation" {
+                score += 70;
+            } else if skill.name == "design-preset-system" {
+                score += 65;
+            } else if skill.name == "apple-hig-expert" && (p_lower.contains("apple") || p_lower.contains("ios") || p_lower.contains("macos") || p_lower.contains("اپل")) {
+                score += 90;
+            } else if skill.category.eq_ignore_ascii_case("prototype") || skill.category.eq_ignore_ascii_case("frontend") {
+                score += 60;
+            }
+        }
+
+        // =====================================================================
         // GRAPHIC & PROTOTYPE SKILLS
         // =====================================================================
         if skill.name == "canvas-design"

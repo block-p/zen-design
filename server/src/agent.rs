@@ -32,6 +32,7 @@ const DEEP_BUDGET: Duration = Duration::from_secs(45 * 60);
 pub const CSP_META: &str = r#"<meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'; script-src 'unsafe-inline'; img-src data: blob:; font-src data:; media-src 'self' data: blob:; connect-src 'self' data: blob:; base-uri 'none'; form-action 'none'; frame-src 'none'">"#;
 
 /// Mathematical WebAudio synthesizer and Neural TTS audio director for ZenDesign slides and motion.
+#[allow(dead_code)]
 pub const ZEN_AUDIO_SCRIPT: &str = r#"<script id="zen-audio-engine">
 window.ZenAudio = (() => {
   let ctx = null;
@@ -1749,20 +1750,10 @@ CORE PRESENTATION ARCHITECTURE:
    - Provide CSS for `.bento-grid`, `.stats-grid`, `.split-grid`, `.cards-grid`, `.timeline-steps`, `.comparison-grid`, `.zd-chart-container`, `.zd-bars-grid`, `.zd-donut-svg`, `.zd-trend-hero`, `.zd-roadmap-track`.
    - Provide `@media print` rules: each `.slide` is `position: relative !important; display: block !important; opacity: 1 !important; page-break-after: always;` and controls have `display: none !important;`.
 
-8. MODEL-DIRECTED SOUND DESIGN & PROCEDURAL AUDIO DIRECTION (ZenAudio):
-   - You are the sound designer and audio director. Elevate the presentation with mood-specific procedural sound effects and presentation narration.
-   - Assign a curated `data-sfx` attribute to EVERY slide (`<section class="slide" data-sfx="..." data-speaker-notes="...">`):
-     * `data-sfx="whoosh"`: Silky aerodynamic swoosh for clean forward story transitions.
-     * `data-sfx="punch"`: Visceral sub-bass impact for big statistics, metric milestones, or market shifts.
-     * `data-sfx="chime"`: Harmonic pentatonic glass chimes for achievements, awards, key takeaways, or quotes.
-     * `data-sfx="digital"`: Crisp high-tech digital sequence for technical architecture, code, or systems.
-     * `data-sfx="sweep"`: Smooth ambient frequency sweep for cover and section openers.
-     * `data-sfx="riser"`: Upward pitch and filter ramp for roadmap, future momentum, and expansion.
-     * `data-sfx="drop"`: Sub-bass frequency drop for problem, challenge, or conflict slides.
-     * `data-sfx="none"`: Muted silence when solemnity is required.
-   - Interactive elements can trigger sounds via `data-sfx-type="chime|punch|digital"` and `data-sfx-trigger="hover|click"`.
-   - Always write detailed, natural speaker talking points on EVERY slide via `data-speaker-notes="..."` (calibrated to 25–40 words per slide for natural 10–18s delivery at ~2.3 words/second). The ZenAudio engine automatically vocalizes these notes via `/api/tts` in presenter mode.
-   - On slide transition, call `if (window.ZenAudio) window.ZenAudio.play(slide.getAttribute('data-sfx') || 'whoosh');` so slide navigation triggers the chosen sound.
+8. PURE, SILENT PRESENTATION ARCHITECTURE:
+   - Presentations are strictly visual, clean, and silent. DO NOT generate WebAudio scripts, sound synthesizers, audio contexts, whoosh effects, or sound effects.
+   - DO NOT attach audio listeners or play sound on slide transitions.
+   - Focus 100% of the document on exceptional typography, charts, diagrams, slide layout, and seamless navigation.
 
 9. TECHNICAL & OUTPUT CONTRACT:
    - Exactly ONE complete self-contained HTML5 file with all CSS in `<style>` and JavaScript in `<script>`.
@@ -2393,15 +2384,10 @@ pub fn sanitize_slides_html(html: &str) -> String {
         "connect-src 'self' data: blob:; media-src 'self' data: blob:",
     );
 
-    // 5. Inject ZenAudio WebAudio sound effects & Neural TTS engine if not present
-    if !out.contains("zen-audio-engine") {
-        if let Some(pos) = out.rfind("</head>") {
-            out = format!("{}\n{}\n{}", &out[..pos], ZEN_AUDIO_SCRIPT, &out[pos..]);
-        } else if let Some(pos) = out.rfind("</body>") {
-            out = format!("{}\n{}\n{}", &out[..pos], ZEN_AUDIO_SCRIPT, &out[pos..]);
-        } else {
-            out.push_str("\n");
-            out.push_str(ZEN_AUDIO_SCRIPT);
+    // 5. Clean up any unwanted audio engines or sounds from presentations
+    if let Some(start) = out.find("<script id=\"zen-audio-engine\">") {
+        if let Some(end) = out[start..].find("</script>") {
+            out.replace_range(start..start + end + 9, "");
         }
     }
 

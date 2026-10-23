@@ -45,7 +45,7 @@ pub fn App() -> impl IntoView {
     let theme_builder_open = RwSignal::new(false);
     let aspect_ratio = RwSignal::new(AspectRatio::R16_9);
     let duration_secs = RwSignal::new(10_u32);
-    let sound_effects = RwSignal::new(true);
+    let sound_effects = RwSignal::new(false);
     let tts_text = RwSignal::new(String::new());
     let tts_lang = RwSignal::new("fa-IR".to_string());
 

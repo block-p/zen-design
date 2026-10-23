@@ -65,8 +65,10 @@ pub fn generate(
             map.insert("custom_theme".to_string(), json!(ct));
         }
 
-        if let Some(sfx) = sound_effects_val {
-            map.insert("sound_effects".to_string(), json!(sfx));
+        if selected_mode == ModeId::Motion {
+            if let Some(sfx) = sound_effects_val {
+                map.insert("sound_effects".to_string(), json!(sfx));
+            }
         }
         if let Some(tts) = tts_text_val {
             if !tts.is_empty() {
