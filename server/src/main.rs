@@ -8,6 +8,7 @@ mod history;
 mod platform;
 mod providers;
 mod settings;
+mod skills;
 mod tts;
 mod updater;
 mod watcher;

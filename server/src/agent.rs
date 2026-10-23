@@ -453,6 +453,7 @@ pub struct AgentOrchestrator {
     settings: Arc<RwLock<Settings>>,
     http: reqwest::Client,
     current_session_id: Arc<tokio::sync::RwLock<Option<String>>>,
+    skills: Arc<Vec<crate::skills::LoadedSkill>>,
 }
 
 impl AgentOrchestrator {
@@ -463,17 +464,30 @@ impl AgentOrchestrator {
         http: reqwest::Client,
         current_session_id: Arc<tokio::sync::RwLock<Option<String>>>,
     ) -> Self {
+        let loaded_skills = crate::skills::load_all_skills(&workspace_dir);
         Self {
             workspace_dir,
             event_sender,
             settings,
             http,
             current_session_id,
+            skills: Arc::new(loaded_skills),
         }
     }
 
     pub async fn execute_prompt(&self, mut req: PromptRequest) -> Result<(), String> {
         let settings = self.settings.read().await.clone();
+
+        // 0. SPECIALIZED SKILLS MATCHER: Detect matching Claude Graphic & Motion skills
+        let matched = crate::skills::match_skills(&req.prompt, &req.mode, &self.skills);
+        if !matched.is_empty() {
+            let names: Vec<_> = matched.iter().map(|s| s.title.as_str()).collect();
+            providers::emit_event(
+                &self.event_sender,
+                "status",
+                format!("🎨 Applying Claude Skill(s): {}", names.join(", ")),
+            );
+        }
 
         // 1. SMART WEB & GITHUB INSPECTOR: Detect any URLs in the prompt and fetch live content
         if let Some(url) = extract_first_url(&req.prompt) {
@@ -607,8 +621,20 @@ impl AgentOrchestrator {
 
     async fn run_provider(&self, req: PromptRequest, settings: &Settings) -> Result<(), String> {
         let tokens = design_tokens_with_custom(&req.design_system, req.custom_theme.as_ref());
-        let system = build_system_prompt_with_request(&tokens, &req);
+        let mut system = build_system_prompt_with_request(&tokens, &req);
         let user = build_user_prompt_from_request(&req);
+
+        // Dynamically match and inject Claude Graphic & Motion Skills!
+        let matched_skills = crate::skills::match_skills(&req.prompt, &req.mode, &self.skills);
+        if !matched_skills.is_empty() {
+            let names: Vec<_> = matched_skills.iter().map(|s| s.title.as_str()).collect();
+            providers::emit_event(
+                &self.event_sender,
+                "status",
+                format!("🎨 Applying Specialized Skill(s): {}", names.join(", ")),
+            );
+            system.push_str(&crate::skills::format_skill_instructions(&matched_skills));
+        }
 
         let label = settings.provider_label();
         let model = settings.active_profile().model.trim().to_string();
