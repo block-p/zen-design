@@ -1,0 +1,11 @@
+{
+  "slug": "shortcut-keys",
+  "title": "Shortcut Keys",
+  "tagline": "Keycaps drop in, press down, and reveal what the shortcut does.",
+  "category": "explainer",
+  "series": "spotlight",
+  "tier": "premium",
+  "engine": "hyperframes",
+  "page": "https://claude-motion.com/skills/shortcut-keys",
+  "install": "https://claude-motion.com/skills/shortcut-keys/install.md"
+}

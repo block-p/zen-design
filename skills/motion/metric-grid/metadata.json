@@ -1,0 +1,11 @@
+{
+  "slug": "metric-grid",
+  "title": "Metric Grid",
+  "tagline": "Graph-paper data report with filterable charts, funnels and donuts.",
+  "category": "deck",
+  "series": null,
+  "tier": "premium",
+  "engine": "hyperframes",
+  "page": "https://claude-motion.com/skills/metric-grid",
+  "install": "https://claude-motion.com/skills/metric-grid/install.md"
+}

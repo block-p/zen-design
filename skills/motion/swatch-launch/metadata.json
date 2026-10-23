@@ -1,0 +1,11 @@
+{
+  "slug": "swatch-launch",
+  "title": "Texture Swatch Launch",
+  "tagline": "Material swatches slide in like a sample book, one quality each.",
+  "category": "launch",
+  "series": null,
+  "tier": "premium",
+  "engine": "hyperframes",
+  "page": "https://claude-motion.com/skills/swatch-launch",
+  "install": "https://claude-motion.com/skills/swatch-launch/install.md"
+}

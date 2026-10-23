@@ -1,0 +1,11 @@
+{
+  "slug": "studio-pitch",
+  "title": "Studio Pitch",
+  "tagline": "A bold startup pitch in cobalt and coral, from problem to ask.",
+  "category": "deck",
+  "series": null,
+  "tier": "premium",
+  "engine": "hyperframes",
+  "page": "https://claude-motion.com/skills/studio-pitch",
+  "install": "https://claude-motion.com/skills/studio-pitch/install.md"
+}

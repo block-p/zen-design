@@ -1,0 +1,11 @@
+{
+  "slug": "notification-stack",
+  "title": "Notification Stack",
+  "tagline": "Notifications land on a lock screen one after another.",
+  "category": "explainer",
+  "series": "devices",
+  "tier": "premium",
+  "engine": "hyperframes",
+  "page": "https://claude-motion.com/skills/notification-stack",
+  "install": "https://claude-motion.com/skills/notification-stack/install.md"
+}

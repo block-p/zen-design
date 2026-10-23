@@ -1,0 +1,11 @@
+{
+  "slug": "pick-one-grid",
+  "title": "Pick-One Grid",
+  "tagline": "A grid of options; a selection ring hops around and lands on the winner.",
+  "category": "explainer",
+  "series": "cards",
+  "tier": "premium",
+  "engine": "hyperframes",
+  "page": "https://claude-motion.com/skills/pick-one-grid",
+  "install": "https://claude-motion.com/skills/pick-one-grid/install.md"
+}

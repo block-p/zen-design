@@ -1,0 +1,11 @@
+{
+  "slug": "pipeline-fanout",
+  "title": "Pipeline Fan-out",
+  "tagline": "One input flows through a process and fans out to many outputs.",
+  "category": "explainer",
+  "series": "diagrams",
+  "tier": "premium",
+  "engine": "hyperframes",
+  "page": "https://claude-motion.com/skills/pipeline-fanout",
+  "install": "https://claude-motion.com/skills/pipeline-fanout/install.md"
+}

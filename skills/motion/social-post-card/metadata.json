@@ -1,0 +1,11 @@
+{
+  "slug": "social-post-card",
+  "title": "Social Post Card",
+  "tagline": "A post that types itself out and racks up likes.",
+  "category": "social",
+  "series": null,
+  "tier": "free",
+  "engine": "hyperframes",
+  "page": "https://claude-motion.com/skills/social-post-card",
+  "install": "https://claude-motion.com/skills/social-post-card/install.md"
+}

@@ -1,0 +1,11 @@
+{
+  "slug": "animated-captions",
+  "title": "Animated Captions",
+  "tagline": "Designed captions for talking-head clips, with one peak word behind the speaker.",
+  "category": "captions",
+  "series": null,
+  "tier": "premium",
+  "engine": "hyperframes",
+  "page": "https://claude-motion.com/skills/animated-captions",
+  "install": "https://claude-motion.com/skills/animated-captions/install.md"
+}

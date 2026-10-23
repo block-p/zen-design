@@ -1,0 +1,11 @@
+{
+  "slug": "card-stack-counter",
+  "title": "Card Stack Counter",
+  "tagline": "Cards drop in one by one while a big total adds them up.",
+  "category": "explainer",
+  "series": "cards",
+  "tier": "premium",
+  "engine": "hyperframes",
+  "page": "https://claude-motion.com/skills/card-stack-counter",
+  "install": "https://claude-motion.com/skills/card-stack-counter/install.md"
+}

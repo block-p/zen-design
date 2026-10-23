@@ -1,0 +1,11 @@
+{
+  "slug": "circle-annotation",
+  "title": "Circle Annotation",
+  "tagline": "Hand-drawn circles and sticky notes mark up an image.",
+  "category": "explainer",
+  "series": "spotlight",
+  "tier": "premium",
+  "engine": "hyperframes",
+  "page": "https://claude-motion.com/skills/circle-annotation",
+  "install": "https://claude-motion.com/skills/circle-annotation/install.md"
+}

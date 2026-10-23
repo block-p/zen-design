@@ -1,0 +1,11 @@
+{
+  "slug": "quadrant-map",
+  "title": "Quadrant Map",
+  "tagline": "A 2\u00d72 positioning map where your dot claims the best quadrant.",
+  "category": "explainer",
+  "series": "compare",
+  "tier": "premium",
+  "engine": "hyperframes",
+  "page": "https://claude-motion.com/skills/quadrant-map",
+  "install": "https://claude-motion.com/skills/quadrant-map/install.md"
+}

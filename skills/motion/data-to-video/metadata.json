@@ -1,0 +1,11 @@
+{
+  "slug": "data-to-video",
+  "title": "Data \u2192 Video",
+  "tagline": "Turn a spreadsheet or CSV into a short data video with the story found for you.",
+  "category": "data",
+  "series": null,
+  "tier": "premium",
+  "engine": "hyperframes",
+  "page": "https://claude-motion.com/skills/data-to-video",
+  "install": "https://claude-motion.com/skills/data-to-video/install.md"
+}

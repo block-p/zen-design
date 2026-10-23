@@ -1,0 +1,11 @@
+{
+  "slug": "halftone-launch",
+  "title": "Halftone Print Launch",
+  "tagline": "Retro print: halftone dots and CMYK plates snapping into register.",
+  "category": "launch",
+  "series": null,
+  "tier": "premium",
+  "engine": "hyperframes",
+  "page": "https://claude-motion.com/skills/halftone-launch",
+  "install": "https://claude-motion.com/skills/halftone-launch/install.md"
+}

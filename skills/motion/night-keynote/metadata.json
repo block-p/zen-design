@@ -1,0 +1,11 @@
+{
+  "slug": "night-keynote",
+  "title": "Night Keynote",
+  "tagline": "A dark, glowing launch keynote with gradient headlines.",
+  "category": "deck",
+  "series": null,
+  "tier": "premium",
+  "engine": "hyperframes",
+  "page": "https://claude-motion.com/skills/night-keynote",
+  "install": "https://claude-motion.com/skills/night-keynote/install.md"
+}

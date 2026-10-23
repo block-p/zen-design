@@ -1,0 +1,11 @@
+{
+  "slug": "device-canvas-launch",
+  "title": "Device Canvas Launch",
+  "tagline": "A desktop and a phone float on a glowing canvas; the camera tours them.",
+  "category": "launch",
+  "series": null,
+  "tier": "premium",
+  "engine": "hyperframes",
+  "page": "https://claude-motion.com/skills/device-canvas-launch",
+  "install": "https://claude-motion.com/skills/device-canvas-launch/install.md"
+}

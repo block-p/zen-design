@@ -1,0 +1,11 @@
+{
+  "slug": "magazine-story",
+  "title": "Magazine Story",
+  "tagline": "An editorial feature with oversized serif type and pull quotes.",
+  "category": "deck",
+  "series": null,
+  "tier": "premium",
+  "engine": "hyperframes",
+  "page": "https://claude-motion.com/skills/magazine-story",
+  "install": "https://claude-motion.com/skills/magazine-story/install.md"
+}

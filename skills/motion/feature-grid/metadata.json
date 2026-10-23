@@ -1,0 +1,11 @@
+{
+  "slug": "feature-grid",
+  "title": "Feature Grid",
+  "tagline": "A bento grid that assembles, then spotlights each feature.",
+  "category": "launch",
+  "series": null,
+  "tier": "premium",
+  "engine": "hyperframes",
+  "page": "https://claude-motion.com/skills/feature-grid",
+  "install": "https://claude-motion.com/skills/feature-grid/install.md"
+}

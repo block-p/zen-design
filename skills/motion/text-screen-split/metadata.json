@@ -1,0 +1,11 @@
+{
+  "slug": "text-screen-split",
+  "title": "Text + Screen Split",
+  "tagline": "Headline and points on one side, your screenshot gliding in on the other.",
+  "category": "explainer",
+  "series": "devices",
+  "tier": "premium",
+  "engine": "hyperframes",
+  "page": "https://claude-motion.com/skills/text-screen-split",
+  "install": "https://claude-motion.com/skills/text-screen-split/install.md"
+}

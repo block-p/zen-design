@@ -1,0 +1,11 @@
+{
+  "slug": "cycle-loop",
+  "title": "Cycle Loop",
+  "tagline": "Steps around a ring, joined by arrows, with a pulse that keeps circling.",
+  "category": "explainer",
+  "series": "diagrams",
+  "tier": "free",
+  "engine": "hyperframes",
+  "page": "https://claude-motion.com/skills/cycle-loop",
+  "install": "https://claude-motion.com/skills/cycle-loop/install.md"
+}

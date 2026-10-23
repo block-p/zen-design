@@ -1,0 +1,11 @@
+{
+  "slug": "statement-burst",
+  "title": "Statement Burst",
+  "tagline": "A short statement slams in word by word, then the key word bursts.",
+  "category": "explainer",
+  "series": "type",
+  "tier": "free",
+  "engine": "hyperframes",
+  "page": "https://claude-motion.com/skills/statement-burst",
+  "install": "https://claude-motion.com/skills/statement-burst/install.md"
+}

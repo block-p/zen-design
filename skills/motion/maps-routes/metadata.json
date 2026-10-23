@@ -1,0 +1,11 @@
+{
+  "slug": "maps-routes",
+  "title": "Maps & Routes",
+  "tagline": "A dot-matrix world map with an animated route.",
+  "category": "data",
+  "series": null,
+  "tier": "premium",
+  "engine": "hyperframes",
+  "page": "https://claude-motion.com/skills/maps-routes",
+  "install": "https://claude-motion.com/skills/maps-routes/install.md"
+}

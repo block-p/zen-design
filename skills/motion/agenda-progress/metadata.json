@@ -1,0 +1,11 @@
+{
+  "slug": "agenda-progress",
+  "title": "Agenda Progress",
+  "tagline": "The agenda appears, done items tick off, and a marker slides to what's next.",
+  "category": "explainer",
+  "series": "chapters",
+  "tier": "premium",
+  "engine": "hyperframes",
+  "page": "https://claude-motion.com/skills/agenda-progress",
+  "install": "https://claude-motion.com/skills/agenda-progress/install.md"
+}

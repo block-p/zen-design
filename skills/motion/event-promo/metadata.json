@@ -1,0 +1,11 @@
+{
+  "slug": "event-promo",
+  "title": "Event Promo",
+  "tagline": "A poster-style event announcement with a speaker ticker.",
+  "category": "social",
+  "series": null,
+  "tier": "premium",
+  "engine": "hyperframes",
+  "page": "https://claude-motion.com/skills/event-promo",
+  "install": "https://claude-motion.com/skills/event-promo/install.md"
+}

@@ -1,0 +1,11 @@
+{
+  "slug": "kpi-counter",
+  "title": "KPI Counter",
+  "tagline": "Up to four headline numbers that count up.",
+  "category": "data",
+  "series": null,
+  "tier": "free",
+  "engine": "hyperframes",
+  "page": "https://claude-motion.com/skills/kpi-counter",
+  "install": "https://claude-motion.com/skills/kpi-counter/install.md"
+}

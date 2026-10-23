@@ -1,0 +1,11 @@
+{
+  "slug": "slides-to-video",
+  "title": "Slides to Video",
+  "tagline": "A deck rendered as a video: one slide per beat, points reveal in order.",
+  "category": "explainer",
+  "series": null,
+  "tier": "premium",
+  "engine": "hyperframes",
+  "page": "https://claude-motion.com/skills/slides-to-video",
+  "install": "https://claude-motion.com/skills/slides-to-video/install.md"
+}

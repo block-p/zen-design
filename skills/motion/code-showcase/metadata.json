@@ -1,0 +1,11 @@
+{
+  "slug": "code-showcase",
+  "title": "Code Showcase",
+  "tagline": "Typed code with syntax colors, highlights and a terminal run.",
+  "category": "dev",
+  "series": null,
+  "tier": "premium",
+  "engine": "hyperframes",
+  "page": "https://claude-motion.com/skills/code-showcase",
+  "install": "https://claude-motion.com/skills/code-showcase/install.md"
+}

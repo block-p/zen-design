@@ -1,0 +1,11 @@
+{
+  "slug": "research-journal",
+  "title": "Research Journal",
+  "tagline": "A kraft-paper research readout with sticky-note quotes and theme charts.",
+  "category": "deck",
+  "series": null,
+  "tier": "premium",
+  "engine": "hyperframes",
+  "page": "https://claude-motion.com/skills/research-journal",
+  "install": "https://claude-motion.com/skills/research-journal/install.md"
+}

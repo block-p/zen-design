@@ -1,0 +1,11 @@
+{
+  "slug": "vertical-launch",
+  "title": "Vertical Launch",
+  "tagline": "A social-first launch cut: hook, phone, beats, CTA.",
+  "category": "launch",
+  "series": null,
+  "tier": "premium",
+  "engine": "hyperframes",
+  "page": "https://claude-motion.com/skills/vertical-launch",
+  "install": "https://claude-motion.com/skills/vertical-launch/install.md"
+}

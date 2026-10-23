@@ -1,0 +1,11 @@
+{
+  "slug": "report-explainer",
+  "title": "30s Report Explainer",
+  "tagline": "A quarterly report as a 30-second editorial explainer.",
+  "category": "data",
+  "series": null,
+  "tier": "premium",
+  "engine": "hyperframes",
+  "page": "https://claude-motion.com/skills/report-explainer",
+  "install": "https://claude-motion.com/skills/report-explainer/install.md"
+}

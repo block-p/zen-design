@@ -1,0 +1,11 @@
+{
+  "slug": "hub-spoke",
+  "title": "Hub & Spoke",
+  "tagline": "A central hub radiates out to everything it connects.",
+  "category": "explainer",
+  "series": "diagrams",
+  "tier": "premium",
+  "engine": "hyperframes",
+  "page": "https://claude-motion.com/skills/hub-spoke",
+  "install": "https://claude-motion.com/skills/hub-spoke/install.md"
+}

@@ -1,0 +1,11 @@
+{
+  "slug": "chat-thread",
+  "title": "Chat Thread",
+  "tagline": "A conversation plays out with typing dots and popping bubbles.",
+  "category": "explainer",
+  "series": "cards",
+  "tier": "premium",
+  "engine": "hyperframes",
+  "page": "https://claude-motion.com/skills/chat-thread",
+  "install": "https://claude-motion.com/skills/chat-thread/install.md"
+}

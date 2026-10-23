@@ -1,0 +1,11 @@
+{
+  "slug": "metric-spotlight",
+  "title": "Metric Spotlight",
+  "tagline": "A dashboard counts up, then one tile takes the spotlight.",
+  "category": "explainer",
+  "series": "spotlight",
+  "tier": "premium",
+  "engine": "hyperframes",
+  "page": "https://claude-motion.com/skills/metric-spotlight",
+  "install": "https://claude-motion.com/skills/metric-spotlight/install.md"
+}

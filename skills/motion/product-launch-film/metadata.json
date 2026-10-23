@@ -1,0 +1,11 @@
+{
+  "slug": "product-launch-film",
+  "title": "Product Launch Film",
+  "tagline": "Hook, product reveal, three features, end card.",
+  "category": "launch",
+  "series": null,
+  "tier": "premium",
+  "engine": "hyperframes",
+  "page": "https://claude-motion.com/skills/product-launch-film",
+  "install": "https://claude-motion.com/skills/product-launch-film/install.md"
+}

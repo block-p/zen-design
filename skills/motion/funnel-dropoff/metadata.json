@@ -1,0 +1,11 @@
+{
+  "slug": "funnel-dropoff",
+  "title": "Funnel Drop-off",
+  "tagline": "Funnel stages narrow down, and the worst leak gets flagged.",
+  "category": "explainer",
+  "series": "charts",
+  "tier": "premium",
+  "engine": "hyperframes",
+  "page": "https://claude-motion.com/skills/funnel-dropoff",
+  "install": "https://claude-motion.com/skills/funnel-dropoff/install.md"
+}

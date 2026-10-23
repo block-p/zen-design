@@ -1,0 +1,11 @@
+{
+  "slug": "strike-correct",
+  "title": "Strike & Correct",
+  "tagline": "One phrase gets crossed out and a correction is written above it.",
+  "category": "explainer",
+  "series": "type",
+  "tier": "premium",
+  "engine": "hyperframes",
+  "page": "https://claude-motion.com/skills/strike-correct",
+  "install": "https://claude-motion.com/skills/strike-correct/install.md"
+}

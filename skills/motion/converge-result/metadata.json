@@ -1,0 +1,11 @@
+{
+  "slug": "converge-result",
+  "title": "Converge to Result",
+  "tagline": "Several inputs stream together into one glowing result.",
+  "category": "explainer",
+  "series": "diagrams",
+  "tier": "premium",
+  "engine": "hyperframes",
+  "page": "https://claude-motion.com/skills/converge-result",
+  "install": "https://claude-motion.com/skills/converge-result/install.md"
+}

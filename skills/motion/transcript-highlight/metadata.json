@@ -1,0 +1,11 @@
+{
+  "slug": "transcript-highlight",
+  "title": "Transcript Highlight",
+  "tagline": "A transcript plays out, the key phrase is highlighted and lifted into a pull quote.",
+  "category": "explainer",
+  "series": "spotlight",
+  "tier": "premium",
+  "engine": "hyperframes",
+  "page": "https://claude-motion.com/skills/transcript-highlight",
+  "install": "https://claude-motion.com/skills/transcript-highlight/install.md"
+}

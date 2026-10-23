@@ -1,0 +1,11 @@
+{
+  "slug": "tier-pyramid",
+  "title": "Tier Pyramid",
+  "tagline": "A pyramid builds layer by layer, each tier with a note.",
+  "category": "explainer",
+  "series": "diagrams",
+  "tier": "premium",
+  "engine": "hyperframes",
+  "page": "https://claude-motion.com/skills/tier-pyramid",
+  "install": "https://claude-motion.com/skills/tier-pyramid/install.md"
+}

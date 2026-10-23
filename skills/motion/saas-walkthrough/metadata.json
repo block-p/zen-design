@@ -1,0 +1,11 @@
+{
+  "slug": "saas-walkthrough",
+  "title": "SaaS UI Walkthrough",
+  "tagline": "The camera pushes into each step while a cursor clicks through.",
+  "category": "launch",
+  "series": null,
+  "tier": "premium",
+  "engine": "hyperframes",
+  "page": "https://claude-motion.com/skills/saas-walkthrough",
+  "install": "https://claude-motion.com/skills/saas-walkthrough/install.md"
+}

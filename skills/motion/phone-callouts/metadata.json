@@ -1,0 +1,11 @@
+{
+  "slug": "phone-callouts",
+  "title": "Phone Callouts",
+  "tagline": "A phone rises in, and labels pop out with leader lines to its screen.",
+  "category": "explainer",
+  "series": "devices",
+  "tier": "free",
+  "engine": "hyperframes",
+  "page": "https://claude-motion.com/skills/phone-callouts",
+  "install": "https://claude-motion.com/skills/phone-callouts/install.md"
+}

@@ -1,0 +1,11 @@
+{
+  "slug": "motion-director",
+  "title": "Motion Director",
+  "tagline": "Describe a video; your agent directs it shot by shot and renders the MP4.",
+  "category": "explainer",
+  "series": null,
+  "tier": "free",
+  "engine": "hyperframes",
+  "page": "https://claude-motion.com/skills/motion-director",
+  "install": "https://claude-motion.com/skills/motion-director/install.md"
+}

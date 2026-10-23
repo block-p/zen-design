@@ -1,0 +1,11 @@
+{
+  "slug": "milestone-timeline",
+  "title": "Milestone Timeline",
+  "tagline": "A timeline draws across and milestones pop up along it.",
+  "category": "explainer",
+  "series": "chapters",
+  "tier": "premium",
+  "engine": "hyperframes",
+  "page": "https://claude-motion.com/skills/milestone-timeline",
+  "install": "https://claude-motion.com/skills/milestone-timeline/install.md"
+}

@@ -1,0 +1,11 @@
+{
+  "slug": "data-chart-story",
+  "title": "Data Chart Story",
+  "tagline": "An animated bar or line chart that lands one takeaway.",
+  "category": "data",
+  "series": null,
+  "tier": "free",
+  "engine": "hyperframes",
+  "page": "https://claude-motion.com/skills/data-chart-story",
+  "install": "https://claude-motion.com/skills/data-chart-story/install.md"
+}

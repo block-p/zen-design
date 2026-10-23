@@ -1,0 +1,11 @@
+{
+  "slug": "checklist-ticks",
+  "title": "Checklist Ticks",
+  "tagline": "A checklist where every box ticks itself, one by one.",
+  "category": "explainer",
+  "series": "cards",
+  "tier": "free",
+  "engine": "hyperframes",
+  "page": "https://claude-motion.com/skills/checklist-ticks",
+  "install": "https://claude-motion.com/skills/checklist-ticks/install.md"
+}

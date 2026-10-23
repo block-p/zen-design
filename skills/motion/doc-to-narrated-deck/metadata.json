@@ -1,0 +1,11 @@
+{
+  "slug": "doc-to-narrated-deck",
+  "title": "Doc \u2192 Narrated Deck",
+  "tagline": "Hand your agent a document; get a narrated, interactive deck and an MP4.",
+  "category": "deck",
+  "series": null,
+  "tier": "premium",
+  "engine": "hyperframes",
+  "page": "https://claude-motion.com/skills/doc-to-narrated-deck",
+  "install": "https://claude-motion.com/skills/doc-to-narrated-deck/install.md"
+}

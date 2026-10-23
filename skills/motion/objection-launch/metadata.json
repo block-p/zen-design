@@ -1,0 +1,11 @@
+{
+  "slug": "objection-launch",
+  "title": "Objection Reversal Launch",
+  "tagline": "Each objection appears in quotes, gets struck out, and is flipped.",
+  "category": "launch",
+  "series": null,
+  "tier": "premium",
+  "engine": "hyperframes",
+  "page": "https://claude-motion.com/skills/objection-launch",
+  "install": "https://claude-motion.com/skills/objection-launch/install.md"
+}

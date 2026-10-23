@@ -1,0 +1,11 @@
+{
+  "slug": "countdown",
+  "title": "Countdown",
+  "tagline": "3-2-1 numbers around a draining ring, then the reveal.",
+  "category": "social",
+  "series": null,
+  "tier": "free",
+  "engine": "hyperframes",
+  "page": "https://claude-motion.com/skills/countdown",
+  "install": "https://claude-motion.com/skills/countdown/install.md"
+}

@@ -1,0 +1,11 @@
+{
+  "slug": "section-wipe",
+  "title": "Section Number Wipe",
+  "tagline": "Accent panels sweep across while the section number rolls to the next.",
+  "category": "explainer",
+  "series": "chapters",
+  "tier": "premium",
+  "engine": "hyperframes",
+  "page": "https://claude-motion.com/skills/section-wipe",
+  "install": "https://claude-motion.com/skills/section-wipe/install.md"
+}

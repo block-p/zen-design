@@ -1,0 +1,11 @@
+{
+  "slug": "beat-launch",
+  "title": "Beat-Reveal Launch",
+  "tagline": "Hard cuts on the beat: words flash, the product drops, benefits pulse.",
+  "category": "launch",
+  "series": null,
+  "tier": "premium",
+  "engine": "hyperframes",
+  "page": "https://claude-motion.com/skills/beat-launch",
+  "install": "https://claude-motion.com/skills/beat-launch/install.md"
+}

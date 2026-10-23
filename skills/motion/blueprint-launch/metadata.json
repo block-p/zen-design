@@ -1,0 +1,11 @@
+{
+  "slug": "blueprint-launch",
+  "title": "Blueprint Launch",
+  "tagline": "Your product as a technical drawing that draws itself, then fills in solid.",
+  "category": "launch",
+  "series": null,
+  "tier": "premium",
+  "engine": "hyperframes",
+  "page": "https://claude-motion.com/skills/blueprint-launch",
+  "install": "https://claude-motion.com/skills/blueprint-launch/install.md"
+}

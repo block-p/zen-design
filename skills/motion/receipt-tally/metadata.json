@@ -1,0 +1,11 @@
+{
+  "slug": "receipt-tally",
+  "title": "Receipt Tally",
+  "tagline": "A receipt prints line by line, totals up, and gets stamped.",
+  "category": "explainer",
+  "series": "compare",
+  "tier": "premium",
+  "engine": "hyperframes",
+  "page": "https://claude-motion.com/skills/receipt-tally",
+  "install": "https://claude-motion.com/skills/receipt-tally/install.md"
+}

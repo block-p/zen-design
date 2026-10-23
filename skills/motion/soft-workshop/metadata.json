@@ -1,0 +1,11 @@
+{
+  "slug": "soft-workshop",
+  "title": "Soft Workshop",
+  "tagline": "A gentle pastel workshop deck with practice built in.",
+  "category": "deck",
+  "series": null,
+  "tier": "premium",
+  "engine": "hyperframes",
+  "page": "https://claude-motion.com/skills/soft-workshop",
+  "install": "https://claude-motion.com/skills/soft-workshop/install.md"
+}

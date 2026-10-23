@@ -1,0 +1,11 @@
+{
+  "slug": "editorial-launch",
+  "title": "Editorial Frame Launch",
+  "tagline": "A magazine cover builds, then each feature is a page that turns.",
+  "category": "launch",
+  "series": null,
+  "tier": "premium",
+  "engine": "hyperframes",
+  "page": "https://claude-motion.com/skills/editorial-launch",
+  "install": "https://claude-motion.com/skills/editorial-launch/install.md"
+}

@@ -1,0 +1,11 @@
+{
+  "slug": "line-trend",
+  "title": "Line Trend",
+  "tagline": "A line draws with a running value, and one moment gets annotated.",
+  "category": "explainer",
+  "series": "charts",
+  "tier": "free",
+  "engine": "hyperframes",
+  "page": "https://claude-motion.com/skills/line-trend",
+  "install": "https://claude-motion.com/skills/line-trend/install.md"
+}

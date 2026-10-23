@@ -1,0 +1,11 @@
+{
+  "slug": "grouped-bars",
+  "title": "Grouped Bars",
+  "tagline": "Before-and-after bars per group, with the change popping above each pair.",
+  "category": "explainer",
+  "series": "charts",
+  "tier": "premium",
+  "engine": "hyperframes",
+  "page": "https://claude-motion.com/skills/grouped-bars",
+  "install": "https://claude-motion.com/skills/grouped-bars/install.md"
+}

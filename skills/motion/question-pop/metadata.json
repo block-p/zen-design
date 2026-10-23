@@ -1,0 +1,11 @@
+{
+  "slug": "question-pop",
+  "title": "Question Pop",
+  "tagline": "The audience's question pops up in a speech bubble, then the answer.",
+  "category": "explainer",
+  "series": "type",
+  "tier": "premium",
+  "engine": "hyperframes",
+  "page": "https://claude-motion.com/skills/question-pop",
+  "install": "https://claude-motion.com/skills/question-pop/install.md"
+}

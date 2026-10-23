@@ -1,0 +1,11 @@
+{
+  "slug": "whiteboard-explainer",
+  "title": "Whiteboard Explainer",
+  "tagline": "Marker doodles draw themselves while labels write on, step by step.",
+  "category": "explainer",
+  "series": null,
+  "tier": "premium",
+  "engine": "hyperframes",
+  "page": "https://claude-motion.com/skills/whiteboard-explainer",
+  "install": "https://claude-motion.com/skills/whiteboard-explainer/install.md"
+}

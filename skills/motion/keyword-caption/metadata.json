@@ -1,0 +1,11 @@
+{
+  "slug": "keyword-caption",
+  "title": "Keyword Caption",
+  "tagline": "A designed caption whose keywords get a pill, underline or color.",
+  "category": "explainer",
+  "series": "type",
+  "tier": "premium",
+  "engine": "hyperframes",
+  "page": "https://claude-motion.com/skills/keyword-caption",
+  "install": "https://claude-motion.com/skills/keyword-caption/install.md"
+}

@@ -1,0 +1,11 @@
+{
+  "slug": "ui-morph-effects",
+  "title": "UI Morph Effects",
+  "tagline": "A button becomes a player, a search box fills with results: one object changing shape.",
+  "category": "launch",
+  "series": null,
+  "tier": "premium",
+  "engine": "hyperframes",
+  "page": "https://claude-motion.com/skills/ui-morph-effects",
+  "install": "https://claude-motion.com/skills/ui-morph-effects/install.md"
+}

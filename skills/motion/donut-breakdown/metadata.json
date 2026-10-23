@@ -1,0 +1,11 @@
+{
+  "slug": "donut-breakdown",
+  "title": "Donut Breakdown",
+  "tagline": "A donut chart draws itself and the biggest slice pops out.",
+  "category": "explainer",
+  "series": "charts",
+  "tier": "premium",
+  "engine": "hyperframes",
+  "page": "https://claude-motion.com/skills/donut-breakdown",
+  "install": "https://claude-motion.com/skills/donut-breakdown/install.md"
+}

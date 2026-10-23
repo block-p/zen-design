@@ -1,0 +1,11 @@
+{
+  "slug": "calendar-reschedule",
+  "title": "Calendar Reschedule",
+  "tagline": "A week view fills up, then a cursor drags one event to a better slot.",
+  "category": "explainer",
+  "series": "devices",
+  "tier": "premium",
+  "engine": "hyperframes",
+  "page": "https://claude-motion.com/skills/calendar-reschedule",
+  "install": "https://claude-motion.com/skills/calendar-reschedule/install.md"
+}

@@ -1,0 +1,11 @@
+{
+  "slug": "step-ladder",
+  "title": "Step Ladder",
+  "tagline": "Numbered steps climb a staircase, joined by a drawn line.",
+  "category": "explainer",
+  "series": "cards",
+  "tier": "premium",
+  "engine": "hyperframes",
+  "page": "https://claude-motion.com/skills/step-ladder",
+  "install": "https://claude-motion.com/skills/step-ladder/install.md"
+}

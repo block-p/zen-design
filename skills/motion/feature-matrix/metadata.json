@@ -1,0 +1,11 @@
+{
+  "slug": "feature-matrix",
+  "title": "Feature Matrix",
+  "tagline": "A comparison table fills row by row, with your column highlighted.",
+  "category": "explainer",
+  "series": "compare",
+  "tier": "premium",
+  "engine": "hyperframes",
+  "page": "https://claude-motion.com/skills/feature-matrix",
+  "install": "https://claude-motion.com/skills/feature-matrix/install.md"
+}

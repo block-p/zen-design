@@ -1,0 +1,11 @@
+{
+  "slug": "paper-lecture",
+  "title": "Paper Lecture",
+  "tagline": "Ruled-paper lecture notes with quizzes, drag exercises and a narrated walk-through.",
+  "category": "deck",
+  "series": null,
+  "tier": "free",
+  "engine": "hyperframes",
+  "page": "https://claude-motion.com/skills/paper-lecture",
+  "install": "https://claude-motion.com/skills/paper-lecture/install.md"
+}

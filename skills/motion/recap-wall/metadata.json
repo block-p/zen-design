@@ -1,0 +1,11 @@
+{
+  "slug": "recap-wall",
+  "title": "Recap Wall",
+  "tagline": "Takeaway cards fly in and settle into a tidy numbered wall.",
+  "category": "explainer",
+  "series": "chapters",
+  "tier": "premium",
+  "engine": "hyperframes",
+  "page": "https://claude-motion.com/skills/recap-wall",
+  "install": "https://claude-motion.com/skills/recap-wall/install.md"
+}

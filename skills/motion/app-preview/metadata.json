@@ -1,0 +1,11 @@
+{
+  "slug": "app-preview",
+  "title": "App Preview",
+  "tagline": "A phone that swipes through screens beside changing captions.",
+  "category": "launch",
+  "series": null,
+  "tier": "premium",
+  "engine": "hyperframes",
+  "page": "https://claude-motion.com/skills/app-preview",
+  "install": "https://claude-motion.com/skills/app-preview/install.md"
+}

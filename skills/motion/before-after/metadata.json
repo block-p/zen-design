@@ -1,0 +1,11 @@
+{
+  "slug": "before-after",
+  "title": "Before / After",
+  "tagline": "A wipe comparison with a sweeping divider.",
+  "category": "social",
+  "series": null,
+  "tier": "free",
+  "engine": "hyperframes",
+  "page": "https://claude-motion.com/skills/before-after",
+  "install": "https://claude-motion.com/skills/before-after/install.md"
+}

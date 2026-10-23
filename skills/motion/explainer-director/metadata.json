@@ -1,0 +1,11 @@
+{
+  "slug": "explainer-director",
+  "title": "Explainer Director",
+  "tagline": "Turn an article, notes or just a topic into an explainer video.",
+  "category": "explainer",
+  "series": null,
+  "tier": "premium",
+  "engine": "hyperframes",
+  "page": "https://claude-motion.com/skills/explainer-director",
+  "install": "https://claude-motion.com/skills/explainer-director/install.md"
+}

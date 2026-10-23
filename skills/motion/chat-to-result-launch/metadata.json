@@ -1,0 +1,11 @@
+{
+  "slug": "chat-to-result-launch",
+  "title": "Chat-to-Result Launch",
+  "tagline": "A prompt is typed, the assistant answers, and the answer becomes your launch.",
+  "category": "launch",
+  "series": null,
+  "tier": "premium",
+  "engine": "hyperframes",
+  "page": "https://claude-motion.com/skills/chat-to-result-launch",
+  "install": "https://claude-motion.com/skills/chat-to-result-launch/install.md"
+}

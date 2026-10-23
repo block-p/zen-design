@@ -1,0 +1,11 @@
+{
+  "slug": "browser-scroll",
+  "title": "Browser Scroll",
+  "tagline": "A tilted browser scrolls smoothly through a full page.",
+  "category": "explainer",
+  "series": "devices",
+  "tier": "premium",
+  "engine": "hyperframes",
+  "page": "https://claude-motion.com/skills/browser-scroll",
+  "install": "https://claude-motion.com/skills/browser-scroll/install.md"
+}

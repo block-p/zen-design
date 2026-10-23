@@ -1,0 +1,11 @@
+{
+  "slug": "chalk-classroom",
+  "title": "Chalk Classroom",
+  "tagline": "A green chalkboard lesson with hand-lettered headings and practice exercises.",
+  "category": "deck",
+  "series": null,
+  "tier": "premium",
+  "engine": "hyperframes",
+  "page": "https://claude-motion.com/skills/chalk-classroom",
+  "install": "https://claude-motion.com/skills/chalk-classroom/install.md"
+}

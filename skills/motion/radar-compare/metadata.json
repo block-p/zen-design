@@ -1,0 +1,11 @@
+{
+  "slug": "radar-compare",
+  "title": "Radar Compare",
+  "tagline": "A spider chart where your shape outgrows the comparison.",
+  "category": "explainer",
+  "series": "charts",
+  "tier": "premium",
+  "engine": "hyperframes",
+  "page": "https://claude-motion.com/skills/radar-compare",
+  "install": "https://claude-motion.com/skills/radar-compare/install.md"
+}

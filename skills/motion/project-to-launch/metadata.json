@@ -1,0 +1,11 @@
+{
+  "slug": "project-to-launch",
+  "title": "Project \u2192 Launch Video",
+  "tagline": "Your agent reads the project and makes its launch video, with music.",
+  "category": "launch",
+  "series": null,
+  "tier": "premium",
+  "engine": "hyperframes",
+  "page": "https://claude-motion.com/skills/project-to-launch",
+  "install": "https://claude-motion.com/skills/project-to-launch/install.md"
+}

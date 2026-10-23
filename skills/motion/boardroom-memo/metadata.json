@@ -1,0 +1,11 @@
+{
+  "slug": "boardroom-memo",
+  "title": "Boardroom Memo",
+  "tagline": "A crisp business review: big numbers, a clear warning, and the decision you need.",
+  "category": "deck",
+  "series": null,
+  "tier": "free",
+  "engine": "hyperframes",
+  "page": "https://claude-motion.com/skills/boardroom-memo",
+  "install": "https://claude-motion.com/skills/boardroom-memo/install.md"
+}

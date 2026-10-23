@@ -1,0 +1,11 @@
+{
+  "slug": "definition-reframe",
+  "title": "Definition Reframe",
+  "tagline": "A dictionary entry whose usual definition gets crossed out and rewritten.",
+  "category": "explainer",
+  "series": "type",
+  "tier": "premium",
+  "engine": "hyperframes",
+  "page": "https://claude-motion.com/skills/definition-reframe",
+  "install": "https://claude-motion.com/skills/definition-reframe/install.md"
+}

@@ -1,0 +1,11 @@
+{
+  "slug": "ratio-bar",
+  "title": "Ratio Bar",
+  "tagline": "One bar splits into shares, then the part that matters gets called out.",
+  "category": "explainer",
+  "series": "compare",
+  "tier": "premium",
+  "engine": "hyperframes",
+  "page": "https://claude-motion.com/skills/ratio-bar",
+  "install": "https://claude-motion.com/skills/ratio-bar/install.md"
+}

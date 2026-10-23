@@ -1,0 +1,11 @@
+{
+  "slug": "papercut-explainer",
+  "title": "Paper-Cut Explainer",
+  "tagline": "Layered paper hills and cut-paper cards explain anything in three steps.",
+  "category": "explainer",
+  "series": null,
+  "tier": "free",
+  "engine": "hyperframes",
+  "page": "https://claude-motion.com/skills/papercut-explainer",
+  "install": "https://claude-motion.com/skills/papercut-explainer/install.md"
+}

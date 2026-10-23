@@ -1,0 +1,11 @@
+{
+  "slug": "schematic-walkthrough",
+  "title": "Schematic Walkthrough",
+  "tagline": "A blueprint-blue technical walkthrough with pipeline and component exercises.",
+  "category": "deck",
+  "series": null,
+  "tier": "premium",
+  "engine": "hyperframes",
+  "page": "https://claude-motion.com/skills/schematic-walkthrough",
+  "install": "https://claude-motion.com/skills/schematic-walkthrough/install.md"
+}

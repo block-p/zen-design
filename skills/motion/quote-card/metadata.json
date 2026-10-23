@@ -1,0 +1,11 @@
+{
+  "slug": "quote-card",
+  "title": "Quote Card",
+  "tagline": "Testimonials and pull-quotes, revealed word by word.",
+  "category": "social",
+  "series": null,
+  "tier": "free",
+  "engine": "hyperframes",
+  "page": "https://claude-motion.com/skills/quote-card",
+  "install": "https://claude-motion.com/skills/quote-card/install.md"
+}

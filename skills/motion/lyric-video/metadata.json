@@ -1,0 +1,11 @@
+{
+  "slug": "lyric-video",
+  "title": "Lyric Video",
+  "tagline": "Timed lyrics with karaoke fill, kinetic words or stacking lines.",
+  "category": "social",
+  "series": null,
+  "tier": "premium",
+  "engine": "hyperframes",
+  "page": "https://claude-motion.com/skills/lyric-video",
+  "install": "https://claude-motion.com/skills/lyric-video/install.md"
+}
