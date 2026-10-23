@@ -9,6 +9,7 @@ mod platform;
 mod providers;
 mod settings;
 mod tts;
+mod updater;
 mod watcher;
 
 use std::convert::Infallible;
@@ -67,6 +68,7 @@ struct AppState {
     public_base: String,
     export_dir: PathBuf,
     workspace: PathBuf,
+    current_session_id: Arc<tokio::sync::RwLock<Option<String>>>,
 }
 
 #[tokio::main]
@@ -121,11 +123,14 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let _file_watcher = watcher::start_watcher(&workspace.to_string_lossy(), event_sender.clone())
         .map_err(|e| format!("failed to start workspace watcher: {e}"))?;
 
+    let current_session_id = Arc::new(tokio::sync::RwLock::new(None));
+
     let orchestrator = Arc::new(AgentOrchestrator::new(
         workspace.to_string_lossy().to_string(),
         event_sender.clone(),
         settings.clone(),
         http.clone(),
+        current_session_id.clone(),
     ));
 
     let state = AppState {
@@ -140,6 +145,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         public_base,
         export_dir,
         workspace: workspace.clone(),
+        current_session_id,
     };
 
     let app = Router::new()
@@ -176,6 +182,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             get(tts_synthesize_get).post(tts_synthesize_post),
         )
         .route("/api/artifact", get(get_artifact).put(save_artifact))
+        .route("/api/system/version", get(system_version))
+        .route("/api/system/check-update", get(system_check_update))
+        .route("/api/system/update", post(system_perform_update))
         // Serve the agent's live output. ServeDir handles traversal protection
         // and content types; index.html is served for `/preview/`.
         .nest_service(
@@ -751,7 +760,20 @@ fn message_to_sse(message: String) -> Option<Result<Event, Infallible>> {
     }
 }
 
-/// Accepts a brief, then runs the orchestrator in the background. The HTTP
+async fn stop_running_agent(state: &AppState) {
+    if let Some(handle) = state.agent_run.lock().await.take() {
+        handle.abort();
+        let event = AgentEvent {
+            event_type: "agent_error".to_string(),
+            message: "Previous generation cancelled.".to_string(),
+        };
+        if let Ok(payload) = serde_json::to_string(&event) {
+            let _ = state.event_sender.send(payload);
+        }
+    }
+}
+
+// Accepts a brief, then runs the orchestrator in the background. The HTTP
 /// request returns immediately (202) so a long reasoning pass can never collide
 /// with a client-side request timeout; progress arrives over `/api/events`.
 async fn prompt(
@@ -774,8 +796,14 @@ async fn prompt(
     let session_id = request
         .session_id
         .clone()
-        .unwrap_or_else(|| format!("{timestamp}_{}", now_millis() % 10000));
+        .unwrap_or_else(|| format!("{timestamp}_{}", uuid::Uuid::new_v4()));
     request.session_id = Some(session_id.clone());
+
+    // Stop previous running agent if any
+    stop_running_agent(&state).await;
+
+    // Track as currently active session
+    *state.current_session_id.write().await = Some(session_id.clone());
 
     let orchestrator = state.orchestrator.clone();
     let sender = state.event_sender.clone();
@@ -2476,7 +2504,7 @@ async fn post_history(
         .as_secs();
     let sid = payload
         .session_id
-        .unwrap_or_else(|| format!("{timestamp}_{}", now_millis() % 10000));
+        .unwrap_or_else(|| format!("{timestamp}_{}", uuid::Uuid::new_v4()));
     let item = history::add_history_entry(
         &state.workspace,
         sid,
@@ -2492,11 +2520,17 @@ async fn delete_history_item(
     State(state): State<AppState>,
     AxumPath(id): AxumPath<String>,
 ) -> impl IntoResponse {
+    if let Some(ref current) = *state.current_session_id.read().await {
+        if current == &id {
+            *state.current_session_id.write().await = None;
+        }
+    }
     let deleted = history::delete_history_entry(&state.workspace, &id);
     Json(json!({ "status": if deleted { "ok" } else { "not_found" } })).into_response()
 }
 
 async fn clear_all_history(State(state): State<AppState>) -> impl IntoResponse {
+    *state.current_session_id.write().await = None;
     let _ = history::clear_history(&state.workspace);
     Json(json!({ "status": "ok" })).into_response()
 }
@@ -2505,6 +2539,13 @@ async fn activate_history_item(
     State(state): State<AppState>,
     AxumPath(id): AxumPath<String>,
 ) -> impl IntoResponse {
+    // 1. Stop any running agent so it does not conflict
+    stop_running_agent(&state).await;
+
+    // 2. Track as active session
+    *state.current_session_id.write().await = Some(id.clone());
+
+    // 3. Activate session in workspace (will auto-heal index.html if missing)
     match history::activate_session(&state.workspace, &id) {
         Ok(item) => {
             providers::emit_event(
@@ -2527,14 +2568,27 @@ async fn activate_history_item(
 }
 
 async fn new_project(State(state): State<AppState>) -> impl IntoResponse {
-    match history::create_new_project(&state.workspace) {
-        Ok(()) => {
+    stop_running_agent(&state).await;
+
+    let timestamp = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_secs();
+    let new_id = format!("{timestamp}_{}", uuid::Uuid::new_v4());
+    *state.current_session_id.write().await = Some(new_id.clone());
+
+    match history::create_new_project_session(&state.workspace, &new_id) {
+        Ok(item) => {
             providers::emit_event(
                 &state.event_sender,
                 "reload",
                 "Created new blank project canvas.",
             );
-            (StatusCode::OK, Json(json!({ "status": "ok" }))).into_response()
+            (
+                StatusCode::OK,
+                Json(json!({ "status": "ok", "session_id": new_id, "item": item })),
+            )
+                .into_response()
         }
         Err(err) => (
             StatusCode::INTERNAL_SERVER_ERROR,
@@ -2573,8 +2627,13 @@ async fn save_artifact(
     Json(payload): Json<SaveArtifactPayload>,
 ) -> impl IntoResponse {
     let index_path = state.workspace.join("index.html");
-    match std::fs::write(&index_path, payload.html) {
+    match std::fs::write(&index_path, &payload.html) {
         Ok(()) => {
+            if let Some(ref sid) = *state.current_session_id.read().await {
+                let session_file = history::session_artifact_path(&state.workspace, sid);
+                let _ = std::fs::write(&session_file, &payload.html);
+                let _ = history::mark_has_artifact(&state.workspace, sid);
+            }
             providers::emit_event(
                 &state.event_sender,
                 "reload",
@@ -2883,6 +2942,42 @@ async fn export_armed(State(state): State<AppState>) -> impl IntoResponse {
 async fn shutdown_signal() {
     let _ = tokio::signal::ctrl_c().await;
     info!("Shutdown signal received, closing daemon");
+}
+
+async fn system_version() -> impl IntoResponse {
+    Json(updater::get_version_info())
+}
+
+async fn system_check_update(State(state): State<AppState>) -> impl IntoResponse {
+    match updater::check_for_updates(&state.http).await {
+        Ok(info) => (StatusCode::OK, Json(json!({ "status": "ok", "data": info }))).into_response(),
+        Err(err) => (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(json!({ "status": "error", "message": err })),
+        )
+            .into_response(),
+    }
+}
+
+#[derive(Deserialize)]
+struct PerformUpdatePayload {
+    #[serde(default)]
+    download_url: Option<String>,
+}
+
+async fn system_perform_update(
+    State(state): State<AppState>,
+    payload: Option<Json<PerformUpdatePayload>>,
+) -> impl IntoResponse {
+    let dl = payload.as_ref().and_then(|p| p.download_url.as_deref());
+    match updater::perform_update(&state.http, dl).await {
+        Ok(res) => (StatusCode::OK, Json(json!({ "status": "ok", "data": res }))).into_response(),
+        Err(err) => (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(json!({ "status": "error", "message": err })),
+        )
+            .into_response(),
+    }
 }
 
 #[cfg(test)]

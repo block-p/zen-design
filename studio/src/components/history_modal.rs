@@ -241,6 +241,7 @@ pub fn HistoryModal(
                                                                         preview_version,
                                                                         entries,
                                                                         lang,
+                                                                        Some(running),
                                                                     );
                                                                 }
                                                                 title=move || t(lang, "Load this project into the live preview canvas", "بارگذاری و مشاهده این پروژه در بوم پیش‌نمایش")

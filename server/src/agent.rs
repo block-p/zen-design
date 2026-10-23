@@ -1,6 +1,6 @@
 use std::collections::HashSet;
 use std::fs;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 
@@ -452,6 +452,7 @@ pub struct AgentOrchestrator {
     event_sender: broadcast::Sender<String>,
     settings: Arc<RwLock<Settings>>,
     http: reqwest::Client,
+    current_session_id: Arc<tokio::sync::RwLock<Option<String>>>,
 }
 
 impl AgentOrchestrator {
@@ -460,12 +461,14 @@ impl AgentOrchestrator {
         event_sender: broadcast::Sender<String>,
         settings: Arc<RwLock<Settings>>,
         http: reqwest::Client,
+        current_session_id: Arc<tokio::sync::RwLock<Option<String>>>,
     ) -> Self {
         Self {
             workspace_dir,
             event_sender,
             settings,
             http,
+            current_session_id,
         }
     }
 
@@ -622,13 +625,21 @@ impl AgentOrchestrator {
             ),
         );
 
+        let target_dir = if let Some(ref sid) = req.session_id {
+            let sdir = Path::new(&self.workspace_dir).join("sessions").join(sid);
+            let _ = fs::create_dir_all(&sdir);
+            sdir
+        } else {
+            PathBuf::from(&self.workspace_dir)
+        };
+
         let result = providers::generate(
             &self.http,
             settings,
             &system,
             &user,
             &self.event_sender,
-            Path::new(&self.workspace_dir),
+            &target_dir,
         )
         .await;
 
@@ -983,12 +994,9 @@ only one complete fenced HTML document."
 
     fn write_artifact(&self, html: &str, session_id: Option<&str>) -> Result<(), String> {
         let workspace = Path::new(&self.workspace_dir);
-        let target = workspace.join("index.html");
         let sanitized = sanitize_slides_html(html);
-        fs::write(&target, &sanitized)
-            .map_err(|e| format!("Failed to write to workspace: {}", e))?;
-        info!("Wrote artifact to {:?} ({} bytes)", target, sanitized.len());
 
+        // 1. ALWAYS isolate into session directory first so it is never lost
         if let Some(sid) = session_id {
             let session_dir = workspace.join("sessions").join(sid);
             if let Err(e) = fs::create_dir_all(&session_dir) {
@@ -1003,21 +1011,53 @@ only one complete fenced HTML document."
                         session_file,
                         sanitized.len()
                     );
+                    let _ = crate::history::mark_has_artifact(workspace, sid);
                 }
             }
         }
+
+        // 2. Only write to workspace/index.html if this is still the active session!
+        let is_active = if let Some(sid) = session_id {
+            match self.current_session_id.try_read() {
+                Ok(guard) => match guard.as_deref() {
+                    Some(active_id) => active_id == sid,
+                    None => true,
+                },
+                Err(_) => true,
+            }
+        } else {
+            true
+        };
+
+        if is_active {
+            let target = workspace.join("index.html");
+            fs::write(&target, &sanitized)
+                .map_err(|e| format!("Failed to write to workspace: {}", e))?;
+            info!("Wrote artifact to workspace {:?} ({} bytes)", target, sanitized.len());
+        } else {
+            info!("Session {session_id:?} artifact saved to session folder; workspace has another active session so workspace/index.html was preserved.");
+        }
+
         Ok(())
     }
 
-    /// When the agent writes `workspace/index.html` itself, it bypasses the
-    /// model-text path (and therefore `ensure_csp`). Add the same offline CSP
-    /// here — but only for self-contained documents, because `default-src
-    /// 'none'` would break a deliberately multi-file artifact.
+    // When the agent writes `index.html` itself (e.g. OpenCode), harden the artifact.
     fn harden_agent_artifact(&self, session_id: Option<&str>) -> Result<Option<String>, String> {
         let workspace = Path::new(&self.workspace_dir);
-        let target = workspace.join("index.html");
-        let html = fs::read_to_string(&target)
-            .map_err(|error| format!("Failed to read the agent artifact: {error}"))?;
+
+        let source_path = if let Some(sid) = session_id {
+            let session_file = workspace.join("sessions").join(sid).join("index.html");
+            if session_file.is_file() {
+                session_file
+            } else {
+                workspace.join("index.html")
+            }
+        } else {
+            workspace.join("index.html")
+        };
+
+        let html = fs::read_to_string(&source_path)
+            .map_err(|error| format!("Failed to read the agent artifact from {:?}: {error}", source_path))?;
         let sanitized = sanitize_slides_html(&html);
         let final_html = if sanitized
             .to_ascii_lowercase()
@@ -1028,10 +1068,7 @@ only one complete fenced HTML document."
             info!("Agent artifact references local files; skipping CSP injection");
             sanitized
         } else {
-            let hardened = ensure_csp(&sanitized);
-            fs::write(&target, &hardened)
-                .map_err(|error| format!("Failed to harden the agent artifact: {error}"))?;
-            hardened
+            ensure_csp(&sanitized)
         };
 
         if let Some(sid) = session_id {
@@ -1039,6 +1076,24 @@ only one complete fenced HTML document."
             let _ = fs::create_dir_all(&session_dir);
             let session_file = session_dir.join("index.html");
             let _ = fs::write(&session_file, &final_html);
+            let _ = crate::history::mark_has_artifact(workspace, sid);
+        }
+
+        let is_active = if let Some(sid) = session_id {
+            match self.current_session_id.try_read() {
+                Ok(guard) => match guard.as_deref() {
+                    Some(active_id) => active_id == sid,
+                    None => true,
+                },
+                Err(_) => true,
+            }
+        } else {
+            true
+        };
+
+        if is_active {
+            let target = workspace.join("index.html");
+            let _ = fs::write(&target, &final_html);
         }
 
         let size = final_html.len();

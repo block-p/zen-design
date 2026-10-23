@@ -1,6 +1,6 @@
 use icondata_lu::{
-    LuBot, LuCheck, LuCircleAlert, LuKey, LuLoaderCircle, LuPlug, LuRefreshCw, LuSave, LuServer,
-    LuSparkles, LuTerminal, LuX,
+    LuBot, LuCheck, LuCircleAlert, LuDownload, LuExternalLink, LuKey, LuLoaderCircle, LuPlug,
+    LuRefreshCw, LuSave, LuServer, LuSparkles, LuTerminal, LuX,
 };
 use leptos::portal::Portal;
 use leptos::prelude::*;
@@ -9,10 +9,10 @@ use wasm_bindgen::JsCast;
 use web_sys::KeyboardEvent;
 
 use crate::actions::{
-    apply_detected_source, import_opencode, load_detected_sources, load_models, save_model_choice,
-    save_settings, SaveSettings,
+    apply_detected_source, check_app_updates, import_opencode, load_detected_sources, load_models,
+    perform_app_update, save_model_choice, save_settings, SaveSettings,
 };
-use crate::data::ActivityEntry;
+use crate::data::{ActivityEntry, UpdateCheckData};
 use crate::i18n::{t, Language};
 use crate::icons::Icon;
 use crate::settings::{
@@ -35,6 +35,11 @@ pub fn SettingsPanel(
     let clear_key = RwSignal::new(false);
     let models = RwSignal::new(Vec::<String>::new());
     let models_error = RwSignal::new(None::<String>);
+    let update_checking = RwSignal::new(false);
+    let update_installing = RwSignal::new(false);
+    let update_info = RwSignal::new(None::<UpdateCheckData>);
+    let update_error = RwSignal::new(None::<String>);
+    let update_success = RwSignal::new(None::<String>);
     let saving = RwSignal::new(false);
     let importing = RwSignal::new(false);
     let warning = RwSignal::new(None::<String>);
@@ -689,6 +694,106 @@ pub fn SettingsPanel(
                                     </p>
                                 </div>
                             </Show>
+
+                            <div class="zd-form-section" style="margin-top: 24px; padding-top: 16px; border-top: 1px solid var(--zd-border);">
+                                <div class="zd-form-row-between">
+                                    <div>
+                                        <span class="zd-form-label">
+                                            {move || t(language.get(), "ZenDesign Version & Updates", "نسخه و بروزرسانی‌های نرم‌افزار")}
+                                        </span>
+                                        <span class="zd-form-hint">
+                                            {move || format!("{} v{} • {}", t(language.get(), "Installed:", "نسخه نصب‌شده:"), env!("CARGO_PKG_VERSION"), t(language.get(), "Built with Rust & WebAssembly", "توسعه‌یافته با راست و وب‌اسمبلی"))}
+                                        </span>
+                                    </div>
+                                    <button
+                                        type="button"
+                                        class="zd-btn-soft"
+                                        disabled=move || update_checking.get() || update_installing.get()
+                                        on:click=move |_| check_app_updates(update_checking, update_info, update_error)
+                                    >
+                                        <Show when=move || update_checking.get() fallback=move || view! {
+                                            <Icon data=LuRefreshCw size=11 />
+                                            <span>{move || t(language.get(), "Check for Updates", "بررسی بروزرسانی")}</span>
+                                        }>
+                                            <Icon data=LuLoaderCircle size=11 class="zd-spin" />
+                                            <span>{move || t(language.get(), "Checking…", "در حال بررسی…")}</span>
+                                        </Show>
+                                    </button>
+                                </div>
+
+                                <Show when=move || update_info.get().is_some()>
+                                    {move || {
+                                        let info = update_info.get().unwrap();
+                                        let has_up = info.has_update;
+                                        let latest = info.latest_version.clone();
+                                        let rel_url = info.release_url.clone();
+                                        let notes = info.release_notes.clone();
+                                        let notes_check = notes.clone();
+                                        let notes_display = notes.clone();
+
+                                        view! {
+                                            <div class="zd-update-card">
+                                                <div class="zd-update-header">
+                                                    <span class="zd-update-tag">
+                                                        {if has_up {
+                                                            format!("New Release: v{latest}")
+                                                        } else {
+                                                            t(language.get(), "Up to date", "شما از آخرین نسخه استفاده می‌کنید").to_string()
+                                                        }}
+                                                    </span>
+                                                    <a
+                                                        href=rel_url
+                                                        target="_blank"
+                                                        rel="noopener noreferrer"
+                                                        class="zd-link-soft"
+                                                        style="font-size: 11px; display: inline-flex; align-items: center; gap: 4px; text-decoration: none;"
+                                                    >
+                                                        <span>{move || t(language.get(), "GitHub Release", "مشاهده در گیت‌هاب")}</span>
+                                                        <Icon data=LuExternalLink size=10 />
+                                                    </a>
+                                                </div>
+                                                <Show when=move || !notes_check.is_empty()>
+                                                    <p class="zd-form-hint" style="white-space: pre-wrap; max-height: 80px; overflow-y: auto; margin-top: 6px;">
+                                                        {notes_display.clone()}
+                                                    </p>
+                                                </Show>
+                                                <Show when=move || has_up>
+                                                    <div class="zd-update-actions" style="margin-top: 10px;">
+                                                        <button
+                                                            type="button"
+                                                            class="zd-btn-primary"
+                                                            disabled=move || update_installing.get()
+                                                            on:click=move |_| perform_app_update(update_installing, update_success, update_error)
+                                                        >
+                                                            <Show when=move || update_installing.get() fallback=move || view! {
+                                                                <Icon data=LuDownload size=12 />
+                                                                <span>{move || t(language.get(), "Update Now", "بروزرسانی خودکار")}</span>
+                                                            }>
+                                                                <Icon data=LuLoaderCircle size=12 class="zd-spin" />
+                                                                <span>{move || t(language.get(), "Installing Update…", "در حال نصب…")}</span>
+                                                            </Show>
+                                                        </button>
+                                                    </div>
+                                                </Show>
+                                            </div>
+                                        }
+                                    }}
+                                </Show>
+
+                                <Show when=move || update_success.get().is_some()>
+                                    <div class="zd-modal-alert zd-modal-alert--success" style="margin-top: 10px;">
+                                        <Icon data=LuCheck size=14 class="zd-modal-alert-icon" />
+                                        <p class="zd-modal-alert-text">{move || update_success.get().unwrap()}</p>
+                                    </div>
+                                </Show>
+
+                                <Show when=move || update_error.get().is_some()>
+                                    <div class="zd-modal-alert zd-modal-alert--warning" style="margin-top: 10px;">
+                                        <Icon data=LuCircleAlert size=14 class="zd-modal-alert-icon" />
+                                        <p class="zd-modal-alert-text">{move || update_error.get().unwrap()}</p>
+                                    </div>
+                                </Show>
+                            </div>
                         </div>
                     </div>
                 </div>

@@ -132,7 +132,7 @@ pub fn AgentPanel(
                         <button
                             type="button"
                             class="zd-btn-soft zd-agent-new-btn"
-                            on:click=move |_| create_new_project(prompt, preview_version, entries, language.get())
+                            on:click=move |_| create_new_project(prompt, preview_version, entries, language.get(), Some(running))
                             title=move || t(language.get(), "New Project Canvas", "پروژه جدید (شروع با بوم خالی)")
                         >
                             <Icon data=LuPlus size=12 />

@@ -76,6 +76,13 @@ async def run():
     text = sys.stdin.read().strip()
     voice = sys.argv[1]
     rate = sys.argv[2]
+    if not ((rate.startswith('+') or rate.startswith('-')) and rate.endswith('%')):
+        try:
+            val = float(rate)
+            pct = int(round((val - 1.0) * 100))
+            rate = f"+{pct}%" if pct >= 0 else f"{pct}%"
+        except Exception:
+            rate = "+0%"
     connector = aiohttp.TCPConnector(resolver=aiohttp.ThreadedResolver())
     communicate = edge_tts.Communicate(text, voice, rate=rate, connector=connector)
     async for chunk in communicate.stream():

@@ -6,7 +6,8 @@ use wasm_bindgen_futures::spawn_local;
 
 use crate::data::{
     mode_meta, system_meta, ActivityEntry, ActivityKind, AspectRatio, ChatHistoryItem,
-    CustomThemeTokens, DesignSystemId, HistoryResponse, ModeId,
+    CustomThemeTokens, DesignSystemId, HistoryResponse, ModeId, UpdateCheckApiResponse,
+    UpdateCheckData,
 };
 use crate::i18n::{t, Language};
 use crate::settings::{
@@ -756,7 +757,11 @@ pub fn activate_project(
     preview_version: RwSignal<u64>,
     entries: RwSignal<Vec<ActivityEntry>>,
     lang: Language,
+    running: Option<RwSignal<bool>>,
 ) {
+    if let Some(r) = running {
+        r.set(false);
+    }
     push_activity(
         entries,
         ActivityKind::Status,
@@ -776,6 +781,9 @@ pub fn activate_project(
                             deep.set(item.deep);
                         }
                     }
+                }
+                if let Some(r) = running {
+                    r.set(false);
                 }
                 preview_version.update(|v| *v = v.saturating_add(1));
                 push_activity(
@@ -812,10 +820,17 @@ pub fn create_new_project(
     preview_version: RwSignal<u64>,
     entries: RwSignal<Vec<ActivityEntry>>,
     lang: Language,
+    running: Option<RwSignal<bool>>,
 ) {
+    if let Some(r) = running {
+        r.set(false);
+    }
     spawn_local(async move {
         match Request::post("/api/history/new-project").send().await {
             Ok(resp) if resp.ok() => {
+                if let Some(r) = running {
+                    r.set(false);
+                }
                 prompt.set(String::new());
                 preview_version.update(|v| *v = v.saturating_add(1));
                 push_activity(
@@ -838,6 +853,83 @@ pub fn create_new_project(
                     ActivityKind::Error,
                     format!("Network error: {err}"),
                 );
+            }
+        }
+    });
+}
+
+pub fn check_app_updates(
+    checking: RwSignal<bool>,
+    info: RwSignal<Option<UpdateCheckData>>,
+    error: RwSignal<Option<String>>,
+) {
+    checking.set(true);
+    error.set(None);
+    spawn_local(async move {
+        match Request::get("/api/system/check-update").send().await {
+            Ok(resp) if resp.ok() => {
+                checking.set(false);
+                if let Ok(api_res) = resp.json::<UpdateCheckApiResponse>().await {
+                    if let Some(d) = api_res.data {
+                        info.set(Some(d));
+                    } else if let Some(err) = api_res.message {
+                        error.set(Some(err));
+                    }
+                }
+            }
+            Ok(resp) => {
+                checking.set(false);
+                error.set(Some(format!("Check failed (HTTP {})", resp.status())));
+            }
+            Err(e) => {
+                checking.set(false);
+                error.set(Some(format!("Network error: {e}")));
+            }
+        }
+    });
+}
+
+pub fn perform_app_update(
+    installing: RwSignal<bool>,
+    success: RwSignal<Option<String>>,
+    error: RwSignal<Option<String>>,
+) {
+    installing.set(true);
+    error.set(None);
+    success.set(None);
+    spawn_local(async move {
+        match Request::post("/api/system/update")
+            .header("Content-Type", "application/json")
+            .body("{}")
+        {
+            Ok(req) => match req.send().await {
+                Ok(resp) if resp.ok() => {
+                    installing.set(false);
+                    if let Ok(body) = resp.text().await {
+                        if let Ok(val) = serde_json::from_str::<serde_json::Value>(&body) {
+                            let msg = val["data"]["message"]
+                                .as_str()
+                                .or_else(|| val["message"].as_str())
+                                .unwrap_or("Update completed successfully! Please restart the app.")
+                                .to_string();
+                            success.set(Some(msg));
+                        } else {
+                            success.set(Some("Update completed! Please restart the app.".to_string()));
+                        }
+                    }
+                }
+                Ok(resp) => {
+                    installing.set(false);
+                    error.set(Some(format!("Update failed (HTTP {})", resp.status())));
+                }
+                Err(e) => {
+                    installing.set(false);
+                    error.set(Some(format!("Network error: {e}")));
+                }
+            },
+            Err(e) => {
+                installing.set(false);
+                error.set(Some(format!("Failed to build request: {e}")));
             }
         }
     });

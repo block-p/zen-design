@@ -632,3 +632,21 @@ pub struct HistoryResponse {
     pub current_mode: Option<String>,
 }
 
+#[derive(Clone, Debug, serde::Deserialize)]
+pub struct UpdateCheckData {
+    pub current_version: String,
+    pub latest_version: String,
+    pub has_update: bool,
+    pub release_name: String,
+    pub release_notes: String,
+    pub release_url: String,
+    pub download_url: Option<String>,
+}
+
+#[derive(Clone, Debug, serde::Deserialize)]
+pub struct UpdateCheckApiResponse {
+    pub status: String,
+    pub data: Option<UpdateCheckData>,
+    pub message: Option<String>,
+}
+

@@ -1602,7 +1602,8 @@ noscript {
 
 .zd-modal-alert,
 .zd-modal-alert--warning,
-.zd-modal-alert--error {
+.zd-modal-alert--error,
+.zd-modal-alert--success {
   display: flex;
   align-items: flex-start;
   gap: 8px;
@@ -1610,6 +1611,49 @@ noscript {
   border-radius: var(--zd-radius-md);
   margin-bottom: 16px;
   font-size: 11px;
+}
+
+.zd-modal-alert--success {
+  background: var(--zd-green-soft, rgba(16, 185, 129, 0.12));
+  border: 1px solid rgba(16, 185, 129, 0.25);
+  color: #065f46;
+}
+
+html[data-theme="dark"] .zd-modal-alert--success {
+  background: rgba(16, 185, 129, 0.12);
+  border-color: rgba(16, 185, 129, 0.3);
+  color: #34d399;
+}
+
+.zd-update-card {
+  background: var(--zd-surface-2, rgba(255, 255, 255, 0.04));
+  border: 1px solid var(--zd-border);
+  border-radius: var(--zd-radius-md);
+  padding: 12px 14px;
+  margin-top: 10px;
+}
+
+.zd-update-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 6px;
+}
+
+.zd-update-tag {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--zd-primary, #6366f1);
+  background: rgba(99, 102, 241, 0.12);
+  border: 1px solid rgba(99, 102, 241, 0.25);
+  padding: 3px 9px;
+  border-radius: 9999px;
+}
+
+.zd-update-actions {
+  display: flex;
+  gap: 8px;
+  margin-top: 10px;
 }
 
 .zd-modal-alert--warning {

@@ -1,6 +1,6 @@
 [package]
 name = "zen-design-studio"
-version = "2.4.0"
+version = "2.4.1"
 edition = "2021"
 description = "ZenDesign studio rendered entirely in Rust/WASM with Leptos"
 license = "MIT"

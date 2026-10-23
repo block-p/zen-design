@@ -1,6 +1,6 @@
 [package]
 name = "zen-design-server"
-version = "2.4.0"
+version = "2.4.1"
 edition = "2021"
 
 [dependencies]
@@ -20,6 +20,7 @@ rust-embed = "8.13.0"
 mime_guess = "2.0.5"
 base64 = "0.22"
 url = "2"
+uuid = { version = "1.28.0", features = ["v4"] }
 
 [target.'cfg(unix)'.dependencies]
 libc = "0.2"
